@@ -32,7 +32,10 @@ jobs:
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow
 
         
-    # Prevent workflow to stop
+    # Keep workflow running indefinitely
     - name: Keep the GitHub Action Runner Alive
       run: |
-          Start-Sleep -Seconds 21540  # Adjust the duration based on your needs
+        while ($true) {
+          Write-Host "Keeping runner alive... $(Get-Date)"
+          Start-Sleep -Seconds 300  # Log every 5 minutes to show activity
+        }
