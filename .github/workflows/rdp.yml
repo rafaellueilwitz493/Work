@@ -1,4 +1,4 @@
-name: Playit RDP Tunnel
+name: Powerful Playit RDP Tunnel
 
 on:
   workflow_dispatch:
@@ -11,31 +11,55 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v2
 
+    # Download and Install Playit
     - name: Download and Install Playit
       run: |
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        Start-Sleep -Seconds 5  # Give some time for the download to complete
+        Start-Sleep -Seconds 5
 
-        
-    # Default, optional.
-    - name: Enable TS
-      run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
-    - run: Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-    - run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
-    - run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+    # Enable RDP and optimize performance
+    - name: Enable and Optimize RDP
+      run: |
+        # Enable Remote Desktop
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
 
+        # Unlock High-Performance Power Mode
+        powercfg /S SCHEME_MIN
+
+        # Enable multiple RDP sessions
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
+
+    # Ensure Playit starts automatically after reboot
+    - name: Add Playit to Startup
+      run: |
+        New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Playit" -Value "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" -Force
+
+    # Optimize RDP Experience
+    - name: Optimize RDP Settings
+      run: |
+        # Enable GPU hardware acceleration
+        reg add "HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" /v HwAcceleration /t REG_DWORD /d 1 /f
+
+        # Disable UI animations for better responsiveness
+        reg add "HKCU\Control Panel\Desktop" /v UserPreferencesMask /t REG_BINARY /d 9012038010000000 /f
+        reg add "HKCU\Control Panel\Desktop" /v DragFullWindows /t REG_SZ /d 0 /f
+        reg add "HKCU\Control Panel\Desktop\WindowMetrics" /v MinAnimate /t REG_SZ /d 0 /f
+
+    # Start Playit and authenticate
     - name: Start Playit and Set Up RDP Tunnel
       env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }} 
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow
 
-        
     # Keep workflow running indefinitely
     - name: Keep the GitHub Action Runner Alive
       run: |
         while ($true) {
           Write-Host "Keeping runner alive... $(Get-Date)"
-          Start-Sleep -Seconds 300  # Log every 5 minutes to show activity
+          Start-Sleep -Seconds 300
         }
