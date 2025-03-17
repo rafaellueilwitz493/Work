@@ -22,31 +22,25 @@ jobs:
             exit 0
         }
     
-        # ✅ Download and Install WinGet + Dependencies
-        Write-Host "🔄 Downloading WinGet Dependencies..."
-        $wingetInstaller = "$env:TEMP\WinGet.msixbundle"
-        $vcRuntime = "$env:TEMP\VC_redist.x64.exe"
-        
-        # Download necessary dependencies
-        Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile $wingetInstaller -UseBasicParsing
-        Invoke-WebRequest -Uri "https://aka.ms/vs/16/release/vc_redist.x64.exe" -OutFile $vcRuntime -UseBasicParsing
+        # ✅ Download and Install WinGet (Standalone EXE)
+        Write-Host "🔄 Downloading WinGet Standalone Executable..."
+        $wingetExe = "$env:TEMP\winget.exe"
+        Invoke-WebRequest -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/winget.exe" -OutFile $wingetExe -UseBasicParsing
     
-        # ✅ Install VC++ Runtime (Needed for WinGet)
-        Write-Host "🔄 Installing Microsoft Visual C++ Runtime..."
-        Start-Process -FilePath $vcRuntime -ArgumentList "/install /quiet /norestart" -Wait
+        # ✅ Move WinGet to System Path
+        Write-Host "🔄 Installing WinGet (Copying to System32)..."
+        Move-Item -Path $wingetExe -Destination "C:\Windows\System32\winget.exe" -Force
     
-        # ✅ Install WinGet via MSIXBUNDLE
-        Write-Host "🔄 Installing WinGet..."
-        Add-AppxPackage -Path $wingetInstaller
-    
-        # ✅ Validate Installation
-        if (Get-Command winget -ErrorAction SilentlyContinue) {
+        # ✅ Verify Installation
+        if (Test-Path "C:\Windows\System32\winget.exe") {
             Write-Host "✅ WinGet Installed Successfully!"
+            winget --version
             exit 0
         } else {
             Write-Host "❌ WinGet installation failed. Exiting..."
             exit 1
         }
+    
     
     # 🔹 Enable Virtualization & Hyper-V
     - name: Enable Virtualization & Hyper-V
