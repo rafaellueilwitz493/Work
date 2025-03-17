@@ -11,10 +11,10 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v2
 
-    # - name: Download and Install Playit
-    #   run: |
-    #     Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-    #     Start-Sleep -Seconds 5
+    - name: Download and Install Playit
+      run: |
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+        Start-Sleep -Seconds 5
 
     # 🔹 Enable Virtualization & Hyper-V
     - name: Enable Virtualization & Hyper-V
@@ -121,8 +121,8 @@ jobs:
     #       Write-Host "Keeping runner alive... $(Get-Date)"
     #       Start-Sleep -Seconds 300
     #     }
-
     # ✅ Enable Remote Desktop (RDP) Persistently
+
     - name: Enable Remote Desktop
       run: |
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
@@ -130,26 +130,18 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
         Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
 
-    # ✅ Install Playit and Schedule it to Run Silently
-    - name: Install and Set Up Playit as Hidden Task
+    # ✅ Add Playit as a Hidden Scheduled Task
+    - name: Add Playit to Task Scheduler (Hidden)
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        $PlayitPath = "$env:USERPROFILE\playit.exe"
-        $TaskName = "PlayitAgent"
+        $TaskAction = New-ScheduledTaskAction -Execute "$env:USERPROFILE\playit.exe" -Argument "--secret $env:PLAYIT_AUTH_KEY"
+        $TaskTrigger = New-ScheduledTaskTrigger -AtStartup
+        $TaskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Hidden
+        Register-ScheduledTask -TaskName "PlayitAgent" -Action $TaskAction -Trigger $TaskTrigger -Settings $TaskSettings -User "SYSTEM" -RunLevel Highest -Force
 
-        # Download Playit
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile $PlayitPath
-        Start-Sleep -Seconds 5
-
-        # **Remove existing task if it exists**
-        schtasks /delete /tn $TaskName /f 2> $null
-
-        # **Create new hidden scheduled task**
-        schtasks /create /tn $TaskName /tr "cmd.exe /c start /b `"$PlayitPath`" --secret $env:PLAYIT_AUTH_KEY" /sc ONSTART /RU SYSTEM /RL HIGHEST /F
-
-        # **Run Playit Immediately (Without Window)**
-        schtasks /run /tn $TaskName
+        # Start Playit as a **hidden** background process
+        Start-ScheduledTask -TaskName "PlayitAgent"
 
     # ✅ Keep the GitHub Action Runner Alive
     - name: Keep the GitHub Action Runner Alive
