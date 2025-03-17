@@ -252,10 +252,51 @@ jobs:
     - name: Register Playit as a Service
       run: |
         Write-Host "🔄 Registering Playit as a service..."
-        sc create PlayitService binPath= "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" start= auto
-        Try { sc start PlayitService }
-        Catch { Write-Host "⚠️ Playit Service failed to start. Trying manual execution..."; Start-Process -FilePath "$env:USERPROFILE\playit.exe" }
-        Write-Host "✅ Playit Service Registered!"
+        # Define paths
+        $playitExe = "$env:USERPROFILE\playit.exe"
+        $nssmExe = "$env:TEMP\nssm.exe"
+
+        # ✅ METHOD 1: Try creating the service using `sc`
+        Try {
+            Write-Host "🔄 Attempting service creation via 'sc'..."
+            sc create PlayitService binPath= "\"$playitExe\" --secret $env:PLAYIT_AUTH_KEY" start= auto
+            Start-Sleep -Seconds 2
+            sc start PlayitService
+            Write-Host "✅ Playit Service Registered!"
+            exit 0
+        } Catch {
+            Write-Host "⚠️ 'sc' method failed, trying alternative..."
+        }
+
+        # ✅ METHOD 2: Use NSSM (Recommended)
+        Try {
+            Write-Host "🔄 Downloading NSSM for better service handling..."
+            Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile "$env:TEMP\nssm.zip" -UseBasicParsing
+            Expand-Archive -Path "$env:TEMP\nssm.zip" -DestinationPath "$env:TEMP\nssm" -Force
+            Move-Item -Path "$env:TEMP\nssm\nssm-2.24\win64\nssm.exe" -Destination $nssmExe -Force
+
+            Write-Host "🔄 Creating PlayitService using NSSM..."
+            Start-Process -FilePath $nssmExe -ArgumentList "install PlayitService `"$playitExe`" `"--secret $env:PLAYIT_AUTH_KEY`"" -Wait -NoNewWindow
+            Start-Process -FilePath $nssmExe -ArgumentList "set PlayitService Start SERVICE_AUTO_START" -Wait -NoNewWindow
+            Start-Process -FilePath $nssmExe -ArgumentList "start PlayitService" -Wait -NoNewWindow
+
+            Write-Host "✅ Playit Service Registered via NSSM!"
+            exit 0
+        } Catch {
+            Write-Host "⚠️ NSSM method failed. Trying manual execution..."
+        }
+
+        # ✅ METHOD 3: Run Playit manually if all else fails
+        Try {
+            Write-Host "🔄 Starting Playit manually..."
+            Start-Process -FilePath $playitExe -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+            Write-Host "✅ Playit started manually!"
+            exit 0
+        } Catch {
+            Write-Host "❌ All methods failed. Exiting..."
+            exit 1
+        }
+
 
     # 🔹 Keep Session Active
     - name: Keep Session Active
