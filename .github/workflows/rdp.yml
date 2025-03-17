@@ -17,6 +17,24 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v3
 
+    # ✅ Prevent Multiple Instances (Mutex Lock)
+    - name: Check If Another Workflow is Running
+      id: check-lock
+      uses: actions/cache@v3
+      with:
+        path: ./lockfile
+        key: "workflow-lock"
+
+    - name: Exit if Another Workflow is Running
+      if: steps.check-lock.outputs.cache-hit == 'true'
+      run: |
+        echo "⚠️ Another workflow is already running. Exiting..."
+        exit 0
+
+    # ✅ Create Lock File
+    - name: Create Lock File
+      run: echo "RUNNING" > lockfile
+
     # ✅ Restore previous progress
     - name: Restore Previous Progress (Optional)
       uses: actions/download-artifact@v4
@@ -58,27 +76,15 @@ jobs:
         Start-Sleep -Seconds 5
         echo "1" > ./progress/last_step.txt
 
-    # ✅ Enable Remote Desktop (RDP)
+    # ✅ Enable Remote Desktop (RDP) persistently
     - name: Enable Remote Desktop
-      if: env.LAST_STEP == '2'
+      if: steps.load-progress.outputs.step == '2'
       run: |
-        Write-Host "🔄 Enabling Remote Desktop..."
-        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1
-        Write-Host "✅ Remote Desktop Enabled!"
-        echo "3" > ./progress/last_step.txt
-
-    # ✅ Install NSSM (Non-Sucking Service Manager)
-    - name: Install NSSM
-      if: env.LAST_STEP == '3'
-      run: |
-        Write-Host "🔄 Downloading and installing NSSM..."
-        Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile "$env:TEMP\nssm.zip"
-        Expand-Archive -Path "$env:TEMP\nssm.zip" -DestinationPath "$env:TEMP\nssm" -Force
-        Copy-Item -Path "$env:TEMP\nssm\nssm-2.24\win64\nssm.exe" -Destination "$env:SystemRoot\System32" -Force
-        Write-Host "✅ NSSM Installed!"
-        echo "4" > ./progress/last_step.txt
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+        echo "3" > ./progress/last_step.txt  # Save progress
 
     # ✅ Run Playit as a Windows Service
     - name: Run Playit as a Windows Service (Hidden)
@@ -105,8 +111,9 @@ jobs:
         path: ./progress/last_step.txt
         retention-days: 30
 
-    # ✅ Restart Workflow Before Timeout
+    # ✅ Restart Workflow Before Timeout (But Only If No Duplicate Runs)
     - name: Restart Workflow Before Timeout
+      if: steps.check-lock.outputs.cache-hit != 'true'
       env:
         GH_TOKEN: ${{ secrets.PAT_TOKEN }}
       run: |
@@ -125,6 +132,11 @@ jobs:
         Write-Host "Triggering workflow restart..."
         Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
       shell: pwsh
+
+    # ✅ Remove Lock File After Completion
+    - name: Remove Lock File
+      if: always()
+      run: rm -f lockfile
 
     # ✅ Keep GitHub Action Runner Alive
     - name: Keep GitHub Action Runner Alive
