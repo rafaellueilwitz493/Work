@@ -54,11 +54,17 @@ jobs:
             Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -NoRestart
         }
 
-    # Install WinGet (Fixed Installation Error)
+    # Fix WinGet Installation (Direct Install Instead of MSIXBUNDLE)
     - name: Install WinGet (Windows Package Manager)
       run: |
-        Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$env:TEMP\WinGet.msixbundle"
-        Add-AppxPackage -Path "$env:TEMP\WinGet.msixbundle"
+        # Check if WinGet is already installed
+        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Host "Installing WinGet..."
+            Invoke-WebRequest -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" -OutFile "$env:TEMP\WinGet.msixbundle"
+            Add-AppProvisionedPackage -Online -PackagePath "$env:TEMP\WinGet.msixbundle"
+        } else {
+            Write-Host "✅ WinGet is already installed!"
+        }
 
     # Install Essential Tools via WinGet
     - name: Install Essential Tools (PowerToys, VS Code, Chrome)
