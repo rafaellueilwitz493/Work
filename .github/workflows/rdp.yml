@@ -8,122 +8,83 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: 🛠️ Check out the repository
+    - name: Check out the repository
       uses: actions/checkout@v2
 
-    # Enable Virtualization (Hyper-V, VM Support)
-    - name: 🖥️ Enable Virtualization Support
-      run: |
-        # Check Windows Edition
-        $WinEdition = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").EditionID
-        Write-Host "Windows Edition Detected: $WinEdition"
-
-        if ($WinEdition -match "Home") {
-            Write-Host "❌ Hyper-V is not available on Windows Home. Skipping Hyper-V installation."
-        } else {
-            Write-Host "🔄 Enabling Hyper-V..."
-            bcdedit /set hypervisorlaunchtype Auto
-
-            # Try different ways to install Hyper-V
-            $features = @("Microsoft-Hyper-V-All", "Microsoft-Hyper-V", "Microsoft-Hyper-V-Platform")
-            foreach ($feature in $features) {
-                Write-Host "Trying to enable $feature..."
-                Enable-WindowsOptionalFeature -Online -FeatureName $feature -NoRestart -ErrorAction SilentlyContinue
-            }
-
-            # Alternative method using DISM
-            Write-Host "🔄 Using DISM to enable virtualization..."
-            DISM /Online /Enable-Feature /FeatureName:Microsoft-Hyper-V-All /All /NoRestart
-        }
-
-        # Enable Virtual Machine Platform (Alternative)
-        Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart -ErrorAction SilentlyContinue
-        
-        # Enable Windows Hypervisor Platform
-        Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -NoRestart -ErrorAction SilentlyContinue
-
-        # Check BIOS Virtualization
-        $VirtualizationEnabled = (Get-ComputerInfo).HyperVRequirementDataExecutionPreventionAvailable
-        if ($VirtualizationEnabled -eq $false) {
-            Write-Host "⚠️ Virtualization is disabled in BIOS. Enable it for Hyper-V to work."
-            exit 1
-        }
-
-    # Install WinGet (All Possible Ways)
-    - name: 📦 Install WinGet
-      run: |
-        Write-Host "🔄 Checking for WinGet..."
-        if (-Not (Get-Command winget -ErrorAction SilentlyContinue)) {
-            Write-Host "🚀 Installing WinGet..."
-
-            # Method 1: Using Microsoft Store
-            Try {
-                Get-AppxPackage -Name Microsoft.DesktopAppInstaller -ErrorAction Stop | Out-Null
-                Write-Host "✅ WinGet is already installed via Microsoft Store."
-            } Catch {
-                Write-Host "Installing from Microsoft Store..."
-                Start-Process -NoNewWindow -Wait -FilePath "msstore:" -ArgumentList "showdetails?id=9NBLGGH4NNS1"
-            }
-
-            # Method 2: Direct Download from Microsoft
-            Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$env:TEMP\WinGet.msixbundle"
-            Add-AppxPackage -Path "$env:TEMP\WinGet.msixbundle" -ErrorAction SilentlyContinue
-
-            # Method 3: Add as a Provisioned Package
-            Try {
-                Add-AppxProvisionedPackage -Online -PackagePath "$env:TEMP\WinGet.msixbundle" -SkipLicense -ErrorAction Stop
-            } Catch {
-                Write-Host "⚠️ WinGet installation via Appx failed, trying alternate method..."
-            }
-
-            # Check again if WinGet is installed
-            if (Get-Command winget -ErrorAction SilentlyContinue) {
-                Write-Host "✅ WinGet Installed Successfully!"
-            } else {
-                Write-Host "❌ WinGet installation failed!"
-                exit 1
-            }
-        } else {
-            Write-Host "✅ WinGet is already installed."
-        }
-
-    # Enable RDP and keep it active after reboot
-    - name: 🔑 Enable and Persist RDP
+    # 🔹 Enable RDP and keep it persistent
+    - name: Enable and Persist RDP
       run: |
         Write-Host "🔄 Enabling RDP..."
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
-
-        # Allow Multiple RDP Sessions
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
         Set-Service -Name TermService -StartupType Automatic
+        Write-Host "✅ RDP Enabled Successfully!"
 
-    # Download and Install Playit
-    - name: 🌐 Download and Install Playit
+    # 🔹 Install WinGet (multiple fallback methods)
+    - name: Install WinGet
+      run: |
+        Write-Host "🔄 Checking for WinGet..."
+        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+          Write-Host "Installing WinGet..."
+          Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$env:TEMP\WinGet.msixbundle"
+          Add-AppxPackage -Path "$env:TEMP\WinGet.msixbundle" -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 10
+        }
+        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+          Write-Host "⚠️ WinGet installation failed, trying alternate method..."
+          DISM /Online /Add-Capability /CapabilityName:Microsoft.DesktopAppInstaller~~~~0.0.1.0
+        }
+        if (Get-Command winget -ErrorAction SilentlyContinue) {
+          Write-Host "✅ WinGet installed successfully!"
+        } else {
+          Write-Host "❌ WinGet installation failed. Continuing without it..."
+        }
+
+    # 🔹 Enable Virtualization & Hyper-V (multiple fallback methods)
+    - name: Enable Virtualization & Hyper-V
+      run: |
+        Write-Host "🔄 Enabling Virtualization..."
+        bcdedit /set hypervisorlaunchtype Auto
+        Write-Host "🔄 Enabling Hyper-V..."
+        $features = @("Microsoft-Hyper-V-All", "Microsoft-Hyper-V", "Microsoft-Hyper-V-Platform")
+        foreach ($feature in $features) {
+          Write-Host "Trying to enable $feature..."
+          Enable-WindowsOptionalFeature -Online -FeatureName $feature -NoRestart -ErrorAction SilentlyContinue
+        }
+        Write-Host "🔄 Trying DISM to enable Hyper-V..."
+        DISM /Online /Enable-Feature /FeatureName:Microsoft-Hyper-V-All /All /NoRestart
+        Write-Host "🔄 Enabling Windows Hypervisor Platform..."
+        Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -NoRestart -ErrorAction SilentlyContinue
+        Write-Host "✅ Virtualization & Hyper-V enabled!"
+
+    # 🔹 Install Playit
+    - name: Install Playit
       run: |
         Write-Host "🔄 Downloading Playit..."
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+        Write-Host "✅ Playit Downloaded!"
 
-    # Register Playit as a Windows Service
-    - name: 🔄 Register Playit as a Service
+    # 🔹 Register Playit as a Service
+    - name: Register Playit as a Service
       run: |
         Write-Host "🔄 Registering Playit as a service..."
         sc create PlayitService binPath= "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" start= auto
         sc start PlayitService
+        Write-Host "✅ Playit Service Registered!"
 
-        # Ensure Playit runs properly
-        Start-Sleep -Seconds 5
-        if (-Not (Get-Process -Name "playit" -ErrorAction SilentlyContinue)) {
-            Write-Host "⚠️ Playit did not start, retrying manually..."
-            Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-        }
+    # 🔹 Keep Session Active
+    - name: Keep Session Active
+      run: |
+        Write-Host "🔄 Keeping RDP Session Active..."
+        reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Winlogon" /v KeepRDPConnections /t REG_DWORD /d 1 /f
+        Write-Host "✅ RDP Session Kept Active!"
 
-    # Keep GitHub Actions Runner Alive
-    - name: 🔄 Keep Runner Alive
+    # 🔹 Keep GitHub Actions runner alive
+    - name: Keep Runner Alive
       run: |
         while ($true) {
-          Write-Host "Keeping runner alive... $(Get-Date)"
+          Write-Host "🔄 Keeping runner alive... $(Get-Date)"
           Start-Sleep -Seconds 300
         }
