@@ -20,10 +20,10 @@ jobs:
         name: progress
         path: ./progress
 
-    - name: Debug GitHub Actions
+    - name: Debug GitHub Actions Connectivity
       run: |
         echo "Checking GitHub API..."
-        curl -sL "https://api.github.com/repos/actions/download-artifact/releases/latest"
+        curl -sL "https://api.github.com/repos/actions/upload-artifact/releases/latest"
         echo "Checking Internet Connection..."
         nslookup github.com
 
@@ -111,7 +111,7 @@ jobs:
 
     # ✅ Keep GitHub Actions Alive (Restart Workflow Automatically)
     - name: Save Progress
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: progress
         path: ./progress/last_step.txt
