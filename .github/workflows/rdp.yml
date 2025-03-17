@@ -17,6 +17,21 @@ jobs:
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5
 
+
+    # Enable Remote Desktop (RDP) persistently
+    - name: Enable Remote Desktop
+      run: |
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+
+    - name: Start Playit RDP Tunnel Silently
+      env:
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+      run: |
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
+
     # 🔹 Enable Virtualization & Hyper-V
     - name: Enable Virtualization & Hyper-V
       run: |
@@ -93,26 +108,6 @@ jobs:
 
         Write-Host "✅ Hyper-V installation completed!"
         exit 0
-
-    # Enable Remote Desktop (RDP) persistently
-    - name: Enable Remote Desktop
-      run: |
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
-
-    # ✅ Ensure Playit runs hidden using Scheduled Task
-    - name: Add Playit as a Scheduled Task (No CMD Popups)
-      run: |
-        schtasks /create /tn "PlayitAgent" /tr "cmd.exe /c start /b `"%USERPROFILE%\playit.exe`" --secret `"%PLAYIT_AUTH_KEY%`"" /sc ONSTART /RU SYSTEM /RL HIGHEST /F
-
-    # ✅ Start Playit in the Background (No CMD Window)
-    - name: Start Playit RDP Tunnel Silently
-      env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
-      run: |
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -NoNewWindow
 
     # ✅ Keep workflow running without a visible window
     - name: Keep the GitHub Action Runner Alive Silently
