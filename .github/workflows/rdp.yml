@@ -32,20 +32,18 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
 
         Write-Host "🔹 Checking if 'runneradmin' user exists..."
-        $userExists = Get-LocalUser | Where-Object { $_.Name -eq "runneradmin" }
+        $userExists = Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue
 
         if ($userExists) {
-          Write-Host "⚠️ User already exists. Deleting and recreating..."
-          net user runneradmin /delete 2>$null
+          Write-Host "✅ User 'runneradmin' already exists. Skipping creation."
+        } else {
+          Write-Host "🔹 Creating 'runneradmin' user..."
+          $Password = ConvertTo-SecureString "p@ssw0rd!" -AsPlainText -Force
+          New-LocalUser "runneradmin" -Password $Password -FullName "Runner Admin" -Description "Admin user"
+          Add-LocalGroupMember -Group "Administrators" -Member "runneradmin"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin"
+          Write-Host "✅ User 'runneradmin' created and added to RDP!"
         }
-
-        Write-Host "🔹 Creating 'runneradmin' user..."
-        $Password = ConvertTo-SecureString "p@ssw0rd!" -AsPlainText -Force
-        New-LocalUser "runneradmin" -Password $Password -FullName "Runner Admin" -Description "Admin user"
-        Add-LocalGroupMember -Group "Administrators" -Member "runneradmin"
-        Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin"
-        
-        Write-Host "✅ User 'runneradmin' created and added to RDP!"
       shell: pwsh
 
     - name: Download and Install Playit
