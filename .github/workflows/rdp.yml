@@ -27,10 +27,10 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
         Set-Service -Name TermService -StartupType Automatic
 
-    # Enable High-Performance Power Mode (Fixes "Unsupported Setting" Error)
+    # Enable High-Performance Power Mode
     - name: Enable High Performance Mode
       run: |
-        powercfg /S SCHEME_MIN  # Use High Performance instead of Ultimate
+        powercfg /S SCHEME_MIN  # Use High Performance
         powercfg -change -monitor-timeout-ac 0
         powercfg -change -monitor-timeout-dc 0
         powercfg -change -disk-timeout-ac 0
@@ -38,19 +38,23 @@ jobs:
         powercfg -change -standby-timeout-ac 0
         powercfg -change -standby-timeout-dc 0
 
-    # Enable Virtual Machine Support (Check if Hyper-V Exists First)
+    # Enable Virtual Machine Support (Fixed Hyper-V Issue)
     - name: Enable Virtual Machine Support
       run: |
         bcdedit /set hypervisorlaunchtype Auto
         $feature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -ErrorAction SilentlyContinue
-        if ($feature -and $feature.State -ne "Disabled") {
+        if ($feature -and $feature.State -eq "Enabled") {
+            Write-Host "✅ Hyper-V is already enabled."
+        } elseif ($feature -and $feature.State -eq "Disabled") {
+            Write-Host "🔄 Enabling Hyper-V..."
             Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -NoRestart
         } else {
-            Write-Host "Hyper-V not available, enabling Windows Containers instead."
-            Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -NoRestart
+            Write-Host "⚠ Hyper-V not available! Enabling VMware & VirtualBox Support instead..."
+            Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart
+            Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -NoRestart
         }
 
-    # Install WinGet via MSI (Fixes GitHub Actions Restrictions)
+    # Install WinGet (Fixed Installation Error)
     - name: Install WinGet (Windows Package Manager)
       run: |
         Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$env:TEMP\WinGet.msixbundle"
