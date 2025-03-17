@@ -103,15 +103,16 @@ jobs:
     # Ensure Playit starts automatically after restart
     - name: Add Playit to Startup
       run: |
-        New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Playit" -Value "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" -Force
+        $playitPath = "$env:USERPROFILE\playit.exe"
+        $playitCommand = "cmd.exe /c start `"$playitPath`" --secret $env:PLAYIT_AUTH_KEY"
+        New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Playit" -Value $playitCommand -Force
 
-    # Start Playit and authenticate
-    - name: Start Playit and Set Up RDP Tunnel
+    # Start Playit and Set Up RDP Tunnel Silently
+    - name: Start Playit RDP Tunnel Silently
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
 
     # Keep workflow running indefinitely
     - name: Keep the GitHub Action Runner Alive
@@ -120,4 +121,3 @@ jobs:
           Write-Host "Keeping runner alive... $(Get-Date)"
           Start-Sleep -Seconds 300
         }
-        
