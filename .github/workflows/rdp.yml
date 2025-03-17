@@ -14,16 +14,8 @@ jobs:
     # ✅ Download and Install Playit
     - name: Download and Install Playit
       run: |
-        Write-Host "🔄 Downloading Playit..."
-        $playitUrl = "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe"
-        Invoke-WebRequest -Uri $playitUrl -OutFile "$env:USERPROFILE\playit.exe"
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5
-        if (Test-Path "$env:USERPROFILE\playit.exe") {
-          Write-Host "✅ Playit Downloaded Successfully!"
-        } else {
-          Write-Host "❌ Playit Download Failed!"
-          exit 1
-        }
 
     - name: Install WinGet (Guaranteed Success)
       run: |
@@ -151,104 +143,32 @@ jobs:
         Write-Host "✅ Hyper-V installation completed!"
         exit 0
 
-    # ✅ Enable Remote Desktop (Persistent)
-    - name: Enable Remote Desktop (RDP)
+    # Enable Remote Desktop (RDP) persistently
+    - name: Enable Remote Desktop
       run: |
-        Write-Host "🔄 Enabling Remote Desktop..."
-        $rdpKeys = @(
-          'HKLM:\System\CurrentControlSet\Control\Terminal Server',
-          'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
-        )
-        foreach ($key in $rdpKeys) {
-          Set-ItemProperty -Path $key -Name "fDenyTSConnections" -Value 0 -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $key -Name "UserAuthentication" -Value 1 -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $key -Name "fSingleSessionPerUser" -Value 0 -ErrorAction SilentlyContinue
-        }
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
-        Set-Service -Name TermService -StartupType Automatic
-        Write-Host "✅ RDP Enabled Successfully!"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
 
-    # ✅ Add `runneradmin` to Remote Desktop Users & Set Password
-    - name: Configure RunnerAdmin for RDP
-      run: |
-        Write-Host "🔄 Configuring RunnerAdmin for RDP..."
-
-        # ✅ Check if the user already exists
-        $UserExists = net user runneradmin 2>&1 | Select-String "The user name could not be found"
-        if ($UserExists) {
-            Write-Host "🔄 Creating user 'runneradmin'..."
-            net user runneradmin "P@ssw0rd!" /add
-        } else {
-            Write-Host "✅ User 'runneradmin' already exists. Skipping creation."
-        }
-
-        # ✅ Add to Remote Desktop Users (if not already a member)
-        $RDPGroupCheck = net localgroup "Remote Desktop Users" 2>&1 | Select-String "runneradmin"
-        if (-not $RDPGroupCheck) {
-            Write-Host "🔄 Adding 'runneradmin' to Remote Desktop Users..."
-            net localgroup "Remote Desktop Users" runneradmin /add
-        } else {
-            Write-Host "✅ 'runneradmin' is already in Remote Desktop Users. Skipping."
-        }
-
-        # ✅ Add to Administrators (if not already a member)
-        $AdminGroupCheck = net localgroup Administrators 2>&1 | Select-String "runneradmin"
-        if (-not $AdminGroupCheck) {
-            Write-Host "🔄 Adding 'runneradmin' to Administrators..."
-            net localgroup Administrators runneradmin /add
-        } else {
-            Write-Host "✅ 'runneradmin' is already an Administrator. Skipping."
-        }
-
-        Write-Host "✅ RunnerAdmin configuration complete!"
-        exit 0
-
-    # ✅ Add Playit to Startup (Persistent)
+    # Ensure Playit starts automatically after restart
     - name: Add Playit to Startup
       run: |
-        Write-Host "🔄 Adding Playit to Startup..."
         New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Playit" -Value "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" -Force
-        Write-Host "✅ Playit added to Startup!"
 
-    # ✅ Register Playit as a Windows Service (Using NSSM)
-    - name: Register Playit as a Service
+    # Start Playit and authenticate
+    - name: Start Playit and Set Up RDP Tunnel
+      env:
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Write-Host "🔄 Downloading NSSM..."
-        $nssmUrl = "https://nssm.cc/release/nssm-2.24.zip"
-        $nssmZip = "$env:TEMP\nssm.zip"
-        Invoke-WebRequest -Uri $nssmUrl -OutFile $nssmZip
-        Expand-Archive -Path $nssmZip -DestinationPath "$env:TEMP\nssm" -Force
-        $nssmExe = "$env:TEMP\nssm\nssm-2.24\win64\nssm.exe"
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow
 
-        if (!(Test-Path $nssmExe)) {
-          Write-Host "❌ NSSM Download Failed!"
-          exit 1
-        }
-
-        Write-Host "🔄 Installing Playit Service..."
-        Start-Process -FilePath $nssmExe -ArgumentList "install PlayitService `"$env:USERPROFILE\playit.exe`" `"--secret $env:PLAYIT_AUTH_KEY`"" -Wait -NoNewWindow
-        Start-Process -FilePath $nssmExe -ArgumentList "set PlayitService Start SERVICE_AUTO_START" -Wait -NoNewWindow
-        Start-Process -FilePath $nssmExe -ArgumentList "start PlayitService" -Wait -NoNewWindow
-        Write-Host "✅ Playit Service Registered Successfully!"
-
-    # ✅ Start Playit Manually (Backup Method)
-    - name: Start Playit Manually (Fallback)
-      run: |
-        Write-Host "🔄 Starting Playit manually..."
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-        Write-Host "✅ Playit started manually!"
-
-    # ✅ Keep RDP Connection Active
-    - name: Keep RDP Session Active
-      run: |
-        Write-Host "🔄 Keeping RDP Session Active..."
-        reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Winlogon" /v KeepRDPConnections /t REG_DWORD /d 1 /f
-        Write-Host "✅ RDP Session Kept Active!"
-
-    # ✅ Keep GitHub Actions Runner Alive
-    - name: Keep Runner Alive
+    # Keep workflow running indefinitely
+    - name: Keep the GitHub Action Runner Alive
       run: |
         while ($true) {
-          Write-Host "🔄 Keeping runner alive... $(Get-Date)"
+          Write-Host "Keeping runner alive... $(Get-Date)"
           Start-Sleep -Seconds 300
         }
+
