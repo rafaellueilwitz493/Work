@@ -5,6 +5,10 @@ on:
   schedule:
     - cron: "0 */5 * * *"  # Restarts every 5 hours to avoid the 6-hour limit
 
+permissions:
+  actions: write
+  contents: write
+
 jobs:
   setup-rdp-tunnel:
     runs-on: windows-latest
