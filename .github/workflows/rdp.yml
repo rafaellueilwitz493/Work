@@ -136,7 +136,7 @@ jobs:
           "ref" = "main"
         } | ConvertTo-Json -Compress
     
-        $workflowFileName = "persistent-playit-rdp-tunnel.yml"  # Ensure this matches your workflow filename
+        $workflowFileName = "rdp.yml"  # Ensure this matches your workflow filename
         $repo = "${{ github.repository }}"
         $url = "https://api.github.com/repos/$repo/actions/workflows/$workflowFileName/dispatches"
     
