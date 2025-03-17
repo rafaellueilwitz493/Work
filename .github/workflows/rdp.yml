@@ -11,94 +11,118 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v2
 
-    # 🔹 Enable RDP and keep it persistent
-    - name: Enable and Persist RDP
-      run: |
-        Write-Host "🔄 Enabling RDP..."
-        $rdpKeys = @(
-          'HKLM:\System\CurrentControlSet\Control\Terminal Server',
-          'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
-        )
-        foreach ($key in $rdpKeys) {
-          Set-ItemProperty -Path $key -Name "fDenyTSConnections" -Value 0 -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $key -Name "UserAuthentication" -Value 1 -ErrorAction SilentlyContinue
-          Set-ItemProperty -Path $key -Name "fSingleSessionPerUser" -Value 0 -ErrorAction SilentlyContinue
-        }
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
-        Set-Service -Name TermService -StartupType Automatic
-        Write-Host "✅ RDP Enabled Successfully!"
-
     # 🔹 Install WinGet (Robust Method with Multiple Fallbacks)
     - name: Install WinGet (Multi-Method)
       run: |
         Write-Host "🔄 Checking for WinGet..."
 
-        # If WinGet is already installed, exit
+        # ✅ If WinGet is already installed, exit
         if (Get-Command winget -ErrorAction SilentlyContinue) {
             Write-Host "✅ WinGet is already installed!"
             exit 0
         }
 
-        # Function to test internet connection
+        # ✅ Function to check internet connectivity reliably
         Function Test-Internet {
-            Try { Test-Connection -ComputerName google.com -Count 2 -Quiet } Catch { $false }
+            Try {
+                $response = Invoke-WebRequest -Uri "https://www.microsoft.com" -UseBasicParsing -TimeoutSec 5
+                if ($response.StatusCode -eq 200) { return $true }
+            } Catch {
+                Write-Host "⚠️ Microsoft.com unreachable, trying Google..."
+            }
+
+            Try {
+                $response = Invoke-WebRequest -Uri "https://www.google.com" -UseBasicParsing -TimeoutSec 5
+                if ($response.StatusCode -eq 200) { return $true }
+            } Catch {
+                Write-Host "⚠️ Google.com unreachable, checking ping..."
+            }
+
+            Try {
+                $pingResult = Test-Connection -ComputerName 8.8.8.8 -Count 2 -Quiet
+                if ($pingResult) { return $true }
+            } Catch {
+                Write-Host "❌ No internet connection detected!"
+            }
+
+            return $false
         }
 
+        # ✅ Verify internet connection before installing WinGet
         if (-not (Test-Internet)) {
             Write-Host "❌ No internet connection. Cannot install WinGet."
             exit 1
         }
 
-        # ✅ METHOD 1: Install via Microsoft Store
+        Write-Host "✅ Internet connection detected! Proceeding with WinGet installation..."
+
+        # ✅ METHOD 1: Install via MSI Installer (Preferred)
         Try {
-            Write-Host "🔄 Trying Microsoft Store installation..."
-            Start-Process -FilePath "ms-windows-store://pdp/?ProductId=9NBLGGH4NNS1" -Wait
-            Start-Sleep -Seconds 5
+            Write-Host "🔄 Downloading WinGet MSI Installer..."
+            $wingetMsiUrl = "https://aka.ms/getwinget"
+            $wingetMsiPath = "$env:TEMP\WinGetInstaller.msi"
+            Invoke-WebRequest -Uri $wingetMsiUrl -OutFile $wingetMsiPath -UseBasicParsing
+
+            Write-Host "🔄 Installing WinGet via MSI..."
+            Start-Process msiexec.exe -ArgumentList "/i $wingetMsiPath /quiet /norestart" -Wait -NoNewWindow
+
             if (Get-Command winget -ErrorAction SilentlyContinue) {
-                Write-Host "✅ WinGet Installed Successfully via Microsoft Store!"
+                Write-Host "✅ WinGet Installed Successfully via MSI!"
                 exit 0
             }
         } Catch {
-            Write-Host "⚠️ Microsoft Store install failed, trying alternate methods..."
+            Write-Host "⚠️ MSI Install failed, trying alternative methods..."
         }
 
-        # ✅ METHOD 2: Install via Chocolatey (if available)
-        if (Get-Command choco -ErrorAction SilentlyContinue) {
-            Write-Host "🔄 Installing WinGet via Chocolatey..."
-            choco install microsoft-windows-terminal -y
+        # ✅ METHOD 2: Install via MSIXBUNDLE
+        Try {
+            Write-Host "🔄 Downloading WinGet MSIXBUNDLE..."
+            $msixUrl = "https://aka.ms/getwinget"
+            $msixPath = "$env:TEMP\WinGet.msixbundle"
+            Invoke-WebRequest -Uri $msixUrl -OutFile $msixPath -UseBasicParsing
+
+            Write-Host "🔄 Installing WinGet via Add-AppxPackage..."
+            Add-AppxPackage -Path $msixPath
+
             if (Get-Command winget -ErrorAction SilentlyContinue) {
-                Write-Host "✅ WinGet Installed Successfully via Chocolatey!"
+                Write-Host "✅ WinGet Installed Successfully via MSIXBUNDLE!"
                 exit 0
             }
-        } Else {
-            Write-Host "⚠️ Chocolatey not found, skipping..."
+        } Catch {
+            Write-Host "⚠️ MSIXBUNDLE Install failed, trying alternative..."
         }
 
-        # ✅ METHOD 3: Download MSI Installer from alternative sources
-        $wingetUrls = @(
-            "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle",
-            "https://winget.azureedge.net/cache/winGet.exe",
-            "https://aka.ms/getwinget"
-        )
+        # ✅ METHOD 3: Install via DISM (Fallback)
+        Try {
+            Write-Host "🔄 Attempting DISM method..."
+            DISM /Online /Add-Capability /CapabilityName:Microsoft.DesktopAppInstaller~~~~0.0.1.0
 
-        foreach ($url in $wingetUrls) {
-            Try {
-                Write-Host "🔄 Downloading WinGet from $url..."
-                $filePath = "$env:TEMP\WinGetInstaller.exe"
-                Invoke-WebRequest -Uri $url -OutFile $filePath -UseBasicParsing
-                Write-Host "🔄 Installing WinGet..."
-                Start-Process -FilePath $filePath -ArgumentList "/quiet /norestart" -Wait -NoNewWindow
-                if (Get-Command winget -ErrorAction SilentlyContinue) {
-                    Write-Host "✅ WinGet Installed Successfully!"
-                    exit 0
-                }
-            } Catch {
-                Write-Host "⚠️ Failed to download from $url, trying next..."
+            if (Get-Command winget -ErrorAction SilentlyContinue) {
+                Write-Host "✅ WinGet Installed Successfully via DISM!"
+                exit 0
             }
+        } Catch {
+            Write-Host "⚠️ DISM method failed. Trying final method..."
         }
 
-        Write-Host "❌ All WinGet installation methods failed."
-        exit 1
+        # ✅ METHOD 4: Manual Download & Extraction (Final Resort)
+        Try {
+            Write-Host "🔄 Downloading WinGet Standalone Executable..."
+            $exeUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/winget.exe"
+            $exePath = "$env:TEMP\winget.exe"
+            Invoke-WebRequest -Uri $exeUrl -OutFile $exePath -UseBasicParsing
+
+            Write-Host "🔄 Moving WinGet to System Path..."
+            Move-Item -Path $exePath -Destination "C:\Windows\System32\" -Force
+
+            if (Test-Path "C:\Windows\System32\winget.exe") {
+                Write-Host "✅ WinGet Installed Successfully via Manual Extraction!"
+                exit 0
+            }
+        } Catch {
+            Write-Host "❌ All installation methods failed. Exiting..."
+            exit 1
+        }
 
     # 🔹 Enable Virtualization & Hyper-V
     - name: Enable Virtualization & Hyper-V
@@ -177,76 +201,89 @@ jobs:
         Write-Host "✅ Hyper-V installation completed!"
         exit 0
 
-    # 🔹 Install Playit (Multiple Methods)
-    - name: Install Playit
+    # ✅ Enable Remote Desktop (Persistent)
+    - name: Enable Remote Desktop (RDP)
+      run: |
+        Write-Host "🔄 Enabling Remote Desktop..."
+        $rdpKeys = @(
+          'HKLM:\System\CurrentControlSet\Control\Terminal Server',
+          'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
+        )
+        foreach ($key in $rdpKeys) {
+          Set-ItemProperty -Path $key -Name "fDenyTSConnections" -Value 0 -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $key -Name "UserAuthentication" -Value 1 -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $key -Name "fSingleSessionPerUser" -Value 0 -ErrorAction SilentlyContinue
+        }
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+        Set-Service -Name TermService -StartupType Automatic
+        Write-Host "✅ RDP Enabled Successfully!"
+
+    # ✅ Add `runneradmin` to Remote Desktop Users & Set Password
+    - name: Configure RunnerAdmin for RDP
+      run: |
+        Write-Host "🔄 Configuring RunnerAdmin for RDP..."
+        net user runneradmin "P@ssw0rd!" /add
+        net localgroup "Remote Desktop Users" runneradmin /add
+        net localgroup Administrators runneradmin /add
+        Write-Host "✅ RunnerAdmin added to RDP and Administrators group!"
+
+    # ✅ Download and Install Playit
+    - name: Download and Install Playit
       run: |
         Write-Host "🔄 Downloading Playit..."
         $playitUrl = "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe"
-        Invoke-WebRequest -Uri $playitUrl -OutFile "$env:USERPROFILE\playit.exe" -ErrorAction SilentlyContinue
-        if (!(Test-Path "$env:USERPROFILE\playit.exe")) {
-          Write-Host "⚠️ Download failed, trying alternate source..."
-          Invoke-WebRequest -Uri "https://playit.gg/downloads/playit.exe" -OutFile "$env:USERPROFILE\playit.exe"
+        Invoke-WebRequest -Uri $playitUrl -OutFile "$env:USERPROFILE\playit.exe"
+        Start-Sleep -Seconds 5
+        if (Test-Path "$env:USERPROFILE\playit.exe") {
+          Write-Host "✅ Playit Downloaded Successfully!"
+        } else {
+          Write-Host "❌ Playit Download Failed!"
+          exit 1
         }
-        if (Test-Path "$env:USERPROFILE\playit.exe") { Write-Host "✅ Playit Downloaded!" } else { Write-Host "❌ Playit download failed." }
 
-    # 🔹 Register Playit as a Service
+    # ✅ Add Playit to Startup (Persistent)
+    - name: Add Playit to Startup
+      run: |
+        Write-Host "🔄 Adding Playit to Startup..."
+        New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Playit" -Value "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" -Force
+        Write-Host "✅ Playit added to Startup!"
+
+    # ✅ Register Playit as a Windows Service (Using NSSM)
     - name: Register Playit as a Service
       run: |
-        Write-Host "🔄 Registering Playit as a service..."
-        
-        # Define paths
-        $playitExe = "$env:USERPROFILE\playit.exe"
-        $nssmExe = "$env:TEMP\nssm.exe"
+        Write-Host "🔄 Downloading NSSM..."
+        $nssmUrl = "https://nssm.cc/release/nssm-2.24.zip"
+        $nssmZip = "$env:TEMP\nssm.zip"
+        Invoke-WebRequest -Uri $nssmUrl -OutFile $nssmZip
+        Expand-Archive -Path $nssmZip -DestinationPath "$env:TEMP\nssm" -Force
+        $nssmExe = "$env:TEMP\nssm\nssm-2.24\win64\nssm.exe"
 
-        # ✅ METHOD 1: Try creating the service using `sc`
-        Try {
-            Write-Host "🔄 Attempting service creation via 'sc'..."
-            sc create PlayitService binPath= "\"$playitExe\" --secret $env:PLAYIT_AUTH_KEY" start= auto
-            Start-Sleep -Seconds 2
-            sc start PlayitService
-            Write-Host "✅ Playit Service Registered!"
-            exit 0
-        } Catch {
-            Write-Host "⚠️ 'sc' method failed, trying alternative..."
+        if (!(Test-Path $nssmExe)) {
+          Write-Host "❌ NSSM Download Failed!"
+          exit 1
         }
 
-        # ✅ METHOD 2: Use NSSM (Recommended)
-        Try {
-            Write-Host "🔄 Downloading NSSM..."
-            Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile "$env:TEMP\nssm.zip" -UseBasicParsing
-            Expand-Archive -Path "$env:TEMP\nssm.zip" -DestinationPath "$env:TEMP\nssm" -Force
-            Move-Item -Path "$env:TEMP\nssm\nssm-2.24\win64\nssm.exe" -Destination $nssmExe -Force
+        Write-Host "🔄 Installing Playit Service..."
+        Start-Process -FilePath $nssmExe -ArgumentList "install PlayitService `"$env:USERPROFILE\playit.exe`" `"--secret $env:PLAYIT_AUTH_KEY`"" -Wait -NoNewWindow
+        Start-Process -FilePath $nssmExe -ArgumentList "set PlayitService Start SERVICE_AUTO_START" -Wait -NoNewWindow
+        Start-Process -FilePath $nssmExe -ArgumentList "start PlayitService" -Wait -NoNewWindow
+        Write-Host "✅ Playit Service Registered Successfully!"
 
-            Write-Host "🔄 Creating PlayitService using NSSM..."
-            Start-Process -FilePath $nssmExe -ArgumentList "install PlayitService `"$playitExe`" `"--secret $env:PLAYIT_AUTH_KEY`"" -Wait -NoNewWindow
-            Start-Process -FilePath $nssmExe -ArgumentList "set PlayitService Start SERVICE_AUTO_START" -Wait -NoNewWindow
-            Start-Process -FilePath $nssmExe -ArgumentList "start PlayitService" -Wait -NoNewWindow
+    # ✅ Start Playit Manually (Backup Method)
+    - name: Start Playit Manually (Fallback)
+      run: |
+        Write-Host "🔄 Starting Playit manually..."
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+        Write-Host "✅ Playit started manually!"
 
-            Write-Host "✅ Playit Service Registered via NSSM!"
-            exit 0
-        } Catch {
-            Write-Host "⚠️ NSSM method failed. Trying manual execution..."
-        }
-
-        # ✅ METHOD 3: Run Playit manually if all else fails
-        Try {
-            Write-Host "🔄 Starting Playit manually..."
-            Start-Process -FilePath $playitExe -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-            Write-Host "✅ Playit started manually!"
-            exit 0
-        } Catch {
-            Write-Host "❌ All methods failed. Exiting..."
-            exit 1
-        }
-
-    # 🔹 Keep Session Active
-    - name: Keep Session Active
+    # ✅ Keep RDP Connection Active
+    - name: Keep RDP Session Active
       run: |
         Write-Host "🔄 Keeping RDP Session Active..."
         reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Winlogon" /v KeepRDPConnections /t REG_DWORD /d 1 /f
         Write-Host "✅ RDP Session Kept Active!"
 
-    # 🔹 Keep GitHub Actions runner alive
+    # ✅ Keep GitHub Actions Runner Alive
     - name: Keep Runner Alive
       run: |
         while ($true) {
