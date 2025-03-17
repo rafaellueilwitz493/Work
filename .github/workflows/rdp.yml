@@ -122,6 +122,7 @@ jobs:
     #       Start-Sleep -Seconds 300
     #     }
     # Enable Remote Desktop (RDP) persistently
+    # ✅ Enable Remote Desktop (RDP) Persistently
     - name: Enable Remote Desktop
       run: |
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
@@ -132,17 +133,35 @@ jobs:
     # ✅ Install NSSM (to run Playit as a background service)
     - name: Install NSSM
       run: |
-        Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile "$env:TEMP\nssm.zip"
-        Expand-Archive -Path "$env:TEMP\nssm.zip" -DestinationPath "$env:TEMP\nssm" -Force
-        Copy-Item -Path "$env:TEMP\nssm\nssm-2.24\win64\nssm.exe" -Destination "$env:SystemRoot\System32" -Force
+        $NssmUrl = "https://nssm.cc/release/nssm-2.24.zip"
+        $NssmZip = "$env:TEMP\nssm.zip"
+        $NssmExtractPath = "$env:TEMP\nssm"
+        $NssmExePath = "$env:SystemRoot\System32\nssm.exe"
+
+        Invoke-WebRequest -Uri $NssmUrl -OutFile $NssmZip
+        Expand-Archive -Path $NssmZip -DestinationPath $NssmExtractPath -Force
+        Copy-Item -Path "$NssmExtractPath\nssm-2.24\win64\nssm.exe" -Destination $NssmExePath -Force
 
     # ✅ Create a Windows Service for Playit (Runs in Background)
     - name: Run Playit as a Windows Service
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        nssm install PlayitAgent "$env:USERPROFILE\playit.exe" "--secret $env:PLAYIT_AUTH_KEY"
+        $PlayitPath = "$env:USERPROFILE\playit.exe"
+
+        # Install Playit as a hidden Windows service
+        nssm install PlayitAgent "$PlayitPath" "--secret $env:PLAYIT_AUTH_KEY"
+
+        # Ensure the service starts automatically at boot
         nssm set PlayitAgent Start SERVICE_AUTO_START
+
+        # **Key Setting**: Prevent `provisioner.exe` and Playit UI from showing
+        nssm set PlayitAgent AppNoConsole 1
+        nssm set PlayitAgent ObjectName LocalSystem
+        nssm set PlayitAgent Type SERVICE_WIN32_OWN_PROCESS
+        nssm set PlayitAgent AppExit Default Restart
+
+        # Start Playit as a **hidden service**
         nssm start PlayitAgent
 
     # ✅ Keep the GitHub Action Runner Alive
