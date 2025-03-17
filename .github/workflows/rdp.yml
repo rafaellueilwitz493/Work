@@ -35,12 +35,14 @@ jobs:
     - name: Load Last Execution Step
       id: load-progress
       run: |
+        New-Item -ItemType Directory -Path "./progress" -Force  # ✅ Ensure the folder exists
+    
         if (Test-Path ./progress/last_step.txt) {
           $LAST_STEP = Get-Content ./progress/last_step.txt
-          echo "::set-output name=step::$LAST_STEP"
+          echo "step=$LAST_STEP" | Out-File -FilePath $env:GITHUB_ENV -Append  # ✅ New method
           Write-Host "Resuming from step $LAST_STEP"
         } else {
-          echo "::set-output name=step::0"
+          echo "step=0" | Out-File -FilePath $env:GITHUB_ENV -Append  # ✅ New method
           Write-Host "Starting from Step 0"
         }
 
@@ -123,17 +125,25 @@ jobs:
         path: ./progress/last_step.txt
 
     - name: Restart Workflow Before Timeout
-      if: always()
       run: |
         $headers = @{
           "Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"
           "Accept" = "application/vnd.github.v3+json"
         }
+        
         $body = @{
-          ref = "main"
+          "ref" = "main"
         } | ConvertTo-Json -Compress
-
-        Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows/Persistent%20Playit%20RDP%20Tunnel.yml/dispatches" -Method Post -Headers $headers -Body $body
+        
+        # ✅ Fix: Ensure workflow filename is correct
+        $workflowFileName = "persistent-playit-rdp-tunnel.yml"  # ✅ Must match exactly in .github/workflows/
+        
+        # ✅ Fix: Ensure correct API URL
+        $url = "https://api.github.com/repos/${{ github.repository }}/actions/workflows/$workflowFileName/dispatches"
+        
+        Write-Host "Triggering workflow dispatch to $url"
+        
+        Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
       shell: pwsh
 
     - name: Keep GitHub Action Runner Alive
