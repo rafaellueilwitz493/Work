@@ -105,7 +105,7 @@ jobs:
     # ✅ Ensure Playit runs hidden using Scheduled Task
     - name: Add Playit as a Scheduled Task (No CMD Popups)
       run: |
-        schtasks /create /tn "PlayitAgent" /tr "cmd.exe /c start \"\" \"$env:USERPROFILE\playit.exe\" --secret $env:PLAYIT_AUTH_KEY" /sc ONSTART /RU SYSTEM /RL HIGHEST /F
+        schtasks /create /tn "PlayitAgent" /tr "cmd.exe /c start \"\" `"$env:USERPROFILE\playit.exe`" --secret `"$env:PLAYIT_AUTH_KEY`"" /sc ONSTART /RU SYSTEM /RL HIGHEST /F
 
     # ✅ Start Playit in the Background (No CMD Window)
     - name: Start Playit RDP Tunnel Silently
