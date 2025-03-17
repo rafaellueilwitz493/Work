@@ -92,6 +92,35 @@ jobs:
         Write-Host "✅ Hyper-V installation completed!"
         exit 0
 
+    # # Enable Remote Desktop (RDP) persistently
+    # - name: Enable Remote Desktop
+    #   run: |
+    #     Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+    #     Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+    #     Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+    #     Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+
+    # # ✅ Create a Scheduled Task to Run Playit Silently on Startup
+    # - name: Add Playit as a Scheduled Task
+    #   run: |
+    #     $Action = New-ScheduledTaskAction -Execute "$env:USERPROFILE\playit.exe" -Argument "--secret $env:PLAYIT_AUTH_KEY"
+    #     $Trigger = New-ScheduledTaskTrigger -AtStartup
+    #     Register-ScheduledTask -TaskName "PlayitAgent" -Action $Action -Trigger $Trigger -RunLevel Highest -User "SYSTEM" -Force
+
+    # # ✅ Start Playit as a Background Process (No Visible Window)
+    # - name: Start Playit RDP Tunnel Silently
+    #   env:
+    #     PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+    #   run: |
+    #     Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
+
+    # # ✅ Keep the GitHub Action Runner Alive
+    # - name: Keep the GitHub Action Runner Alive
+    #   run: |
+    #     while ($true) {
+    #       Write-Host "Keeping runner alive... $(Get-Date)"
+    #       Start-Sleep -Seconds 300
+    #     }
     # Enable Remote Desktop (RDP) persistently
     - name: Enable Remote Desktop
       run: |
@@ -100,19 +129,21 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
         Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
 
-    # ✅ Create a Scheduled Task to Run Playit Silently on Startup
-    - name: Add Playit as a Scheduled Task
+    # ✅ Install NSSM (to run Playit as a background service)
+    - name: Install NSSM
       run: |
-        $Action = New-ScheduledTaskAction -Execute "$env:USERPROFILE\playit.exe" -Argument "--secret $env:PLAYIT_AUTH_KEY"
-        $Trigger = New-ScheduledTaskTrigger -AtStartup
-        Register-ScheduledTask -TaskName "PlayitAgent" -Action $Action -Trigger $Trigger -RunLevel Highest -User "SYSTEM" -Force
+        Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile "$env:TEMP\nssm.zip"
+        Expand-Archive -Path "$env:TEMP\nssm.zip" -DestinationPath "$env:TEMP\nssm" -Force
+        Copy-Item -Path "$env:TEMP\nssm\nssm-2.24\win64\nssm.exe" -Destination "$env:SystemRoot\System32" -Force
 
-    # ✅ Start Playit as a Background Process (No Visible Window)
-    - name: Start Playit RDP Tunnel Silently
+    # ✅ Create a Windows Service for Playit (Runs in Background)
+    - name: Run Playit as a Windows Service
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
+        nssm install PlayitAgent "$env:USERPROFILE\playit.exe" "--secret $env:PLAYIT_AUTH_KEY"
+        nssm set PlayitAgent Start SERVICE_AUTO_START
+        nssm start PlayitAgent
 
     # ✅ Keep the GitHub Action Runner Alive
     - name: Keep the GitHub Action Runner Alive
