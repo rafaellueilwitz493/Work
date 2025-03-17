@@ -11,7 +11,6 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v2
 
-    # 🔹 Enable RDP and keep it persistent
     - name: Enable and Persist RDP
       run: |
         Write-Host "🔄 Enabling RDP..."
@@ -28,7 +27,6 @@ jobs:
         Set-Service -Name TermService -StartupType Automatic
         Write-Host "✅ RDP Enabled Successfully!"
 
-    # 🔹 Install WinGet (Multiple Methods)
     - name: Install WinGet
       run: |
         Write-Host "🔄 Checking for WinGet..."
@@ -38,17 +36,12 @@ jobs:
           Try { Add-AppxPackage -Path "$env:TEMP\WinGet.msixbundle" -ErrorAction Stop }
           Catch {
             Write-Host "⚠️ Add-AppxPackage failed. Trying DISM method..."
-            DISM /Online /Add-Capability /CapabilityName:Microsoft.DesktopAppInstaller~~~~0.0.1.0
+            Try { DISM /Online /Add-Capability /CapabilityName:Microsoft.DesktopAppInstaller~~~~0.0.1.0 }
+            Catch { Write-Host "❌ WinGet install failed." }
           }
         }
-        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-          Write-Host "⚠️ WinGet installation failed. Trying alternative EXE method..."
-          Invoke-WebRequest -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.appxbundle" -OutFile "$env:TEMP\winget.appxbundle"
-          Add-AppxPackage -Path "$env:TEMP\winget.appxbundle" -ErrorAction SilentlyContinue
-        }
-        if (Get-Command winget -ErrorAction SilentlyContinue) { Write-Host "✅ WinGet installed!" } else { Write-Host "❌ WinGet install failed." }
+        if (Get-Command winget -ErrorAction SilentlyContinue) { Write-Host "✅ WinGet installed!" }
 
-    # 🔹 Enable Virtualization & Hyper-V (Multiple Fallbacks)
     - name: Enable Virtualization & Hyper-V
       run: |
         Write-Host "🔄 Enabling Virtualization..."
@@ -59,23 +52,25 @@ jobs:
           Try { Enable-WindowsOptionalFeature -Online -FeatureName $feature -NoRestart -ErrorAction Stop }
           Catch { Write-Host "⚠️ Failed to enable $feature, trying next..." }
         }
-        Write-Host "🔄 Trying DISM method for Hyper-V..."
         DISM /Online /Enable-Feature /FeatureName:Microsoft-Hyper-V-All /All /NoRestart
         Write-Host "✅ Virtualization & Hyper-V Enabled!"
 
-    # 🔹 Install Playit (Multiple Methods)
     - name: Install Playit
       run: |
         Write-Host "🔄 Downloading Playit..."
-        $playitUrl = "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe"
-        Invoke-WebRequest -Uri $playitUrl -OutFile "$env:USERPROFILE\playit.exe" -ErrorAction SilentlyContinue
-        if (!(Test-Path "$env:USERPROFILE\playit.exe")) {
-          Write-Host "⚠️ Download failed, trying alternate source..."
-          Invoke-WebRequest -Uri "https://playit.gg/downloads/playit.exe" -OutFile "$env:USERPROFILE\playit.exe"
+        $playitUrls = @( 
+          "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe",
+          "https://playit.gg/downloads/playit.exe"
+        )
+        foreach ($url in $playitUrls) {
+          Try {
+            Invoke-WebRequest -Uri $url -OutFile "$env:USERPROFILE\playit.exe" -ErrorAction Stop
+            if (Test-Path "$env:USERPROFILE\playit.exe") { break }
+          }
+          Catch { Write-Host "⚠️ Failed to download from $url, trying next..." }
         }
         if (Test-Path "$env:USERPROFILE\playit.exe") { Write-Host "✅ Playit Downloaded!" } else { Write-Host "❌ Playit download failed." }
 
-    # 🔹 Register Playit as a Service
     - name: Register Playit as a Service
       run: |
         Write-Host "🔄 Registering Playit as a service..."
@@ -84,14 +79,12 @@ jobs:
         Catch { Write-Host "⚠️ Playit Service failed to start. Trying manual execution..."; Start-Process -FilePath "$env:USERPROFILE\playit.exe" }
         Write-Host "✅ Playit Service Registered!"
 
-    # 🔹 Keep Session Active
     - name: Keep Session Active
       run: |
         Write-Host "🔄 Keeping RDP Session Active..."
         reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Winlogon" /v KeepRDPConnections /t REG_DWORD /d 1 /f
         Write-Host "✅ RDP Session Kept Active!"
 
-    # 🔹 Keep GitHub Actions runner alive
     - name: Keep Runner Alive
       run: |
         while ($true) {
