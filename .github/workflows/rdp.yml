@@ -3,7 +3,7 @@ name: Persistent Playit RDP Tunnel
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */5 * * *"  # Restarts every 5 hours to avoid the 6-hour limit
+    - cron: "0 */5 * * *"  # Restart every 5 hours to avoid GitHub's 6-hour limit
 
 permissions:
   actions: write
@@ -33,18 +33,20 @@ jobs:
         echo "Checking Internet Connection..."
         nslookup github.com
 
-
     # ✅ Load Last Execution Step
     - name: Load Last Execution Step
       id: load-progress
+      shell: pwsh
       run: |
         New-Item -ItemType Directory -Path "./progress" -Force  # Ensure folder exists
         if (Test-Path ./progress/last_step.txt) {
           $LAST_STEP = Get-Content ./progress/last_step.txt
           echo "LAST_STEP=$LAST_STEP" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "::set-output name=step::$LAST_STEP"
           Write-Host "Resuming from step $LAST_STEP"
         } else {
           echo "LAST_STEP=0" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "::set-output name=step::0"
           Write-Host "Starting from Step 0"
         }
 
@@ -55,35 +57,6 @@ jobs:
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5
         echo "1" > ./progress/last_step.txt
-    
-    # ✅ Enable Virtualization & Hyper-V
-    - name: Enable Virtualization & Hyper-V
-      if: steps.load-progress.outputs.step == '1'
-      run: |
-        Write-Host "🔄 Checking if system supports Hyper-V..."
-        $hyperVSupport = Get-WindowsOptionalFeature -Online | Where-Object { $_.FeatureName -like "*Hyper-V*" }
-        if (-not $hyperVSupport) {
-            Write-Host "❌ This system does not support Hyper-V. Exiting..."
-            exit 1
-        } else {
-            Write-Host "✅ System supports Hyper-V!"
-        }
-        Write-Host "🔄 Enabling Virtualization..."
-        bcdedit /set hypervisorlaunchtype Auto
-        if ($?) { Write-Host "✅ Virtualization Enabled!" } else { exit 1 }
-
-        # Enable Hyper-V Features
-        $features = @("Microsoft-Hyper-V-All", "Microsoft-Hyper-V", "Microsoft-Hyper-V-Platform", "Microsoft-Hyper-V-Management-Tools", "HypervisorPlatform")
-        foreach ($feature in $features) {
-            Try {
-                Write-Host "🔄 Enabling $feature..."
-                Enable-WindowsOptionalFeature -Online -FeatureName $feature -NoRestart -ErrorAction Stop
-                Write-Host "✅ Successfully enabled $feature!"
-            } Catch {
-                Write-Host "⚠️ Failed to enable $feature, trying next..."
-            }
-        }
-        echo "2" > ./progress/last_step.txt  # Save progress
 
     # ✅ Enable Remote Desktop (RDP)
     - name: Enable Remote Desktop
@@ -106,7 +79,6 @@ jobs:
         Copy-Item -Path "$env:TEMP\nssm\nssm-2.24\win64\nssm.exe" -Destination "$env:SystemRoot\System32" -Force
         Write-Host "✅ NSSM Installed!"
         echo "4" > ./progress/last_step.txt
-
 
     # ✅ Run Playit as a Windows Service
     - name: Run Playit as a Windows Service (Hidden)
@@ -131,6 +103,7 @@ jobs:
       with:
         name: progress
         path: ./progress/last_step.txt
+        retention-days: 30
 
     # ✅ Restart Workflow Before Timeout
     - name: Restart Workflow Before Timeout
