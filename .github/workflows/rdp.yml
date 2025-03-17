@@ -11,26 +11,10 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v2
 
-    # ✅ Download and Install Playit
     - name: Download and Install Playit
       run: |
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5
-
-
-    # Enable Remote Desktop (RDP) persistently
-    - name: Enable Remote Desktop
-      run: |
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
-
-    - name: Start Playit RDP Tunnel Silently
-      env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
-      run: |
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
 
     # 🔹 Enable Virtualization & Hyper-V
     - name: Enable Virtualization & Hyper-V
@@ -105,15 +89,35 @@ jobs:
             Write-Host "❌ All installation methods failed. Exiting..."
             exit 1
         }
-
         Write-Host "✅ Hyper-V installation completed!"
         exit 0
 
-    # ✅ Keep workflow running without a visible window
-    - name: Keep the GitHub Action Runner Alive Silently
+    # Enable Remote Desktop (RDP) persistently
+    - name: Enable Remote Desktop
       run: |
-        Start-Job -ScriptBlock {
-            while ($true) {
-                Start-Sleep -Seconds 300
-            }
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+
+    # Ensure Playit starts automatically after restart
+    - name: Add Playit to Startup
+      run: |
+        New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Playit" -Value "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" -Force
+
+    # Start Playit and authenticate
+    - name: Start Playit and Set Up RDP Tunnel
+      env:
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+      run: |
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow
+
+    # Keep workflow running indefinitely
+    - name: Keep the GitHub Action Runner Alive
+      run: |
+        while ($true) {
+          Write-Host "Keeping runner alive... $(Get-Date)"
+          Start-Sleep -Seconds 300
         }
+        
