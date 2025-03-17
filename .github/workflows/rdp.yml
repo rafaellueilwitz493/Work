@@ -17,55 +17,6 @@ jobs:
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5
 
-    - name: Install WinGet (Guaranteed Success)
-      run: |
-        Write-Host "🔄 Checking for WinGet..."
-
-        # ✅ Check if WinGet is installed
-        if (Get-Command winget -ErrorAction SilentlyContinue) {
-            Write-Host "✅ WinGet is already installed!"
-            winget --version
-            exit 0
-        }
-
-        # ✅ Try Installing WinGet via Microsoft Store
-        Write-Host "🔄 Attempting to install WinGet from Microsoft Store..."
-        Try {
-            Get-AppxPackage -Name Microsoft.DesktopAppInstaller -ErrorAction Stop | Out-Null
-            Write-Host "✅ WinGet is already installed via Microsoft Store!"
-            exit 0
-        } Catch {
-            Write-Host "⚠️ Microsoft Store method failed. Attempting manual installation..."
-        }
-
-        # ✅ Safe Download WinGet Installer (Handles Download Errors)
-        Write-Host "🔄 Downloading WinGet Installer..."
-        $wingetInstaller = "$env:TEMP\WinGet.msixbundle"
-        $wingetDownloadUrl = "https://aka.ms/getwinget"
-
-        Try {
-            Invoke-WebRequest -Uri $wingetDownloadUrl -OutFile $wingetInstaller -UseBasicParsing -ErrorAction Stop
-            Write-Host "✅ Download Successful!"
-        } Catch {
-            Write-Host "❌ Failed to download WinGet. Skipping installation..."
-            exit 0
-        }
-
-        # ✅ Safe Installation (Handles Errors)
-        Write-Host "🔄 Installing WinGet..."
-        Try {
-            Add-AppxPackage -Path $wingetInstaller -ErrorAction Stop
-            if (Get-Command winget -ErrorAction SilentlyContinue) {
-                Write-Host "✅ WinGet Installed Successfully!"
-                exit 0
-            }
-        } Catch {
-            Write-Host "⚠️ MSIX installation failed. Skipping installation..."
-        }
-
-        Write-Host "⚠️ WinGet could not be installed, but the script completed successfully!"
-        exit 0
-
     # 🔹 Enable Virtualization & Hyper-V
     - name: Enable Virtualization & Hyper-V
       run: |
@@ -170,4 +121,3 @@ jobs:
           Write-Host "Keeping runner alive... $(Get-Date)"
           Start-Sleep -Seconds 300
         }
-
