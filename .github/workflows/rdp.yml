@@ -18,8 +18,9 @@ jobs:
       uses: actions/checkout@v3
 
     # ✅ Restore previous progress if available
-    - name: Restore Previous Progress
+    - name: Restore Previous Progress (Optional)
       uses: actions/download-artifact@v4
+      continue-on-error: true  # Prevents failure if artifact doesn't exist
       with:
         name: progress
         path: ./progress
@@ -115,7 +116,7 @@ jobs:
 
     # ✅ Keep GitHub Actions Alive (Restart Workflow Automatically)
     - name: Save Progress
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v4  # Ensure this is v4 (not v3)
       with:
         name: progress
         path: ./progress/last_step.txt
@@ -123,10 +124,16 @@ jobs:
     - name: Restart Workflow Before Timeout
       if: always()
       run: |
-        curl -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-             -H "Accept: application/vnd.github.v3+json" \
-             https://api.github.com/repos/${{ github.repository }}/actions/workflows/${{ github.workflow }}/dispatches \
-             -d '{"ref": "main"}'
+        $headers = @{
+          "Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"
+          "Accept" = "application/vnd.github.v3+json"
+        }
+        $body = @{
+          ref = "main"
+        } | ConvertTo-Json -Compress
+
+        Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/workflows/Persistent%20Playit%20RDP%20Tunnel.yml/dispatches" -Method Post -Headers $headers -Body $body
+      shell: pwsh
 
     - name: Keep GitHub Action Runner Alive
       run: |
