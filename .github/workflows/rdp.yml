@@ -1,4 +1,4 @@
-name: Most Powerful Windows RDP with Playit
+name: Optimized Playit RDP with VM Support
 
 on:
   workflow_dispatch:
@@ -17,59 +17,75 @@ jobs:
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5
 
-    # Enable RDP and optimize performance
-    - name: Enable and Optimize RDP
+    # Enable RDP and Persist After Reboot
+    - name: Enable and Persist RDP
       run: |
-        # Enable Remote Desktop (RDP)
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
         Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
 
-        # Unlock High-Performance Power Mode
-        powercfg -SETACTIVE SCHEME_MIN
-        powercfg /change monitor-timeout-ac 0
-        powercfg /change disk-timeout-ac 0
-        powercfg /change standby-timeout-ac 0
-        powercfg /change hibernate-timeout-ac 0
-
         # Enable multiple RDP sessions
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
 
-    # Prevent Windows from shutting down or sleeping
-    - name: Prevent Sleep Mode
+        # Ensure RDP service starts after reboot
+        Set-Service -Name TermService -StartupType Automatic
+
+    # Enable Virtualization Support
+    - name: Enable Virtualization for VMware & VirtualBox
       run: |
-        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Power" /v CsEnabled /t REG_DWORD /d 0 /f
-        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Power" /v HiberbootEnabled /t REG_DWORD /d 0 /f
+        # Enable Hyper-V (for VMs)
+        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All -NoRestart
+        Enable-WindowsOptionalFeature -Online -FeatureName Containers -All -NoRestart
 
-    # Ensure Playit starts automatically after reboot
-    - name: Add Playit to Startup
+        # Enable Nested Virtualization
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableVirtualizationBasedSecurity" -Value 0
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name "EnableVirtualizationBasedSecurity" -Value 0
+
+        # Enable VT-x / AMD-V for VirtualBox
+        bcdedit /set hypervisorlaunchtype off
+        bcdedit /set vm No
+        bcdedit /set nx AlwaysOn
+
+        # Disable Windows Defender Credential Guard (causes VM conflicts)
+        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v LsaCfgFlags /t REG_DWORD /d 0 /f
+
+    # Optimize Windows for Maximum Performance
+    - name: Enable High-Performance Mode
       run: |
-        $StartupFolder = [System.Environment]::GetFolderPath('Startup')
-        Copy-Item "$env:USERPROFILE\playit.exe" -Destination "$StartupFolder\playit.exe"
-        New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Playit" -Value "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" -Force
+        powercfg /S SCHEME_MIN
+        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v LargeSystemCache /t REG_DWORD /d 1 /f
+        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v IoPageLockLimit /t REG_DWORD /d 4294967295 /f
+        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Executive" /v AdditionalCriticalWorkerThreads /t REG_DWORD /d 4 /f
+        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Executive" /v AdditionalDelayedWorkerThreads /t REG_DWORD /d 4 /f
 
-    # Optimize RDP Experience
-    - name: Optimize RDP Settings
+    # Disable Unnecessary Windows Services to Free Up Resources
+    - name: Disable Unnecessary Services
       run: |
-        # Enable GPU hardware acceleration
-        reg add "HKLM\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" /v HwAcceleration /t REG_DWORD /d 1 /f
+        Get-Service | Where-Object { $_.StartType -eq 'Automatic' -and $_.Status -eq 'Running' } | `
+        Where-Object { $_.Name -notmatch 'TermService|WinRM|EventLog|W32Time|WSearch' } | `
+        ForEach-Object { Set-Service -Name $_.Name -StartupType Disabled }
 
-        # Disable UI animations for better responsiveness
-        reg add "HKCU\Control Panel\Desktop" /v UserPreferencesMask /t REG_BINARY /d 9012038010000000 /f
-        reg add "HKCU\Control Panel\Desktop" /v DragFullWindows /t REG_SZ /d 0 /f
-        reg add "HKCU\Control Panel\Desktop\WindowMetrics" /v MinAnimate /t REG_SZ /d 0 /f
+    # Register Playit as a Windows Service for Auto-Start
+    - name: Register Playit as a Background Service
+      run: |
+        sc create PlayitService binPath= "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" start= auto
+        sc start PlayitService
 
-    # Start Playit and authenticate
-    - name: Start Playit and Set Up RDP Tunnel
+    # Start Playit Immediately
+    - name: Start Playit Agent
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
 
-    # Keep the GitHub runner alive
-    - name: Keep the GitHub Action Runner Alive
+    # Ensure RDP reconnects after restart
+    - name: Keep RDP Session Active
+      run: |
+        reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Winlogon" /v KeepRDPConnections /t REG_DWORD /d 1 /f
+
+    # Keep GitHub Actions Runner Alive
+    - name: Keep Runner Alive
       run: |
         while ($true) {
           Write-Host "Keeping runner alive... $(Get-Date)"
