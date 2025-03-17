@@ -17,6 +17,14 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v4
 
+    - name: Restore Cached Files
+      uses: actions/cache@v3
+      with:
+        path: C:\persistent_data
+        key: persistent-data-${{ github.run_id }}
+        restore-keys: |
+          persistent-data-
+
     - name: Prevent Multiple Concurrent Runs
       run: |
         $workflowRuns = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/runs" -Headers @{Authorization="Bearer ${{ secrets.PAT_TOKEN }}"}).workflow_runs
@@ -46,6 +54,12 @@ jobs:
         }
       shell: pwsh
 
+    - name: Restore Files After Restart
+      run: |
+        if (Test-Path "C:\persistent_data\playit.exe") {
+          Copy-Item -Path "C:\persistent_data\playit.exe" -Destination "$env:USERPROFILE\playit.exe" -Force
+        }
+          
     - name: Download and Install Playit
       run: |
         Write-Host "Downloading Playit..."
@@ -64,6 +78,11 @@ jobs:
         Register-ScheduledTask -TaskName "PlayitAgent" -Action $TaskAction -Trigger $TaskTrigger -Settings $TaskSettings -User "SYSTEM" -RunLevel Highest -Force
         Start-ScheduledTask -TaskName "PlayitAgent"
         Write-Host "✅ Playit is now running in the background!"
+        
+    - name: Save Files Before Restart
+      run: |
+        if (!(Test-Path "C:\persistent_data")) { New-Item -ItemType Directory -Path "C:\persistent_data" }
+        Copy-Item -Path "$env:USERPROFILE\playit.exe" -Destination "C:\persistent_data\playit.exe" -Force
 
     - name: Restart Workflow Before Timeout
       env:
