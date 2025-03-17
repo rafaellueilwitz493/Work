@@ -11,6 +11,20 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v2
 
+    # ✅ Download and Install Playit
+    - name: Download and Install Playit
+      run: |
+        Write-Host "🔄 Downloading Playit..."
+        $playitUrl = "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe"
+        Invoke-WebRequest -Uri $playitUrl -OutFile "$env:USERPROFILE\playit.exe"
+        Start-Sleep -Seconds 5
+        if (Test-Path "$env:USERPROFILE\playit.exe") {
+          Write-Host "✅ Playit Downloaded Successfully!"
+        } else {
+          Write-Host "❌ Playit Download Failed!"
+          exit 1
+        }
+
     - name: Install WinGet (Guaranteed Success)
       run: |
         Write-Host "🔄 Checking for WinGet..."
@@ -162,20 +176,6 @@ jobs:
         net localgroup "Remote Desktop Users" runneradmin /add
         net localgroup Administrators runneradmin /add
         Write-Host "✅ RunnerAdmin added to RDP and Administrators group!"
-
-    # ✅ Download and Install Playit
-    - name: Download and Install Playit
-      run: |
-        Write-Host "🔄 Downloading Playit..."
-        $playitUrl = "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe"
-        Invoke-WebRequest -Uri $playitUrl -OutFile "$env:USERPROFILE\playit.exe"
-        Start-Sleep -Seconds 5
-        if (Test-Path "$env:USERPROFILE\playit.exe") {
-          Write-Host "✅ Playit Downloaded Successfully!"
-        } else {
-          Write-Host "❌ Playit Download Failed!"
-          exit 1
-        }
 
     # ✅ Add Playit to Startup (Persistent)
     - name: Add Playit to Startup
