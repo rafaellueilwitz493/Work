@@ -29,57 +29,41 @@ jobs:
         Write-Host "✅ RDP Enabled Successfully!"
 
     # 🔹 Install WinGet (Robust Method with Multiple Fallbacks)
-    - name: Install WinGet
+    - name: Install WinGet (Alternative Method)
       run: |
         Write-Host "🔄 Checking for WinGet..."
+        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+          Write-Host "🔄 Downloading WinGet..."
+          
+          # Download WinGet Installer
+          $wingetUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
+          $wingetPath = "$env:TEMP\WinGet.msixbundle"
+          Invoke-WebRequest -Uri $wingetUrl -OutFile $wingetPath -UseBasicParsing
+
+          # Attempt Install via Add-AppxPackage
+          Try {
+            Add-AppxPackage -Path $wingetPath -ErrorAction Stop
+            Write-Host "✅ WinGet installed via MSIXBUNDLE!"
+          } Catch {
+            Write-Host "⚠️ Add-AppxPackage failed. Trying alternative method..."
+
+            # Use DISM to enable Desktop App Installer if available
+            Try {
+              DISM /Online /Add-Capability /CapabilityName:Microsoft.DesktopAppInstaller~~~~0.0.1.0
+              Write-Host "✅ WinGet installed via DISM!"
+            } Catch {
+              Write-Host "❌ WinGet installation failed completely. Skipping..."
+            }
+          }
+        }
+
+        # Verify installation
         if (Get-Command winget -ErrorAction SilentlyContinue) {
-          Write-Host "✅ WinGet is already installed!"
-          exit 0
-        }
-
-        # Ensure App Installer is installed (Required for WinGet)
-        Write-Host "🔄 Ensuring App Installer is installed..."
-        if (-not (Get-AppxPackage -Name Microsoft.DesktopAppInstaller)) {
-          Write-Host "⚠️ App Installer not found. Installing from Microsoft Store..."
-          Start-Process -NoNewWindow "ms-windows-store://pdp/?ProductId=9NBLGGH4NNS1"
-          Start-Sleep -Seconds 30  # Wait for installation
-        }
-
-        # Re-check if WinGet is available now
-        if (Get-Command winget -ErrorAction SilentlyContinue) {
-          Write-Host "✅ WinGet successfully installed via Microsoft Store!"
-          exit 0
-        }
-
-        # Download and install WinGet manually
-        Write-Host "🔄 Downloading WinGet..."
-        $wingetURL = "https://aka.ms/getwinget"
-        $wingetInstaller = "$env:TEMP\WinGet.msixbundle"
-        Invoke-WebRequest -Uri $wingetURL -OutFile $wingetInstaller -UseBasicParsing
-
-        Write-Host "🔄 Installing WinGet..."
-        Try {
-          Add-AppxPackage -Path $wingetInstaller -ErrorAction Stop
-          Write-Host "✅ WinGet installed successfully!"
-          exit 0
-        } Catch {
-          Write-Host "⚠️ Failed to install WinGet via MSIXBUNDLE. Trying EXE method..."
-        }
-
-        # Final Fallback: Try EXE method
-        Write-Host "🔄 Downloading WinGet EXE..."
-        $wingetEXE = "$env:TEMP\winget.exe"
-        Invoke-WebRequest -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.appxbundle" -OutFile $wingetEXE -UseBasicParsing
-        Add-AppxPackage -Path $wingetEXE -ErrorAction SilentlyContinue
-
-        # Final Check
-        if (Get-Command winget -ErrorAction SilentlyContinue) {
-          Write-Host "✅ WinGet successfully installed!"
+          Write-Host "✅ WinGet is installed!"
         } else {
-          Write-Host "❌ WinGet installation failed completely. Skipping."
+          Write-Host "❌ WinGet installation failed."
           exit 1
         }
-
 
     # 🔹 Enable Virtualization & Hyper-V
     - name: Enable Virtualization & Hyper-V
