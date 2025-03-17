@@ -24,17 +24,24 @@ jobs:
         if ($activeRuns.Count -gt 1) { Write-Host "Another run is active. Exiting..."; exit 1 }
       shell: pwsh
 
-    - name: Enable Remote Desktop and Configure User
+    - name: Enable Remote Desktop & Setup User
       run: |
         Write-Host "Enabling Remote Desktop..."
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
         
-        Write-Host "Creating 'runneradmin' user..."
-        net user runneradmin "p@ssw0rd!" /add
-        net localgroup Administrators runneradmin /add
-        Write-Host "✅ Remote Desktop and user setup complete!"
+        Write-Host "Checking if 'runneradmin' user exists..."
+        $userExists = Get-LocalUser | Where-Object { $_.Name -eq "runneradmin" }
+
+        if (-not $userExists) {
+          Write-Host "Creating 'runneradmin' user..."
+          net user runneradmin "p@ssw0rd!" /add
+          net localgroup Administrators runneradmin /add
+          Write-Host "✅ User 'runneradmin' created and added to Administrators!"
+        } else {
+          Write-Host "✅ User 'runneradmin' already exists. Skipping creation."
+        }
 
     - name: Download and Install Playit
       run: |
