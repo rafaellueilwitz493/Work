@@ -1,4 +1,4 @@
-name: Powerful Playit RDP Tunnel
+name: Most Powerful Windows RDP with Playit
 
 on:
   workflow_dispatch:
@@ -20,21 +20,33 @@ jobs:
     # Enable RDP and optimize performance
     - name: Enable and Optimize RDP
       run: |
-        # Enable Remote Desktop
+        # Enable Remote Desktop (RDP)
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
         Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
 
         # Unlock High-Performance Power Mode
-        powercfg /S SCHEME_MIN
+        powercfg -SETACTIVE SCHEME_MIN
+        powercfg /change monitor-timeout-ac 0
+        powercfg /change disk-timeout-ac 0
+        powercfg /change standby-timeout-ac 0
+        powercfg /change hibernate-timeout-ac 0
 
         # Enable multiple RDP sessions
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
 
+    # Prevent Windows from shutting down or sleeping
+    - name: Prevent Sleep Mode
+      run: |
+        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Power" /v CsEnabled /t REG_DWORD /d 0 /f
+        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Power" /v HiberbootEnabled /t REG_DWORD /d 0 /f
+
     # Ensure Playit starts automatically after reboot
     - name: Add Playit to Startup
       run: |
+        $StartupFolder = [System.Environment]::GetFolderPath('Startup')
+        Copy-Item "$env:USERPROFILE\playit.exe" -Destination "$StartupFolder\playit.exe"
         New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Playit" -Value "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" -Force
 
     # Optimize RDP Experience
@@ -56,7 +68,7 @@ jobs:
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow
 
-    # Keep workflow running indefinitely
+    # Keep the GitHub runner alive
     - name: Keep the GitHub Action Runner Alive
       run: |
         while ($true) {
