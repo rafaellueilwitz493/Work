@@ -11,14 +11,21 @@ jobs:
 
     steps:
     - name: Check out the repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     # ✅ Restore previous progress if available
     - name: Restore Previous Progress
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: progress
         path: ./progress
+
+    - name: Debug GitHub Actions
+      run: |
+        echo "Checking GitHub API..."
+        curl -sL "https://api.github.com/repos/actions/download-artifact/releases/latest"
+        echo "Checking Internet Connection..."
+        nslookup github.com
 
     - name: Load Last Execution Step
       id: load-progress
