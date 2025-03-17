@@ -3,7 +3,7 @@ name: Persistent Playit RDP Tunnel
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */5 * * *"  # Restart every 5 hours to avoid GitHub's 6-hour limit
+    - cron: "0 */5 * * *"  # Runs every 5 hours to restart before the 6-hour limit
 
 permissions:
   actions: write
@@ -15,130 +15,58 @@ jobs:
 
     steps:
     - name: Check out the repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
-    # ✅ Prevent Multiple Instances (Mutex Lock)
-    - name: Check If Another Workflow is Running
-      id: check-lock
-      uses: actions/cache@v3
-      with:
-        path: ./lockfile
-        key: "workflow-lock"
-
-    - name: Exit if Another Workflow is Running
-      if: steps.check-lock.outputs.cache-hit == 'true'
+    - name: Prevent Multiple Concurrent Runs
       run: |
-        echo "⚠️ Another workflow is already running. Exiting..."
-        exit 0
-
-    # ✅ Create Lock File
-    - name: Create Lock File
-      run: echo "RUNNING" > lockfile
-
-    # ✅ Restore previous progress
-    - name: Restore Previous Progress (Optional)
-      uses: actions/download-artifact@v4
-      continue-on-error: true
-      with:
-        name: progress
-        path: ./progress
-
-    # ✅ Debug GitHub Actions Connectivity
-    - name: Debug GitHub Actions Connectivity
-      run: |
-        echo "Checking GitHub API..."
-        curl -sL "https://api.github.com/repos/actions/upload-artifact/releases/latest"
-        echo "Checking Internet Connection..."
-        nslookup github.com
-
-    # ✅ Load Last Execution Step
-    - name: Load Last Execution Step
-      id: load-progress
+        $workflowRuns = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/runs" -Headers @{Authorization="Bearer ${{ secrets.PAT_TOKEN }}"}).workflow_runs
+        $activeRuns = $workflowRuns | Where-Object { $_.status -eq "in_progress" -and $_.name -eq "Persistent Playit RDP Tunnel" }
+        if ($activeRuns.Count -gt 1) { Write-Host "Another run is active. Exiting..."; exit 1 }
       shell: pwsh
-      run: |
-        New-Item -ItemType Directory -Path "./progress" -Force  # Ensure folder exists
-        if (Test-Path ./progress/last_step.txt) {
-          $LAST_STEP = Get-Content ./progress/last_step.txt
-          echo "LAST_STEP=$LAST_STEP" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "::set-output name=step::$LAST_STEP"
-          Write-Host "Resuming from step $LAST_STEP"
-        } else {
-          echo "LAST_STEP=0" | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo "::set-output name=step::0"
-          Write-Host "Starting from Step 0"
-        }
 
-    # ✅ Download and Install Playit
-    - name: Download and Install Playit
-      if: env.LAST_STEP == '0'
+    - name: Enable Remote Desktop and Configure User
       run: |
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        Start-Sleep -Seconds 5
-        echo "1" > ./progress/last_step.txt
-
-    # ✅ Enable Remote Desktop (RDP) persistently
-    - name: Enable Remote Desktop
-      if: steps.load-progress.outputs.step == '2'
-      run: |
+        Write-Host "Enabling Remote Desktop..."
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
-        echo "3" > ./progress/last_step.txt  # Save progress
+        
+        Write-Host "Creating 'runneradmin' user..."
+        net user runneradmin "p@ssw0rd!" /add
+        net localgroup Administrators runneradmin /add
+        Write-Host "✅ Remote Desktop and user setup complete!"
 
-    # ✅ Run Playit as a Windows Service
-    - name: Run Playit as a Windows Service (Hidden)
-      if: env.LAST_STEP == '4'
+    - name: Download and Install Playit
+      run: |
+        Write-Host "Downloading Playit..."
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+        Start-Sleep -Seconds 5
+        Write-Host "✅ Playit downloaded!"
+
+    - name: Run Playit as a Background Service
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Write-Host "🔄 Setting up Playit as a service..."
-        nssm install PlayitAgent "$env:USERPROFILE\playit.exe" "--secret $env:PLAYIT_AUTH_KEY"
-        nssm set PlayitAgent Start SERVICE_AUTO_START
-        nssm set PlayitAgent AppNoConsole 1
-        nssm set PlayitAgent ObjectName LocalSystem
-        nssm set PlayitAgent Type SERVICE_WIN32_OWN_PROCESS
-        nssm set PlayitAgent AppExit Default Restart
-        nssm start PlayitAgent
-        Write-Host "✅ Playit is now running as a service!"
-        echo "5" > ./progress/last_step.txt
+        Write-Host "Setting up Playit as a hidden scheduled task..."
+        $TaskAction = New-ScheduledTaskAction -Execute "$env:USERPROFILE\playit.exe" -Argument "--secret $env:PLAYIT_AUTH_KEY"
+        $TaskTrigger = New-ScheduledTaskTrigger -AtStartup
+        $TaskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Hidden
+        Register-ScheduledTask -TaskName "PlayitAgent" -Action $TaskAction -Trigger $TaskTrigger -Settings $TaskSettings -User "SYSTEM" -RunLevel Highest -Force
+        Start-ScheduledTask -TaskName "PlayitAgent"
+        Write-Host "✅ Playit is now running in the background!"
 
-    # ✅ Save Progress
-    - name: Save Progress
-      uses: actions/upload-artifact@v4
-      with:
-        name: progress
-        path: ./progress/last_step.txt
-        retention-days: 30
-
-    # ✅ Restart Workflow Before Timeout (But Only If No Duplicate Runs)
     - name: Restart Workflow Before Timeout
-      if: steps.check-lock.outputs.cache-hit != 'true'
       env:
         GH_TOKEN: ${{ secrets.PAT_TOKEN }}
       run: |
-        $headers = @{
-          "Authorization" = "Bearer $env:GH_TOKEN"
-          "Accept" = "application/vnd.github.v3+json"
-        }
-        $body = @{
-          "ref" = "main"
-        } | ConvertTo-Json -Compress
-    
-        $workflowFileName = "rdp.yml"
+        $headers = @{ "Authorization" = "Bearer $env:GH_TOKEN" }
+        $body = @{ "ref" = "main" } | ConvertTo-Json -Compress
         $repo = "${{ github.repository }}"
-        $url = "https://api.github.com/repos/$repo/actions/workflows/$workflowFileName/dispatches"
-    
+        $url = "https://api.github.com/repos/$repo/actions/workflows/persistent_rdp_playit.yml/dispatches"
         Write-Host "Triggering workflow restart..."
         Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
       shell: pwsh
 
-    # ✅ Remove Lock File After Completion
-    - name: Remove Lock File
-      if: always()
-      run: rm -f lockfile
-
-    # ✅ Keep GitHub Action Runner Alive
     - name: Keep GitHub Action Runner Alive
       run: |
         while ($true) {
