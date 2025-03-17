@@ -1,10 +1,10 @@
-name: Optimized Playit RDP with VM Support
+name: Ultimate Windows RDP with WinGet & VM Support
 
 on:
   workflow_dispatch:
 
 jobs:
-  setup-rdp-tunnel:
+  setup-powerful-rdp:
     runs-on: windows-latest
 
     steps:
@@ -17,9 +17,10 @@ jobs:
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5
 
-    # Enable RDP and Persist After Reboot
+    # Enable RDP and ensure it stays active
     - name: Enable and Persist RDP
       run: |
+        # Enable Remote Desktop
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
@@ -28,63 +29,65 @@ jobs:
         # Enable multiple RDP sessions
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
 
-        # Ensure RDP service starts after reboot
+        # Make sure the RDP service starts after reboot
         Set-Service -Name TermService -StartupType Automatic
 
-    # Enable Virtualization Support
-    - name: Enable Virtualization for VMware & VirtualBox
+    # Enable Virtualization Support for VM
+    - name: Enable Hyper-V and VM Support
       run: |
-        # Enable Hyper-V (for VMs)
+        # Enable Hyper-V (needed for VMware/VirtualBox)
         Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All -NoRestart
-        Enable-WindowsOptionalFeature -Online -FeatureName Containers -All -NoRestart
+        Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart
+        Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -NoRestart
+        
+        # Allow Nested Virtualization
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableVirtualizationBasedSecurity" -Value 0 -Force
 
-        # Enable Nested Virtualization
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableVirtualizationBasedSecurity" -Value 0
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name "EnableVirtualizationBasedSecurity" -Value 0
-
-        # Enable VT-x / AMD-V for VirtualBox
-        bcdedit /set hypervisorlaunchtype off
-        bcdedit /set vm No
-        bcdedit /set nx AlwaysOn
-
-        # Disable Windows Defender Credential Guard (causes VM conflicts)
-        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Lsa" /v LsaCfgFlags /t REG_DWORD /d 0 /f
-
-    # Optimize Windows for Maximum Performance
-    - name: Enable High-Performance Mode
+    # Install WinGet
+    - name: Install WinGet (Windows Package Manager)
       run: |
-        powercfg /S SCHEME_MIN
-        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v LargeSystemCache /t REG_DWORD /d 1 /f
-        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v IoPageLockLimit /t REG_DWORD /d 4294967295 /f
-        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Executive" /v AdditionalCriticalWorkerThreads /t REG_DWORD /d 4 /f
-        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Executive" /v AdditionalDelayedWorkerThreads /t REG_DWORD /d 4 /f
+        # Download and install App Installer (which includes WinGet)
+        Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$env:TEMP\AppInstaller.MSIXBUNDLE"
+        Add-AppxPackage -Path "$env:TEMP\AppInstaller.MSIXBUNDLE"
 
-    # Disable Unnecessary Windows Services to Free Up Resources
-    - name: Disable Unnecessary Services
-      run: |
-        Get-Service | Where-Object { $_.StartType -eq 'Automatic' -and $_.Status -eq 'Running' } | `
-        Where-Object { $_.Name -notmatch 'TermService|WinRM|EventLog|W32Time|WSearch' } | `
-        ForEach-Object { Set-Service -Name $_.Name -StartupType Disabled }
-
-    # Register Playit as a Windows Service for Auto-Start
+    # Register Playit as a Windows service to auto-start without opening a window
     - name: Register Playit as a Background Service
       run: |
-        sc create PlayitService binPath= "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" start= auto
+        New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Services\PlayitService" -Force
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\PlayitService" -Name "ImagePath" -Value "`"$env:USERPROFILE\playit.exe`" --secret $env:PLAYIT_AUTH_KEY"
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\PlayitService" -Name "Start" -Value 2
         sc start PlayitService
 
-    # Start Playit Immediately
-    - name: Start Playit Agent
+    # Start Playit immediately (in the background, no command prompt window)
+    - name: Start Playit Agent Silently
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
 
-    # Ensure RDP reconnects after restart
-    - name: Keep RDP Session Active
+    # Fix "Access Denied" error when modifying Windows services
+    - name: Disable Unnecessary Services (Skip Protected)
+      run: |
+        $excludedServices = @('BFE', 'EventLog', 'WinRM', 'W32Time', 'WSearch', 'TermService', 'RpcSs', 'DcomLaunch')
+
+        Get-Service | Where-Object { 
+          $_.StartType -eq 'Automatic' -and $_.Status -eq 'Running' -and 
+          $excludedServices -notcontains $_.Name
+        } | ForEach-Object { 
+          try {
+            Set-Service -Name $_.Name -StartupType Disabled -ErrorAction Stop
+            Write-Host "Disabled service: $($_.Name)"
+          } catch {
+            Write-Host "Skipping protected service: $($_.Name)"
+          }
+        }
+
+    # Ensure RDP reconnects even after restart
+    - name: Keep RDP Persistent
       run: |
         reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Winlogon" /v KeepRDPConnections /t REG_DWORD /d 1 /f
 
-    # Keep GitHub Actions Runner Alive
+    # Keep GitHub Actions runner alive
     - name: Keep Runner Alive
       run: |
         while ($true) {
