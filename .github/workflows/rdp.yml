@@ -11,11 +11,11 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v2
 
-    # 🔹 Install WinGet (Robust Method with Multiple Fallbacks)
+    # 🔹 Install WinGet (Robust Multi-Method)
     - name: Install WinGet (Multi-Method)
       run: |
         Write-Host "🔄 Checking for WinGet..."
-
+        
         # ✅ If WinGet is already installed, exit
         if (Get-Command winget -ErrorAction SilentlyContinue) {
             Write-Host "✅ WinGet is already installed!"
@@ -24,31 +24,10 @@ jobs:
 
         # ✅ Function to check internet connectivity reliably
         Function Test-Internet {
-            Try {
-                $response = Invoke-WebRequest -Uri "https://www.microsoft.com" -UseBasicParsing -TimeoutSec 5
-                if ($response.StatusCode -eq 200) { return $true }
-            } Catch {
-                Write-Host "⚠️ Microsoft.com unreachable, trying Google..."
-            }
-
-            Try {
-                $response = Invoke-WebRequest -Uri "https://www.google.com" -UseBasicParsing -TimeoutSec 5
-                if ($response.StatusCode -eq 200) { return $true }
-            } Catch {
-                Write-Host "⚠️ Google.com unreachable, checking ping..."
-            }
-
-            Try {
-                $pingResult = Test-Connection -ComputerName 8.8.8.8 -Count 2 -Quiet
-                if ($pingResult) { return $true }
-            } Catch {
-                Write-Host "❌ No internet connection detected!"
-            }
-
-            return $false
+            Try { Invoke-WebRequest -Uri "https://www.microsoft.com" -UseBasicParsing -TimeoutSec 5 | Out-Null; return $true }
+            Catch { return $false }
         }
 
-        # ✅ Verify internet connection before installing WinGet
         if (-not (Test-Internet)) {
             Write-Host "❌ No internet connection. Cannot install WinGet."
             exit 1
@@ -62,17 +41,13 @@ jobs:
             $wingetMsiUrl = "https://aka.ms/getwinget"
             $wingetMsiPath = "$env:TEMP\WinGetInstaller.msi"
             Invoke-WebRequest -Uri $wingetMsiUrl -OutFile $wingetMsiPath -UseBasicParsing
-
-            Write-Host "🔄 Installing WinGet via MSI..."
             Start-Process msiexec.exe -ArgumentList "/i $wingetMsiPath /quiet /norestart" -Wait -NoNewWindow
 
             if (Get-Command winget -ErrorAction SilentlyContinue) {
                 Write-Host "✅ WinGet Installed Successfully via MSI!"
                 exit 0
             }
-        } Catch {
-            Write-Host "⚠️ MSI Install failed, trying alternative methods..."
-        }
+        } Catch { Write-Host "⚠️ MSI Install failed, trying alternative methods..." }
 
         # ✅ METHOD 2: Install via MSIXBUNDLE
         Try {
@@ -80,17 +55,13 @@ jobs:
             $msixUrl = "https://aka.ms/getwinget"
             $msixPath = "$env:TEMP\WinGet.msixbundle"
             Invoke-WebRequest -Uri $msixUrl -OutFile $msixPath -UseBasicParsing
-
-            Write-Host "🔄 Installing WinGet via Add-AppxPackage..."
             Add-AppxPackage -Path $msixPath
 
             if (Get-Command winget -ErrorAction SilentlyContinue) {
                 Write-Host "✅ WinGet Installed Successfully via MSIXBUNDLE!"
                 exit 0
             }
-        } Catch {
-            Write-Host "⚠️ MSIXBUNDLE Install failed, trying alternative..."
-        }
+        } Catch { Write-Host "⚠️ MSIXBUNDLE Install failed, trying alternative..." }
 
         # ✅ METHOD 3: Install via DISM (Fallback)
         Try {
@@ -101,9 +72,7 @@ jobs:
                 Write-Host "✅ WinGet Installed Successfully via DISM!"
                 exit 0
             }
-        } Catch {
-            Write-Host "⚠️ DISM method failed. Trying final method..."
-        }
+        } Catch { Write-Host "⚠️ DISM method failed. Trying final method..." }
 
         # ✅ METHOD 4: Manual Download & Extraction (Final Resort)
         Try {
@@ -111,8 +80,6 @@ jobs:
             $exeUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/winget.exe"
             $exePath = "$env:TEMP\winget.exe"
             Invoke-WebRequest -Uri $exeUrl -OutFile $exePath -UseBasicParsing
-
-            Write-Host "🔄 Moving WinGet to System Path..."
             Move-Item -Path $exePath -Destination "C:\Windows\System32\" -Force
 
             if (Test-Path "C:\Windows\System32\winget.exe") {
@@ -124,6 +91,14 @@ jobs:
             exit 1
         }
 
+        # ✅ Refresh Environment Variables
+        Write-Host "🔄 Refreshing Environment Variables..."
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", [System.EnvironmentVariableTarget]::Machine)
+
+        # ✅ Validate Installation
+        Write-Host "🔄 Checking WinGet version..."
+        winget --version
+        
     # 🔹 Enable Virtualization & Hyper-V
     - name: Enable Virtualization & Hyper-V
       run: |
