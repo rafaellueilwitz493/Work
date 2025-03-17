@@ -47,10 +47,11 @@ jobs:
     - name: Download and Install Playit
       if: steps.load-progress.outputs.step == '0'
       run: |
+        New-Item -ItemType Directory -Path "./progress" -Force  # ✅ Ensure folder exists
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5
-        echo "1" > ./progress/last_step.txt  # Save progress
-
+        echo "1" | Out-File -FilePath "./progress/last_step.txt" -Encoding utf8  # ✅ Write safely
+    
     # ✅ Enable Virtualization & Hyper-V
     - name: Enable Virtualization & Hyper-V
       if: steps.load-progress.outputs.step == '1'
