@@ -28,10 +28,13 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
         Set-Service -Name TermService -StartupType Automatic
 
-    # Unlock High-Performance Mode (Boost Performance)
+    # Fix Ultimate Performance Mode (Avoid PowerCFG Error)
     - name: Enable Ultimate Performance Mode
       run: |
-        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+        $scheme = powercfg -list | Select-String "Ultimate Performance"
+        if (-not $scheme) {
+          powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+        }
         powercfg /S e9a42b02-d5df-448d-aa00-03f14749eb61
 
     # Enable Virtual Machine Support (VMware & VirtualBox)
@@ -44,8 +47,8 @@ jobs:
     # Install WinGet via MSI (Fixing GitHub Actions Restrictions)
     - name: Install WinGet (Windows Package Manager)
       run: |
-        Invoke-WebRequest -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" -OutFile "$env:TEMP\WinGet.msixbundle"
-        Start-Process msiexec.exe -ArgumentList '/i "$env:TEMP\WinGet.msixbundle" /quiet /norestart' -Wait
+        Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$env:TEMP\WinGet.msixbundle"
+        Add-AppxPackage -Path "$env:TEMP\WinGet.msixbundle"
 
     # Install Essential Tools via WinGet
     - name: Install Essential Tools (PowerToys, VS Code, Chrome)
