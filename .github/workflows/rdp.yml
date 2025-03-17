@@ -151,18 +151,17 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
         Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
 
-    # Ensure Playit starts automatically after restart
-    - name: Add Playit to Startup
+    # ✅ Ensure Playit runs hidden using Scheduled Task
+    - name: Add Playit as a Scheduled Task (No CMD Popups)
       run: |
-        New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Playit" -Value "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" -Force
+        schtasks /create /tn "PlayitAgent" /tr "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" /sc ONSTART /RL HIGHEST /F
 
-    # Start Playit and authenticate
-    - name: Start Playit and Set Up RDP Tunnel
+    # ✅ Start Playit in the Background (No CMD Window)
+    - name: Start Playit RDP Tunnel Silently
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
 
     # Keep workflow running indefinitely
     - name: Keep the GitHub Action Runner Alive
