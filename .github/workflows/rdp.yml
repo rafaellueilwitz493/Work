@@ -1,93 +1,72 @@
-name: Ultimate Windows RDP with WinGet & VM Support
+name: Ultimate Persistent RDP with WinGet & VM Support
 
 on:
   workflow_dispatch:
 
 jobs:
-  setup-powerful-rdp:
+  setup-rdp-tunnel:
     runs-on: windows-latest
 
     steps:
     - name: Check out the repository
       uses: actions/checkout@v2
 
-    # Download and Install Playit
+    # Download and Install Playit (No Console Popup)
     - name: Download and Install Playit
       run: |
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5
+        # Register Playit to run silently in the background
+        New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Playit" -Value "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" -Force
 
-    # Enable RDP and ensure it stays active
+    # Enable RDP, Keep Active After Reboot, and Allow Multiple Sessions
     - name: Enable and Persist RDP
       run: |
-        # Enable Remote Desktop
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
-
-        # Enable multiple RDP sessions
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
-
-        # Make sure the RDP service starts after reboot
         Set-Service -Name TermService -StartupType Automatic
 
-    # Enable Virtualization Support for VM
-    - name: Enable Hyper-V and VM Support
+    # Unlock High-Performance Mode (Boost Performance)
+    - name: Enable Ultimate Performance Mode
       run: |
-        # Enable Hyper-V (needed for VMware/VirtualBox)
-        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All -NoRestart
-        Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart
-        Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -NoRestart
-        
-        # Allow Nested Virtualization
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableVirtualizationBasedSecurity" -Value 0 -Force
+        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+        powercfg /S e9a42b02-d5df-448d-aa00-03f14749eb61
 
-    # Install WinGet
+    # Enable Virtual Machine Support (VMware & VirtualBox)
+    - name: Enable Virtual Machine Support
+      run: |
+        bcdedit /set hypervisorlaunchtype Auto
+        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -NoRestart
+        Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -NoRestart
+
+    # Install WinGet via MSI (Fixing GitHub Actions Restrictions)
     - name: Install WinGet (Windows Package Manager)
       run: |
-        # Download and install App Installer (which includes WinGet)
-        Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$env:TEMP\AppInstaller.MSIXBUNDLE"
-        Add-AppxPackage -Path "$env:TEMP\AppInstaller.MSIXBUNDLE"
+        Invoke-WebRequest -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" -OutFile "$env:TEMP\WinGet.msixbundle"
+        Start-Process msiexec.exe -ArgumentList '/i "$env:TEMP\WinGet.msixbundle" /quiet /norestart' -Wait
 
-    # Register Playit as a Windows service to auto-start without opening a window
-    - name: Register Playit as a Background Service
+    # Install Essential Tools via WinGet
+    - name: Install Essential Tools (PowerToys, VS Code, Chrome)
       run: |
-        New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Services\PlayitService" -Force
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\PlayitService" -Name "ImagePath" -Value "`"$env:USERPROFILE\playit.exe`" --secret $env:PLAYIT_AUTH_KEY"
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\PlayitService" -Name "Start" -Value 2
-        sc start PlayitService
+        winget install --silent --accept-package-agreements --accept-source-agreements Microsoft.PowerToys
+        winget install --silent --accept-package-agreements --accept-source-agreements Microsoft.VisualStudioCode
+        winget install --silent --accept-package-agreements --accept-source-agreements Google.Chrome
 
-    # Start Playit immediately (in the background, no command prompt window)
-    - name: Start Playit Agent Silently
+    # Start Playit & Keep RDP Active
+    - name: Start Playit Agent
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
 
-    # Fix "Access Denied" error when modifying Windows services
-    - name: Disable Unnecessary Services (Skip Protected)
-      run: |
-        $excludedServices = @('BFE', 'EventLog', 'WinRM', 'W32Time', 'WSearch', 'TermService', 'RpcSs', 'DcomLaunch')
-
-        Get-Service | Where-Object { 
-          $_.StartType -eq 'Automatic' -and $_.Status -eq 'Running' -and 
-          $excludedServices -notcontains $_.Name
-        } | ForEach-Object { 
-          try {
-            Set-Service -Name $_.Name -StartupType Disabled -ErrorAction Stop
-            Write-Host "Disabled service: $($_.Name)"
-          } catch {
-            Write-Host "Skipping protected service: $($_.Name)"
-          }
-        }
-
-    # Ensure RDP reconnects even after restart
-    - name: Keep RDP Persistent
+    # Keep Session Active After Restart
+    - name: Ensure Persistent RDP Session
       run: |
         reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Winlogon" /v KeepRDPConnections /t REG_DWORD /d 1 /f
 
-    # Keep GitHub Actions runner alive
+    # Keep GitHub Actions Runner Alive
     - name: Keep Runner Alive
       run: |
         while ($true) {
