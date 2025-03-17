@@ -172,10 +172,36 @@ jobs:
     - name: Configure RunnerAdmin for RDP
       run: |
         Write-Host "🔄 Configuring RunnerAdmin for RDP..."
-        net user runneradmin "P@ssw0rd!" /add
-        net localgroup "Remote Desktop Users" runneradmin /add
-        net localgroup Administrators runneradmin /add
-        Write-Host "✅ RunnerAdmin added to RDP and Administrators group!"
+
+        # ✅ Check if the user already exists
+        $UserExists = net user runneradmin 2>&1 | Select-String "The user name could not be found"
+        if ($UserExists) {
+            Write-Host "🔄 Creating user 'runneradmin'..."
+            net user runneradmin "P@ssw0rd!" /add
+        } else {
+            Write-Host "✅ User 'runneradmin' already exists. Skipping creation."
+        }
+
+        # ✅ Add to Remote Desktop Users (if not already a member)
+        $RDPGroupCheck = net localgroup "Remote Desktop Users" 2>&1 | Select-String "runneradmin"
+        if (-not $RDPGroupCheck) {
+            Write-Host "🔄 Adding 'runneradmin' to Remote Desktop Users..."
+            net localgroup "Remote Desktop Users" runneradmin /add
+        } else {
+            Write-Host "✅ 'runneradmin' is already in Remote Desktop Users. Skipping."
+        }
+
+        # ✅ Add to Administrators (if not already a member)
+        $AdminGroupCheck = net localgroup Administrators 2>&1 | Select-String "runneradmin"
+        if (-not $AdminGroupCheck) {
+            Write-Host "🔄 Adding 'runneradmin' to Administrators..."
+            net localgroup Administrators runneradmin /add
+        } else {
+            Write-Host "✅ 'runneradmin' is already an Administrator. Skipping."
+        }
+
+        Write-Host "✅ RunnerAdmin configuration complete!"
+        exit 0
 
     # ✅ Add Playit to Startup (Persistent)
     - name: Add Playit to Startup
