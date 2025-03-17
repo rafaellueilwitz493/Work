@@ -11,101 +11,48 @@ jobs:
     - name: 🛠️ Check out the repository
       uses: actions/checkout@v2
 
-    # Install Playit with Resilience
-    - name: 📥 Download and Install Playit
-      run: |
-        $PlayitPath = "$env:USERPROFILE\playit.exe"
-        
-        # Try first download method
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile $PlayitPath -ErrorAction SilentlyContinue
-        
-        # If first method fails, try another source
-        if (!(Test-Path $PlayitPath)) {
-            Invoke-WebRequest -Uri "https://dl.playit.gg/playit-windows.exe" -OutFile $PlayitPath
-        }
-
-        # Verify installation
-        if (!(Test-Path $PlayitPath)) {
-            Write-Host "❌ Playit download failed."
-            exit 1
-        }
-
-    # Enable RDP and Keep Active After Reboot
-    - name: 🔓 Enable and Persist RDP
-      run: |
-        # Enable RDP
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
-        
-        # Enable multiple RDP sessions
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
-
-        # Ensure RDP service starts on reboot
-        Set-Service -Name TermService -StartupType Automatic
-
-    # Persistent Playit Execution
-    - name: 🔄 Register Playit as a Scheduled Task
-      run: |
-        $PlayitPath = "$env:USERPROFILE\playit.exe"
-        
-        # Remove existing task if any
-        schtasks /delete /tn "PlayitTunnel" /f
-        
-        # Create new scheduled task
-        schtasks /create /tn "PlayitTunnel" /tr "$PlayitPath --secret $env:PLAYIT_AUTH_KEY" /sc onlogon /rl highest
-
-    # Start Playit Immediately
-    - name: 🚀 Start Playit
-      env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
-      run: |
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-
     # Enable Virtualization (Hyper-V, VM Support)
     - name: 🖥️ Enable Virtualization Support
       run: |
-        # Enable Hyper-V
-        bcdedit /set hypervisorlaunchtype Auto
-        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -NoRestart -ErrorAction SilentlyContinue
+        # Check Windows Edition
+        $WinEdition = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").EditionID
+        Write-Host "Windows Edition Detected: $WinEdition"
 
-        # Alternative: Enable Virtual Machine Platform
-        Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart -ErrorAction SilentlyContinue
+        if ($WinEdition -match "Home") {
+            Write-Host "❌ Hyper-V is not available on Windows Home. Skipping Hyper-V installation."
+        } else {
+            # Enable Hyper-V if supported
+            Write-Host "🔄 Enabling Hyper-V..."
+            bcdedit /set hypervisorlaunchtype Auto
 
-        # Alternative: Use DISM if previous methods fail
-        DISM /Online /Enable-Feature /FeatureName:HypervisorPlatform /All /NoRestart
-
-    # Set Ultimate Performance Mode
-    - name: ⚡ Unlock Ultimate Performance Mode
-      run: |
-        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
-        powercfg /S e9a42b02-d5df-448d-aa00-03f14749eb61
-
-    # Install Winget (Multiple Methods)
-    - name: 📦 Install WinGet
-      run: |
-        $WinGetPath = "$env:USERPROFILE\WinGet.msixbundle"
-        
-        # Try direct MSIXBUNDLE install
-        Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile $WinGetPath
-        Add-AppxPackage -Path $WinGetPath -ErrorAction SilentlyContinue
-
-        # Alternative: Use DISM
-        if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
-            DISM /Online /Add-Package /PackagePath:$WinGetPath
+            Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -NoRestart -ErrorAction SilentlyContinue
+            Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -NoRestart -ErrorAction SilentlyContinue
+            Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Platform -NoRestart -ErrorAction SilentlyContinue
         }
 
-        # Final Check
-        if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
-            Write-Host "❌ WinGet installation failed."
+        # Enable Virtual Machine Platform (Alternative)
+        Write-Host "🔄 Enabling Virtual Machine Platform..."
+        Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart -ErrorAction SilentlyContinue
+        
+        # Enable Windows Hypervisor Platform
+        Write-Host "🔄 Enabling Windows Hypervisor Platform..."
+        Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -NoRestart -ErrorAction SilentlyContinue
+
+        # Use DISM as an alternative method
+        Write-Host "🔄 Using DISM to enable virtualization features..."
+        DISM /Online /Enable-Feature /FeatureName:Microsoft-Hyper-V-All /All /NoRestart
+        DISM /Online /Enable-Feature /FeatureName:HypervisorPlatform /All /NoRestart
+        DISM /Online /Enable-Feature /FeatureName:VirtualMachinePlatform /All /NoRestart
+
+        # Check if virtualization is enabled in BIOS
+        $VirtualizationEnabled = (Get-ComputerInfo).HyperVRequirementDataExecutionPreventionAvailable
+        if ($VirtualizationEnabled -eq $false) {
+            Write-Host "⚠️ Virtualization is disabled in BIOS. Please enable it for Hyper-V to work."
             exit 1
         }
 
-    # Keep GitHub Actions Runner Alive
-    - name: 🛡️ Keep Runner Alive
+    # Reboot system to apply Hyper-V changes
+    - name: 🔄 Reboot System
       run: |
-        while ($true) {
-          Write-Host "Keeping runner alive... $(Get-Date)"
-          Start-Sleep -Seconds 300
-        }
+        Write-Host "🔄 Rebooting system to apply Hyper-V changes..."
+        shutdown /r /t 10
