@@ -56,16 +56,28 @@ jobs:
 
     - name: Restore Files After Restart
       run: |
+        Write-Host "🔄 Restoring user files and installed programs..."
+        if (Test-Path "C:\persistent_data\Program Files") {
+          robocopy "C:\persistent_data\Program Files" "C:\Program Files" /E /COPYALL /NFL /NDL /NJH /NJS
+        }
+        if (Test-Path "C:\persistent_data\runneradmin") {
+          robocopy "C:\persistent_data\runneradmin" "C:\Users\runneradmin" /E /COPYALL /NFL /NDL /NJH /NJS
+        }
         if (Test-Path "C:\persistent_data\playit.exe") {
           Copy-Item -Path "C:\persistent_data\playit.exe" -Destination "$env:USERPROFILE\playit.exe" -Force
         }
-          
-    - name: Download and Install Playit
+        Write-Host "✅ Files and programs restored!"
+
+    - name: Download and Install Playit (if missing)
       run: |
-        Write-Host "Downloading Playit..."
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        Start-Sleep -Seconds 5
-        Write-Host "✅ Playit downloaded!"
+        if (!(Test-Path "$env:USERPROFILE\playit.exe")) {
+          Write-Host "Downloading Playit..."
+          Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+          Start-Sleep -Seconds 5
+          Write-Host "✅ Playit downloaded!"
+        } else {
+          Write-Host "✅ Playit is already restored!"
+        }
 
     - name: Run Playit as a Background Service
       env:
@@ -78,11 +90,15 @@ jobs:
         Register-ScheduledTask -TaskName "PlayitAgent" -Action $TaskAction -Trigger $TaskTrigger -Settings $TaskSettings -User "SYSTEM" -RunLevel Highest -Force
         Start-ScheduledTask -TaskName "PlayitAgent"
         Write-Host "✅ Playit is now running in the background!"
-        
+
     - name: Save Files Before Restart
       run: |
+        Write-Host "💾 Saving user files and installed software..."
         if (!(Test-Path "C:\persistent_data")) { New-Item -ItemType Directory -Path "C:\persistent_data" }
+        robocopy "C:\Program Files" "C:\persistent_data\Program Files" /E /COPYALL /NFL /NDL /NJH /NJS
+        robocopy "C:\Users\runneradmin" "C:\persistent_data\runneradmin" /E /COPYALL /NFL /NDL /NJH /NJS
         Copy-Item -Path "$env:USERPROFILE\playit.exe" -Destination "C:\persistent_data\playit.exe" -Force
+        Write-Host "✅ Files and programs saved!"
 
     - name: Restart Workflow Before Timeout
       env:
