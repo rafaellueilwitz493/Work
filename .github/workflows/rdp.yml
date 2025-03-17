@@ -72,7 +72,7 @@ jobs:
         }
         $body = @{ "ref" = "main" } | ConvertTo-Json -Compress
     
-        $workflowFileName = "persistent_rdp_playit.yml"  # Ensure this is correct
+        $workflowFileName = "rdp.yml"  # Ensure this is correct
         $repo = "${{ github.repository }}"
         $url = "https://api.github.com/repos/$repo/actions/workflows/$workflowFileName/dispatches"
     
