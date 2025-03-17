@@ -17,14 +17,15 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v3
 
-    # ✅ Restore previous progress if available
+    # ✅ Restore previous progress
     - name: Restore Previous Progress (Optional)
       uses: actions/download-artifact@v4
-      continue-on-error: true  # Prevents failure if artifact doesn't exist
+      continue-on-error: true
       with:
         name: progress
         path: ./progress
 
+    # ✅ Debug GitHub Actions Connectivity
     - name: Debug GitHub Actions Connectivity
       run: |
         echo "Checking GitHub API..."
@@ -32,35 +33,34 @@ jobs:
         echo "Checking Internet Connection..."
         nslookup github.com
 
+
+    # ✅ Load Last Execution Step
     - name: Load Last Execution Step
       id: load-progress
       run: |
-        New-Item -ItemType Directory -Path "./progress" -Force  # ✅ Ensure the folder exists
-    
+        New-Item -ItemType Directory -Path "./progress" -Force  # Ensure folder exists
         if (Test-Path ./progress/last_step.txt) {
           $LAST_STEP = Get-Content ./progress/last_step.txt
-          echo "step=$LAST_STEP" | Out-File -FilePath $env:GITHUB_ENV -Append  # ✅ New method
+          echo "LAST_STEP=$LAST_STEP" | Out-File -FilePath $env:GITHUB_ENV -Append
           Write-Host "Resuming from step $LAST_STEP"
         } else {
-          echo "step=0" | Out-File -FilePath $env:GITHUB_ENV -Append  # ✅ New method
+          echo "LAST_STEP=0" | Out-File -FilePath $env:GITHUB_ENV -Append
           Write-Host "Starting from Step 0"
         }
 
+    # ✅ Download and Install Playit
     - name: Download and Install Playit
-      if: steps.load-progress.outputs.step == '0'
+      if: env.LAST_STEP == '0'
       run: |
-        New-Item -ItemType Directory -Path "./progress" -Force  # ✅ Ensure folder exists
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5
-        echo "1" | Out-File -FilePath "./progress/last_step.txt" -Encoding utf8  # ✅ Write safely
+        echo "1" > ./progress/last_step.txt
     
     # ✅ Enable Virtualization & Hyper-V
     - name: Enable Virtualization & Hyper-V
       if: steps.load-progress.outputs.step == '1'
       run: |
         Write-Host "🔄 Checking if system supports Hyper-V..."
-        
-        # ✅ Check if system supports Hyper-V
         $hyperVSupport = Get-WindowsOptionalFeature -Online | Where-Object { $_.FeatureName -like "*Hyper-V*" }
         if (-not $hyperVSupport) {
             Write-Host "❌ This system does not support Hyper-V. Exiting..."
@@ -68,28 +68,12 @@ jobs:
         } else {
             Write-Host "✅ System supports Hyper-V!"
         }
-        
-        # ✅ Enable Virtualization in Boot Configuration
         Write-Host "🔄 Enabling Virtualization..."
         bcdedit /set hypervisorlaunchtype Auto
-        if ($?) {
-            Write-Host "✅ Virtualization Enabled!"
-        } else {
-            Write-Host "❌ Failed to enable Virtualization. Check BIOS settings."
-            exit 1
-        }
-        
-        # ✅ List of Hyper-V Features
-        $features = @(
-            "Microsoft-Hyper-V-All",
-            "Microsoft-Hyper-V",
-            "Microsoft-Hyper-V-Platform",
-            "Microsoft-Hyper-V-Management-Tools",
-            "HypervisorPlatform"
-        )
-        
-        # ✅ METHOD 1: Enable Hyper-V using Enable-WindowsOptionalFeature
-        Write-Host "🔄 Enabling Hyper-V using Windows Features..."
+        if ($?) { Write-Host "✅ Virtualization Enabled!" } else { exit 1 }
+
+        # Enable Hyper-V Features
+        $features = @("Microsoft-Hyper-V-All", "Microsoft-Hyper-V", "Microsoft-Hyper-V-Platform", "Microsoft-Hyper-V-Management-Tools", "HypervisorPlatform")
         foreach ($feature in $features) {
             Try {
                 Write-Host "🔄 Enabling $feature..."
@@ -99,65 +83,38 @@ jobs:
                 Write-Host "⚠️ Failed to enable $feature, trying next..."
             }
         }
-        
-        # ✅ METHOD 2: Check if Hyper-V is fully enabled
-        $enabledFeatures = Get-WindowsOptionalFeature -Online | Where-Object { $_.State -eq "Enabled" -and $_.FeatureName -like "*Hyper-V*" }
-        if ($enabledFeatures) {
-            Write-Host "✅ Hyper-V is enabled successfully!"
-            echo "2" > ./progress/last_step.txt  # Save progress
-            exit 0
-        } else {
-            Write-Host "⚠️ Hyper-V installation may not be complete. Checking DISM method..."
-        }
-        
-        # ✅ METHOD 3: Enable Hyper-V using DISM
-        Try {
-            Write-Host "🔄 Trying DISM method for Hyper-V..."
-            DISM /Online /Enable-Feature /FeatureName:Microsoft-Hyper-V-All /All /NoRestart
-            Write-Host "✅ DISM method executed for Hyper-V!"
-        } Catch {
-            Write-Host "⚠️ DISM method failed. Trying alternative..."
-        }
-        
-        # ✅ METHOD 4: Manually Install Hyper-V (Final Resort)
-        Try {
-            Write-Host "🔄 Manually enabling Hyper-V registry settings..."
-            New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies" -Name "HyperV" -Value 1 -PropertyType DWord -Force
-            Restart-Computer -Force
-        } Catch {
-            Write-Host "❌ All installation methods failed. Exiting..."
-            exit 1
-        }
-        
-        Write-Host "✅ Hyper-V installation completed!"
         echo "2" > ./progress/last_step.txt  # Save progress
 
-
-    # ✅ Enable Remote Desktop (RDP) persistently
+    # ✅ Enable Remote Desktop (RDP)
     - name: Enable Remote Desktop
-      if: steps.load-progress.outputs.step == '2'
+      if: env.LAST_STEP == '2'
       run: |
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Write-Host "🔄 Enabling Remote Desktop..."
+        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
-        echo "3" > ./progress/last_step.txt  # Save progress
+        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1
+        Write-Host "✅ Remote Desktop Enabled!"
+        echo "3" > ./progress/last_step.txt
 
-    # ✅ Install NSSM (Alternative to Task Scheduler)
+    # ✅ Install NSSM (Non-Sucking Service Manager)
     - name: Install NSSM
-      if: steps.load-progress.outputs.step == '3'
+      if: env.LAST_STEP == '3'
       run: |
+        Write-Host "🔄 Downloading and installing NSSM..."
         Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile "$env:TEMP\nssm.zip"
         Expand-Archive -Path "$env:TEMP\nssm.zip" -DestinationPath "$env:TEMP\nssm" -Force
         Copy-Item -Path "$env:TEMP\nssm\nssm-2.24\win64\nssm.exe" -Destination "$env:SystemRoot\System32" -Force
-        echo "4" > ./progress/last_step.txt  # Save progress
+        Write-Host "✅ NSSM Installed!"
+        echo "4" > ./progress/last_step.txt
 
-    # ✅ Create a Windows Service for Playit (Runs in Background)
+
+    # ✅ Run Playit as a Windows Service
     - name: Run Playit as a Windows Service (Hidden)
-      if: steps.load-progress.outputs.step == '4'
+      if: env.LAST_STEP == '4'
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
+        Write-Host "🔄 Setting up Playit as a service..."
         nssm install PlayitAgent "$env:USERPROFILE\playit.exe" "--secret $env:PLAYIT_AUTH_KEY"
         nssm set PlayitAgent Start SERVICE_AUTO_START
         nssm set PlayitAgent AppNoConsole 1
@@ -165,15 +122,17 @@ jobs:
         nssm set PlayitAgent Type SERVICE_WIN32_OWN_PROCESS
         nssm set PlayitAgent AppExit Default Restart
         nssm start PlayitAgent
-        echo "5" > ./progress/last_step.txt  # Save progress
+        Write-Host "✅ Playit is now running as a service!"
+        echo "5" > ./progress/last_step.txt
 
-    # ✅ Keep GitHub Actions Alive (Restart Workflow Automatically)
+    # ✅ Save Progress
     - name: Save Progress
-      uses: actions/upload-artifact@v4  # Ensure this is v4 (not v3)
+      uses: actions/upload-artifact@v4
       with:
         name: progress
         path: ./progress/last_step.txt
 
+    # ✅ Restart Workflow Before Timeout
     - name: Restart Workflow Before Timeout
       env:
         GH_TOKEN: ${{ secrets.PAT_TOKEN }}
@@ -186,14 +145,15 @@ jobs:
           "ref" = "main"
         } | ConvertTo-Json -Compress
     
-        $workflowFileName = "rdp.yml"  # Ensure this matches your workflow filename
+        $workflowFileName = "rdp.yml"
         $repo = "${{ github.repository }}"
         $url = "https://api.github.com/repos/$repo/actions/workflows/$workflowFileName/dispatches"
     
-        Write-Host "Triggering workflow dispatch to: $url"
+        Write-Host "Triggering workflow restart..."
         Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
       shell: pwsh
 
+    # ✅ Keep GitHub Action Runner Alive
     - name: Keep GitHub Action Runner Alive
       run: |
         while ($true) {
