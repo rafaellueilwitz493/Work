@@ -63,13 +63,16 @@ jobs:
             Write-Host "✅ WinGet is already installed."
         }
 
-    # Register Playit as a Windows Service for auto-start
-    - name: Register Playit as a Service
+    # Use Task Scheduler instead of Windows Service for Playit
+    - name: Register Playit with Task Scheduler
       run: |
-        Write-Host "🔄 Registering Playit as a service..."
-        sc create PlayitService binPath= "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" start= auto
-        sc start PlayitService
-        Write-Host "✅ Playit is now running as a service."
+        Write-Host "🔄 Registering Playit to start on boot via Task Scheduler..."
+        $Action = New-ScheduledTaskAction -Execute "$env:USERPROFILE\playit.exe" -Argument "--secret $env:PLAYIT_AUTH_KEY"
+        $Trigger = New-ScheduledTaskTrigger -AtStartup
+        $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -DontStopOnIdleEnd
+        Register-ScheduledTask -TaskName "PlayitAutoStart" -Action $Action -Trigger $Trigger -Settings $Settings -User "SYSTEM"
+
+        Write-Host "✅ Playit will now start automatically at boot."
 
     # Start Playit immediately
     - name: Start Playit Agent
