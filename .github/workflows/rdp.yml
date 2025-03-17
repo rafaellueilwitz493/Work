@@ -35,13 +35,13 @@ jobs:
         $userExists = Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue
 
         if ($userExists) {
-          Write-Host "✅ User 'runneradmin' already exists. Skipping creation."
+          Write-Host "✅ User 'runneradmin' already exists. Updating password..."
+          Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
         } else {
           Write-Host "🔹 Creating 'runneradmin' user..."
-          $Password = ConvertTo-SecureString "p@ssw0rd!" -AsPlainText -Force
-          New-LocalUser "runneradmin" -Password $Password -FullName "Runner Admin" -Description "Admin user"
-          Add-LocalGroupMember -Group "Administrators" -Member "runneradmin"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin"
+          net user runneradmin "p@ssw0rd!" /add
+          net localgroup Administrators runneradmin /add
+          net localgroup "Remote Desktop Users" runneradmin /add
           Write-Host "✅ User 'runneradmin' created and added to RDP!"
         }
       shell: pwsh
