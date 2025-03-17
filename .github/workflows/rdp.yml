@@ -125,9 +125,11 @@ jobs:
         path: ./progress/last_step.txt
 
     - name: Restart Workflow Before Timeout
+      env:
+        GH_TOKEN: ${{ secrets.PAT_TOKEN }}  # ⬅️ Use a Personal Access Token with "workflow" scope
       run: |
         $headers = @{
-          "Authorization" = "Bearer ${{ secrets.GITHUB_TOKEN }}"
+          "Authorization" = "Bearer $env:GH_TOKEN"
           "Accept" = "application/vnd.github.v3+json"
         }
         
@@ -135,14 +137,16 @@ jobs:
           "ref" = "main"
         } | ConvertTo-Json -Compress
         
-        # ✅ Fix: Ensure workflow filename is correct
-        $workflowFileName = "persistent-playit-rdp-tunnel.yml"  # ✅ Must match exactly in .github/workflows/
+        # ✅ Ensure workflow filename is correct
+        $workflowFileName = "persistent-playit-rdp-tunnel.yml"  # ⬅️ Check this matches your workflow file
+    
+        # ✅ Correct API URL format
+        $repo = "${{ github.repository }}"  # Automatically fetches correct repo name
+        $url = "https://api.github.com/repos/$repo/actions/workflows/$workflowFileName/dispatches"
+    
+        Write-Host "Triggering workflow dispatch to: $url"
         
-        # ✅ Fix: Ensure correct API URL
-        $url = "https://api.github.com/repos/${{ github.repository }}/actions/workflows/$workflowFileName/dispatches"
-        
-        Write-Host "Triggering workflow dispatch to $url"
-        
+        # ✅ Send request
         Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
       shell: pwsh
 
