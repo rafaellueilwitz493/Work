@@ -1,4 +1,4 @@
-name: Ultimate Persistent RDP with VM Support & WinGet
+name: Ultimate Persistent RDP with VM & WinGet
 
 on:
   workflow_dispatch:
@@ -30,7 +30,7 @@ jobs:
     # Enable High-Performance Power Mode (Fixes "Unsupported Setting" Error)
     - name: Enable High Performance Mode
       run: |
-        powercfg /S SCHEME_MIN  # Set to High Performance instead of Ultimate
+        powercfg /S SCHEME_MIN  # Use High Performance instead of Ultimate
         powercfg -change -monitor-timeout-ac 0
         powercfg -change -monitor-timeout-dc 0
         powercfg -change -disk-timeout-ac 0
@@ -38,14 +38,19 @@ jobs:
         powercfg -change -standby-timeout-ac 0
         powercfg -change -standby-timeout-dc 0
 
-    # Enable Virtual Machine Support (VMware & VirtualBox)
+    # Enable Virtual Machine Support (Check if Hyper-V Exists First)
     - name: Enable Virtual Machine Support
       run: |
         bcdedit /set hypervisorlaunchtype Auto
-        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -NoRestart
-        Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -NoRestart
+        $feature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -ErrorAction SilentlyContinue
+        if ($feature -and $feature.State -ne "Disabled") {
+            Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -NoRestart
+        } else {
+            Write-Host "Hyper-V not available, enabling Windows Containers instead."
+            Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -NoRestart
+        }
 
-    # Install WinGet via MSI (Fixing GitHub Actions Restrictions)
+    # Install WinGet via MSI (Fixes GitHub Actions Restrictions)
     - name: Install WinGet (Windows Package Manager)
       run: |
         Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$env:TEMP\WinGet.msixbundle"
