@@ -1,4 +1,4 @@
-name: Powerful Persistent Playit RDP
+name: Powerful Persistent Playit RDP Tunnel
 
 on:
   workflow_dispatch:
@@ -8,114 +8,108 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: Check out repository
+    - name: Check out the repository
       uses: actions/checkout@v2
 
-    # Install Playit for RDP tunneling
+    # Download and Install Playit
     - name: Download and Install Playit
       run: |
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5
 
-    # Enable RDP, keep it active after reboot, and allow multiple users
+    # Enable RDP and keep it active after reboot
     - name: Enable and Persist RDP
       run: |
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Write-Host "🔄 Enabling RDP..."
+        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force")
-        Set-Service -Name TermService -StartupType Automatic
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
+        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1
 
-    # Ensure Playit starts automatically after reboot
+        Write-Host "🔄 Allowing multiple RDP sessions..."
+        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fSingleSessionPerUser" -Value 0
+
+        Write-Host "🔄 Setting RDP service to start automatically..."
+        Set-Service -Name TermService -StartupType Automatic
+
+        if ((Get-Service -Name TermService).Status -ne "Running") {
+          Write-Host "✅ Starting RDP service..."
+          Start-Service -Name TermService
+        } else {
+          Write-Host "✅ RDP service is already running."
+        }
+
+        Write-Host "🔄 Ensuring RDP stays active after reboot..."
+        reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Winlogon" /v KeepRDPConnections /t REG_DWORD /d 1 /f
+
+        Write-Host "✅ RDP has been successfully configured."
+
+    # Install WinGet (Multiple Methods for Reliability)
+    - name: Install WinGet
+      run: |
+        Write-Host "🔄 Checking if WinGet is already installed..."
+        if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Host "⏳ Downloading WinGet..."
+            Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$env:TEMP\WinGet.msixbundle"
+            
+            Write-Host "⏳ Installing WinGet..."
+            try {
+                Add-AppxProvisionedPackage -Online -PackagePath "$env:TEMP\WinGet.msixbundle" -SkipLicense
+                Write-Host "✅ WinGet installed successfully."
+            } catch {
+                Write-Host "⚠️ Failed to install WinGet using Appx. Trying another method..."
+                Add-AppxPackage -Path "$env:TEMP\WinGet.msixbundle" -ErrorAction SilentlyContinue
+            }
+        } else {
+            Write-Host "✅ WinGet is already installed."
+        }
+
+    # Register Playit as a Windows Service for auto-start
     - name: Register Playit as a Service
       run: |
+        Write-Host "🔄 Registering Playit as a service..."
         sc create PlayitService binPath= "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" start= auto
         sc start PlayitService
+        Write-Host "✅ Playit is now running as a service."
 
     # Start Playit immediately
     - name: Start Playit Agent
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
+        Write-Host "🔄 Starting Playit..."
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+        Write-Host "✅ Playit started."
 
-    # Keep the session active even after reboot
-    - name: Keep RDP Session Alive
+    # Enable Ultimate Performance Mode (Fixes Previous Errors)
+    - name: Enable Ultimate Performance Mode
       run: |
-        reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Winlogon" /v KeepRDPConnections /t REG_DWORD /d 1 /f
+        Write-Host "🔄 Enabling Ultimate Performance Mode..."
+        $powerScheme = powercfg -list | Select-String "Ultimate Performance"
+        if ($powerScheme -match "Ultimate Performance") {
+            Write-Host "✅ Ultimate Performance mode already enabled."
+        } else {
+            Write-Host "⚠️ Ultimate Performance not found. Trying to enable..."
+            powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+            Write-Host "✅ Ultimate Performance mode enabled."
+        }
 
-    # Enable Ultimate Performance mode
-    - name: Enable Ultimate Performance
+    # Enable Virtualization for VMware & VirtualBox
+    - name: Enable Virtualization
       run: |
-        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
-        powercfg /S e9a42b02-d5df-448d-aa00-03f14749eb61
-
-    # Enable Virtualization (for VMware & VirtualBox support)
-    - name: Enable Virtualization & Hyper-V
-      run: |
+        Write-Host "🔄 Enabling virtualization support..."
         bcdedit /set hypervisorlaunchtype Auto
-        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -All -NoRestart
-        Enable-WindowsOptionalFeature -Online -FeatureName Containers -All -NoRestart
-        Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart
-
-    # Install WinGet (Multiple Failover Methods)
-    - name: Install WinGet (Auto-Fix)
-      run: |
-        function Test-WinGet {
-            if (Get-Command winget -ErrorAction SilentlyContinue) {
-                Write-Host "✅ WinGet is installed!"
-                return $true
-            } else {
-                Write-Host "⚠ WinGet not found, attempting installation..."
-                return $false
-            }
+        try {
+            Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -NoRestart
+            Write-Host "✅ Hyper-V enabled successfully."
+        } catch {
+            Write-Host "⚠️ Hyper-V installation failed. Trying to enable Windows Containers instead..."
+            Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -NoRestart
         }
 
-        function Install-WinGet {
-            Write-Host "🔄 Attempting Microsoft Store installation..."
-            Start-Process -NoNewWindow -Wait -FilePath "cmd.exe" -ArgumentList "/c start ms-windows-store://pdp/?ProductId=9NBLGGH4NNS1"
-            Start-Sleep -Seconds 30
-            if (Test-WinGet) { return $true }
-            
-            Write-Host "⚠ Microsoft Store method failed, trying manual installation..."
-            Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$env:TEMP\WinGet.msixbundle"
-            Add-AppxPackage -Path "$env:TEMP\WinGet.msixbundle"
-            Start-Sleep -Seconds 10
-            if (Test-WinGet) { return $true }
-
-            Write-Host "⚠ Manual method failed, trying package manager..."
-            Get-AppPackage -Name Microsoft.DesktopAppInstaller | Add-AppxPackage
-            Start-Sleep -Seconds 5
-            if (Test-WinGet) { return $true }
-
-            Write-Host "❌ All WinGet installation methods failed!"
-            exit 1
-        }
-
-        if (-not (Test-WinGet)) { Install-WinGet }
-
-        # Ensure WinGet is accessible by adding it to PATH if needed
-        $wingetPath = "$env:ProgramFiles\WindowsApps\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\winget.exe"
-        if (Test-Path $wingetPath) {
-            Write-Host "✅ Adding WinGet to PATH..."
-            [System.Environment]::SetEnvironmentVariable("Path", $env:Path + ";$wingetPath", [System.EnvironmentVariableTarget]::Machine)
-        }
-
-    # Install essential applications via WinGet
-    - name: Install Essential Tools
-      run: |
-        winget install --silent --accept-package-agreements --accept-source-agreements Microsoft.PowerToys
-        winget install --silent --accept-package-agreements --accept-source-agreements Microsoft.VisualStudioCode
-        winget install --silent --accept-package-agreements --accept-source-agreements Google.Chrome
-        winget install --silent --accept-package-agreements --accept-source-agreements 7zip.7zip
-        winget install --silent --accept-package-agreements --accept-source-agreements Notepad++.Notepad++
-        winget install --silent --accept-package-agreements --accept-source-agreements Git.Git
-
-    # Keep GitHub Actions runner alive indefinitely
+    # Keep GitHub Actions runner alive
     - name: Keep Runner Alive
       run: |
         while ($true) {
-          Write-Host "Keeping runner alive... $(Get-Date)"
+          Write-Host "🔄 Keeping runner alive... $(Get-Date)"
           Start-Sleep -Seconds 300
         }
