@@ -21,38 +21,109 @@ jobs:
         if ($WinEdition -match "Home") {
             Write-Host "❌ Hyper-V is not available on Windows Home. Skipping Hyper-V installation."
         } else {
-            # Enable Hyper-V if supported
             Write-Host "🔄 Enabling Hyper-V..."
             bcdedit /set hypervisorlaunchtype Auto
 
-            Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -NoRestart -ErrorAction SilentlyContinue
-            Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -NoRestart -ErrorAction SilentlyContinue
-            Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Platform -NoRestart -ErrorAction SilentlyContinue
+            # Try different ways to install Hyper-V
+            $features = @("Microsoft-Hyper-V-All", "Microsoft-Hyper-V", "Microsoft-Hyper-V-Platform")
+            foreach ($feature in $features) {
+                Write-Host "Trying to enable $feature..."
+                Enable-WindowsOptionalFeature -Online -FeatureName $feature -NoRestart -ErrorAction SilentlyContinue
+            }
+
+            # Alternative method using DISM
+            Write-Host "🔄 Using DISM to enable virtualization..."
+            DISM /Online /Enable-Feature /FeatureName:Microsoft-Hyper-V-All /All /NoRestart
         }
 
         # Enable Virtual Machine Platform (Alternative)
-        Write-Host "🔄 Enabling Virtual Machine Platform..."
         Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart -ErrorAction SilentlyContinue
         
         # Enable Windows Hypervisor Platform
-        Write-Host "🔄 Enabling Windows Hypervisor Platform..."
         Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -NoRestart -ErrorAction SilentlyContinue
 
-        # Use DISM as an alternative method
-        Write-Host "🔄 Using DISM to enable virtualization features..."
-        DISM /Online /Enable-Feature /FeatureName:Microsoft-Hyper-V-All /All /NoRestart
-        DISM /Online /Enable-Feature /FeatureName:HypervisorPlatform /All /NoRestart
-        DISM /Online /Enable-Feature /FeatureName:VirtualMachinePlatform /All /NoRestart
-
-        # Check if virtualization is enabled in BIOS
+        # Check BIOS Virtualization
         $VirtualizationEnabled = (Get-ComputerInfo).HyperVRequirementDataExecutionPreventionAvailable
         if ($VirtualizationEnabled -eq $false) {
-            Write-Host "⚠️ Virtualization is disabled in BIOS. Please enable it for Hyper-V to work."
+            Write-Host "⚠️ Virtualization is disabled in BIOS. Enable it for Hyper-V to work."
             exit 1
         }
 
-    # Reboot system to apply Hyper-V changes
-    - name: 🔄 Reboot System
+    # Install WinGet (All Possible Ways)
+    - name: 📦 Install WinGet
       run: |
-        Write-Host "🔄 Rebooting system to apply Hyper-V changes..."
-        shutdown /r /t 10
+        Write-Host "🔄 Checking for WinGet..."
+        if (-Not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Host "🚀 Installing WinGet..."
+
+            # Method 1: Using Microsoft Store
+            Try {
+                Get-AppxPackage -Name Microsoft.DesktopAppInstaller -ErrorAction Stop | Out-Null
+                Write-Host "✅ WinGet is already installed via Microsoft Store."
+            } Catch {
+                Write-Host "Installing from Microsoft Store..."
+                Start-Process -NoNewWindow -Wait -FilePath "msstore:" -ArgumentList "showdetails?id=9NBLGGH4NNS1"
+            }
+
+            # Method 2: Direct Download from Microsoft
+            Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$env:TEMP\WinGet.msixbundle"
+            Add-AppxPackage -Path "$env:TEMP\WinGet.msixbundle" -ErrorAction SilentlyContinue
+
+            # Method 3: Add as a Provisioned Package
+            Try {
+                Add-AppxProvisionedPackage -Online -PackagePath "$env:TEMP\WinGet.msixbundle" -SkipLicense -ErrorAction Stop
+            } Catch {
+                Write-Host "⚠️ WinGet installation via Appx failed, trying alternate method..."
+            }
+
+            # Check again if WinGet is installed
+            if (Get-Command winget -ErrorAction SilentlyContinue) {
+                Write-Host "✅ WinGet Installed Successfully!"
+            } else {
+                Write-Host "❌ WinGet installation failed!"
+                exit 1
+            }
+        } else {
+            Write-Host "✅ WinGet is already installed."
+        }
+
+    # Enable RDP and keep it active after reboot
+    - name: 🔑 Enable and Persist RDP
+      run: |
+        Write-Host "🔄 Enabling RDP..."
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+
+        # Allow Multiple RDP Sessions
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
+        Set-Service -Name TermService -StartupType Automatic
+
+    # Download and Install Playit
+    - name: 🌐 Download and Install Playit
+      run: |
+        Write-Host "🔄 Downloading Playit..."
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+
+    # Register Playit as a Windows Service
+    - name: 🔄 Register Playit as a Service
+      run: |
+        Write-Host "🔄 Registering Playit as a service..."
+        sc create PlayitService binPath= "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" start= auto
+        sc start PlayitService
+
+        # Ensure Playit runs properly
+        Start-Sleep -Seconds 5
+        if (-Not (Get-Process -Name "playit" -ErrorAction SilentlyContinue)) {
+            Write-Host "⚠️ Playit did not start, retrying manually..."
+            Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
+        }
+
+    # Keep GitHub Actions Runner Alive
+    - name: 🔄 Keep Runner Alive
+      run: |
+        while ($true) {
+          Write-Host "Keeping runner alive... $(Get-Date)"
+          Start-Sleep -Seconds 300
+        }
