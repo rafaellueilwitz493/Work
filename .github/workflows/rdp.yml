@@ -1,4 +1,4 @@
-name: Powerful Persistent Playit RDP with Full Virtualization Support
+name: Persistent Playit RDP Tunnel
 
 on:
   workflow_dispatch:
@@ -8,139 +8,104 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - name: Check out the repository
+    - name: 🛠️ Check out the repository
       uses: actions/checkout@v2
 
-    # Enable Virtualization for Hyper-V, VMware, VirtualBox, and WSL2
-    - name: Enable Virtualization
+    # Install Playit with Resilience
+    - name: 📥 Download and Install Playit
       run: |
-        Write-Host "🔄 Checking if Virtualization is enabled in BIOS..."
-        $cpuVT = Get-CimInstance Win32_Processor | Select-Object -ExpandProperty VirtualizationFirmwareEnabled
-        if ($cpuVT -eq $false) {
-            Write-Host "⚠️ Virtualization is disabled in BIOS. Please enable it in BIOS settings."
+        $PlayitPath = "$env:USERPROFILE\playit.exe"
+        
+        # Try first download method
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile $PlayitPath -ErrorAction SilentlyContinue
+        
+        # If first method fails, try another source
+        if (!(Test-Path $PlayitPath)) {
+            Invoke-WebRequest -Uri "https://dl.playit.gg/playit-windows.exe" -OutFile $PlayitPath
+        }
+
+        # Verify installation
+        if (!(Test-Path $PlayitPath)) {
+            Write-Host "❌ Playit download failed."
             exit 1
         }
-        Write-Host "✅ Virtualization is enabled in BIOS."
 
-        Write-Host "🔄 Enabling virtualization support..."
-        bcdedit /set hypervisorlaunchtype Auto
-
-        # Enable Hyper-V
-        Write-Host "🔄 Checking Hyper-V..."
-        $hyperV = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All
-        if ($hyperV.State -ne "Enabled") {
-            Write-Host "⚠️ Hyper-V is not enabled. Attempting installation..."
-            try {
-                Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -NoRestart
-                Write-Host "✅ Hyper-V installed successfully."
-            } catch {
-                Write-Host "⚠️ Hyper-V installation failed. Checking alternative virtualization options..."
-            }
-        } else {
-            Write-Host "✅ Hyper-V is already enabled."
-        }
-
-        # Enable Virtual Machine Platform (For VMware & VirtualBox)
-        Write-Host "🔄 Enabling Virtual Machine Platform..."
-        try {
-            Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart
-            Write-Host "✅ Virtual Machine Platform enabled."
-        } catch {
-            Write-Host "⚠️ Failed to enable Virtual Machine Platform."
-        }
-
-        # Enable Windows Hypervisor Platform (For VMware)
-        Write-Host "🔄 Enabling Windows Hypervisor Platform..."
-        try {
-            Enable-WindowsOptionalFeature -Online -FeatureName WindowsHypervisorPlatform -NoRestart
-            Write-Host "✅ Windows Hypervisor Platform enabled."
-        } catch {
-            Write-Host "⚠️ Failed to enable Windows Hypervisor Platform."
-        }
-
-        # Enable WSL2 Support
-        Write-Host "🔄 Checking WSL2 support..."
-        $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux
-        if ($wslFeature.State -ne "Enabled") {
-            Write-Host "⚠️ WSL2 is not enabled. Attempting installation..."
-            try {
-                Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -NoRestart
-                Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart
-                Write-Host "✅ WSL2 installed successfully."
-            } catch {
-                Write-Host "⚠️ WSL2 installation failed."
-            }
-        } else {
-            Write-Host "✅ WSL2 is already enabled."
-        }
-
-        Write-Host "✅ All virtualization features have been enabled."
-
-    # Enable RDP
-    - name: Enable and Persist RDP
+    # Enable RDP and Keep Active After Reboot
+    - name: 🔓 Enable and Persist RDP
       run: |
-        Write-Host "🔄 Enabling RDP..."
-        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
+        # Enable RDP
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 1
-        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fSingleSessionPerUser" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+        
+        # Enable multiple RDP sessions
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
+
+        # Ensure RDP service starts on reboot
         Set-Service -Name TermService -StartupType Automatic
-        Write-Host "✅ RDP enabled."
 
-    # Install WinGet
-    - name: Install WinGet
+    # Persistent Playit Execution
+    - name: 🔄 Register Playit as a Scheduled Task
       run: |
-        Write-Host "🔄 Checking if WinGet is already installed..."
-        if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
-            Write-Host "⏳ Downloading WinGet..."
-            Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$env:TEMP\WinGet.msixbundle"
+        $PlayitPath = "$env:USERPROFILE\playit.exe"
+        
+        # Remove existing task if any
+        schtasks /delete /tn "PlayitTunnel" /f
+        
+        # Create new scheduled task
+        schtasks /create /tn "PlayitTunnel" /tr "$PlayitPath --secret $env:PLAYIT_AUTH_KEY" /sc onlogon /rl highest
 
-            Write-Host "⏳ Installing WinGet..."
-            try {
-                Add-AppxProvisionedPackage -Online -PackagePath "$env:TEMP\WinGet.msixbundle" -SkipLicense
-                Write-Host "✅ WinGet installed successfully."
-            } catch {
-                Write-Host "⚠️ Failed to install WinGet using Appx. Trying another method..."
-                Add-AppxPackage -Path "$env:TEMP\WinGet.msixbundle" -ErrorAction SilentlyContinue
-            }
-        } else {
-            Write-Host "✅ WinGet is already installed."
-        }
-
-    # Register Playit with Task Scheduler (More Reliable than Service)
-    - name: Register Playit with Task Scheduler
-      run: |
-        Write-Host "🔄 Registering Playit to start on boot..."
-        $Action = New-ScheduledTaskAction -Execute "$env:USERPROFILE\playit.exe" -Argument "--secret $env:PLAYIT_AUTH_KEY"
-        $Trigger = New-ScheduledTaskTrigger -AtStartup
-        Register-ScheduledTask -TaskName "PlayitAutoStart" -Action $Action -Trigger $Trigger -User "SYSTEM"
-        Write-Host "✅ Playit will start automatically."
-
-    # Start Playit immediately
-    - name: Start Playit Agent
+    # Start Playit Immediately
+    - name: 🚀 Start Playit
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Write-Host "🔄 Starting Playit..."
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
-        Write-Host "✅ Playit started."
 
-    # Enable Ultimate Performance Mode
-    - name: Enable Ultimate Performance Mode
+    # Enable Virtualization (Hyper-V, VM Support)
+    - name: 🖥️ Enable Virtualization Support
       run: |
-        Write-Host "🔄 Enabling Ultimate Performance Mode..."
-        $powerScheme = powercfg -list | Select-String "Ultimate Performance"
-        if ($powerScheme -match "Ultimate Performance") {
-            Write-Host "✅ Ultimate Performance mode already enabled."
-        } else {
-            powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
-            Write-Host "✅ Ultimate Performance mode enabled."
+        # Enable Hyper-V
+        bcdedit /set hypervisorlaunchtype Auto
+        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -NoRestart -ErrorAction SilentlyContinue
+
+        # Alternative: Enable Virtual Machine Platform
+        Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart -ErrorAction SilentlyContinue
+
+        # Alternative: Use DISM if previous methods fail
+        DISM /Online /Enable-Feature /FeatureName:HypervisorPlatform /All /NoRestart
+
+    # Set Ultimate Performance Mode
+    - name: ⚡ Unlock Ultimate Performance Mode
+      run: |
+        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+        powercfg /S e9a42b02-d5df-448d-aa00-03f14749eb61
+
+    # Install Winget (Multiple Methods)
+    - name: 📦 Install WinGet
+      run: |
+        $WinGetPath = "$env:USERPROFILE\WinGet.msixbundle"
+        
+        # Try direct MSIXBUNDLE install
+        Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile $WinGetPath
+        Add-AppxPackage -Path $WinGetPath -ErrorAction SilentlyContinue
+
+        # Alternative: Use DISM
+        if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
+            DISM /Online /Add-Package /PackagePath:$WinGetPath
         }
 
-    # Keep GitHub Actions runner alive
-    - name: Keep Runner Alive
+        # Final Check
+        if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
+            Write-Host "❌ WinGet installation failed."
+            exit 1
+        }
+
+    # Keep GitHub Actions Runner Alive
+    - name: 🛡️ Keep Runner Alive
       run: |
         while ($true) {
-          Write-Host "🔄 Keeping runner alive... $(Get-Date)"
+          Write-Host "Keeping runner alive... $(Get-Date)"
           Start-Sleep -Seconds 300
         }
