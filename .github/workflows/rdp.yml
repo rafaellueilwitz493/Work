@@ -28,41 +28,102 @@ jobs:
         Set-Service -Name TermService -StartupType Automatic
         Write-Host "✅ RDP Enabled Successfully!"
 
-    # 🔹 Install WinGet (Improved)
+    # 🔹 Install WinGet (Robust Method with Multiple Fallbacks)
     - name: Install WinGet
       run: |
         Write-Host "🔄 Checking for WinGet..."
-        if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-          Write-Host "Installing WinGet via MSIXBUNDLE..."
-          Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$env:TEMP\WinGet.msixbundle"
-          Try {
-            Add-AppxPackage -Path "$env:TEMP\WinGet.msixbundle" -ErrorAction Stop
-          } Catch {
-            Write-Host "⚠️ Add-AppxPackage failed. Trying alternative EXE method..."
-            Invoke-WebRequest -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" -OutFile "$env:TEMP\winget.msixbundle"
-            Try {
-              Add-AppxPackage -Path "$env:TEMP\winget.msixbundle" -ErrorAction Stop
-            } Catch {
-              Write-Host "❌ WinGet installation failed. Skipping."
-            }
-          }
+        if (Get-Command winget -ErrorAction SilentlyContinue) {
+          Write-Host "✅ WinGet is already installed!"
+          exit 0
         }
-        if (Get-Command winget -ErrorAction SilentlyContinue) { Write-Host "✅ WinGet installed!" } else { Write-Host "❌ WinGet install failed." }
+
+        # Ensure App Installer is installed (Required for WinGet)
+        Write-Host "🔄 Ensuring App Installer is installed..."
+        if (-not (Get-AppxPackage -Name Microsoft.DesktopAppInstaller)) {
+          Write-Host "⚠️ App Installer not found. Installing from Microsoft Store..."
+          Start-Process -NoNewWindow "ms-windows-store://pdp/?ProductId=9NBLGGH4NNS1"
+          Start-Sleep -Seconds 30  # Wait for installation
+        }
+
+        # Re-check if WinGet is available now
+        if (Get-Command winget -ErrorAction SilentlyContinue) {
+          Write-Host "✅ WinGet successfully installed via Microsoft Store!"
+          exit 0
+        }
+
+        # Download and install WinGet manually
+        Write-Host "🔄 Downloading WinGet..."
+        $wingetURL = "https://aka.ms/getwinget"
+        $wingetInstaller = "$env:TEMP\WinGet.msixbundle"
+        Invoke-WebRequest -Uri $wingetURL -OutFile $wingetInstaller -UseBasicParsing
+
+        Write-Host "🔄 Installing WinGet..."
+        Try {
+          Add-AppxPackage -Path $wingetInstaller -ErrorAction Stop
+          Write-Host "✅ WinGet installed successfully!"
+          exit 0
+        } Catch {
+          Write-Host "⚠️ Failed to install WinGet via MSIXBUNDLE. Trying EXE method..."
+        }
+
+        # Final Fallback: Try EXE method
+        Write-Host "🔄 Downloading WinGet EXE..."
+        $wingetEXE = "$env:TEMP\winget.exe"
+        Invoke-WebRequest -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.appxbundle" -OutFile $wingetEXE -UseBasicParsing
+        Add-AppxPackage -Path $wingetEXE -ErrorAction SilentlyContinue
+
+        # Final Check
+        if (Get-Command winget -ErrorAction SilentlyContinue) {
+          Write-Host "✅ WinGet successfully installed!"
+        } else {
+          Write-Host "❌ WinGet installation failed completely. Skipping."
+          exit 1
+        }
+
 
     # 🔹 Enable Virtualization & Hyper-V
     - name: Enable Virtualization & Hyper-V
       run: |
-        Write-Host "🔄 Enabling Virtualization..."
-        bcdedit /set hypervisorlaunchtype Auto
-        Write-Host "🔄 Enabling Hyper-V..."
-        $features = @("Microsoft-Hyper-V-All", "Microsoft-Hyper-V", "Microsoft-Hyper-V-Platform", "HypervisorPlatform")
-        foreach ($feature in $features) {
-          Try { Enable-WindowsOptionalFeature -Online -FeatureName $feature -NoRestart -ErrorAction Stop }
-          Catch { Write-Host "⚠️ Failed to enable $feature, trying next..." }
+        Write-Host "🔄 Checking if system supports Hyper-V..."
+        $hyperVSupport = (Get-WindowsOptionalFeature -Online | Where-Object { $_.FeatureName -like "Microsoft-Hyper-V*" })
+        if (-not $hyperVSupport) {
+          Write-Host "❌ Hyper-V is not available on this system. Skipping..."
+          exit 1
         }
-        Write-Host "🔄 Trying DISM method for Hyper-V..."
-        DISM /Online /Enable-Feature /FeatureName:Microsoft-Hyper-V-All /All /NoRestart
-        Write-Host "✅ Virtualization & Hyper-V Enabled!"
+
+        Write-Host "🔄 Enabling Virtualization..."
+        Try {
+          bcdedit /set hypervisorlaunchtype Auto
+          Write-Host "✅ Virtualization Enabled!"
+        } Catch {
+          Write-Host "⚠️ Failed to enable virtualization. Continuing..."
+        }
+
+        Write-Host "🔄 Enabling Hyper-V..."
+        $features = @("Microsoft-Hyper-V-All", "Microsoft-Hyper-V", "Microsoft-Hyper-V-Platform", "Microsoft-Hyper-V-Management-Tools")
+        foreach ($feature in $features) {
+          Try {
+            Enable-WindowsOptionalFeature -Online -FeatureName $feature -NoRestart -ErrorAction Stop
+            Write-Host "✅ Successfully enabled $feature"
+          } Catch {
+            Write-Host "⚠️ Failed to enable $feature, trying next..."
+          }
+        }
+
+        # Verify if Hyper-V is enabled
+        $hyperVEnabled = (Get-WindowsOptionalFeature -Online | Where-Object { $_.FeatureName -eq "Microsoft-Hyper-V-All" -and $_.State -eq "Enabled" })
+        if ($hyperVEnabled) {
+          Write-Host "✅ Hyper-V is successfully enabled!"
+        } else {
+          Write-Host "⚠️ Hyper-V installation may not be complete. Checking DISM method..."
+          Try {
+            DISM /Online /Enable-Feature /FeatureName:Microsoft-Hyper-V-All /All /NoRestart
+            Write-Host "✅ DISM method executed for Hyper-V."
+          } Catch {
+            Write-Host "❌ DISM method failed. Hyper-V may not be available."
+          }
+        }
+
 
     # 🔹 Install Playit (Multiple Methods)
     - name: Install Playit
