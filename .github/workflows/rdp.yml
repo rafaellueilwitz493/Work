@@ -22,13 +22,35 @@ jobs:
             exit 0
         }
     
-        # ✅ Download and Install WinGet (Standalone EXE)
-        Write-Host "🔄 Downloading WinGet Standalone Executable..."
-        $wingetExe = "$env:TEMP\winget.exe"
-        Invoke-WebRequest -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/winget.exe" -OutFile $wingetExe -UseBasicParsing
+        # ✅ Get the latest WinGet release from Microsoft's official GitHub
+        Write-Host "🔄 Fetching the latest WinGet release..."
+        $wingetDownloadUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
+        $wingetInstaller = "$env:TEMP\WinGet.msixbundle"
     
-        # ✅ Move WinGet to System Path
-        Write-Host "🔄 Installing WinGet (Copying to System32)..."
+        # ✅ Download WinGet Installer
+        Write-Host "🔄 Downloading WinGet..."
+        Invoke-WebRequest -Uri $wingetDownloadUrl -OutFile $wingetInstaller -UseBasicParsing
+    
+        # ✅ Install WinGet (Skip MSIX if unsupported)
+        Write-Host "🔄 Installing WinGet..."
+        Try {
+            Add-AppxPackage -Path $wingetInstaller
+            if (Get-Command winget -ErrorAction SilentlyContinue) {
+                Write-Host "✅ WinGet Installed Successfully!"
+                exit 0
+            }
+        } Catch {
+            Write-Host "⚠️ MSIX installation failed, trying manual method..."
+        }
+    
+        # ✅ Alternative: Install WinGet Standalone EXE if MSIX fails
+        $wingetExe = "$env:TEMP\winget.exe"
+        $wingetExeUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/winget.exe"
+    
+        Write-Host "🔄 Downloading WinGet Standalone Executable..."
+        Invoke-WebRequest -Uri $wingetExeUrl -OutFile $wingetExe -UseBasicParsing
+    
+        Write-Host "🔄 Moving WinGet to System32..."
         Move-Item -Path $wingetExe -Destination "C:\Windows\System32\winget.exe" -Force
     
         # ✅ Verify Installation
@@ -39,8 +61,7 @@ jobs:
         } else {
             Write-Host "❌ WinGet installation failed. Exiting..."
             exit 1
-        }
-    
+        }    
     
     # 🔹 Enable Virtualization & Hyper-V
     - name: Enable Virtualization & Hyper-V
