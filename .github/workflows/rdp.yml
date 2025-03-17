@@ -163,7 +163,7 @@ jobs:
     - name: Enable Virtualization & Hyper-V
       run: |
         Write-Host "🔄 Checking if system supports Hyper-V..."
-        
+
         # ✅ Check if system supports Hyper-V
         $hyperVSupport = Get-WindowsOptionalFeature -Online | Where-Object { $_.FeatureName -like "*Hyper-V*" }
 
@@ -235,8 +235,6 @@ jobs:
 
         Write-Host "✅ Hyper-V installation completed!"
         exit 0
-
-
 
     # 🔹 Install Playit (Multiple Methods)
     - name: Install Playit
