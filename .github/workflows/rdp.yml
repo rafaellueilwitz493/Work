@@ -66,10 +66,16 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.PAT_TOKEN }}
       run: |
-        $headers = @{ "Authorization" = "Bearer $env:GH_TOKEN" }
+        $headers = @{
+          "Authorization" = "Bearer $env:GH_TOKEN"
+          "Accept" = "application/vnd.github.v3+json"
+        }
         $body = @{ "ref" = "main" } | ConvertTo-Json -Compress
+    
+        $workflowFileName = "persistent_rdp_playit.yml"  # Ensure this is correct
         $repo = "${{ github.repository }}"
-        $url = "https://api.github.com/repos/$repo/actions/workflows/persistent_rdp_playit.yml/dispatches"
+        $url = "https://api.github.com/repos/$repo/actions/workflows/$workflowFileName/dispatches"
+    
         Write-Host "Triggering workflow restart..."
         Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
       shell: pwsh
