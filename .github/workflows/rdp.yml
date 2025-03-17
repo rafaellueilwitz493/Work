@@ -1,4 +1,4 @@
-name: Ultimate Persistent RDP with WinGet & VM Support
+name: Ultimate Persistent RDP with VM Support & WinGet
 
 on:
   workflow_dispatch:
@@ -11,12 +11,11 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v2
 
-    # Download and Install Playit (No Console Popup)
+    # Download and Install Playit
     - name: Download and Install Playit
       run: |
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5
-        # Register Playit to run silently in the background
         New-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "Playit" -Value "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" -Force
 
     # Enable RDP, Keep Active After Reboot, and Allow Multiple Sessions
@@ -28,14 +27,16 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
         Set-Service -Name TermService -StartupType Automatic
 
-    # Fix Ultimate Performance Mode (Avoid PowerCFG Error)
-    - name: Enable Ultimate Performance Mode
+    # Enable High-Performance Power Mode (Fixes "Unsupported Setting" Error)
+    - name: Enable High Performance Mode
       run: |
-        $scheme = powercfg -list | Select-String "Ultimate Performance"
-        if (-not $scheme) {
-          powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
-        }
-        powercfg /S e9a42b02-d5df-448d-aa00-03f14749eb61
+        powercfg /S SCHEME_MIN  # Set to High Performance instead of Ultimate
+        powercfg -change -monitor-timeout-ac 0
+        powercfg -change -monitor-timeout-dc 0
+        powercfg -change -disk-timeout-ac 0
+        powercfg -change -disk-timeout-dc 0
+        powercfg -change -standby-timeout-ac 0
+        powercfg -change -standby-timeout-dc 0
 
     # Enable Virtual Machine Support (VMware & VirtualBox)
     - name: Enable Virtual Machine Support
@@ -64,7 +65,7 @@ jobs:
       run: |
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow
 
-    # Keep Session Active After Restart
+    # Ensure RDP Stays Active After Restart
     - name: Ensure Persistent RDP Session
       run: |
         reg add "HKLM\Software\Microsoft\Windows NT\CurrentVersion\Winlogon" /v KeepRDPConnections /t REG_DWORD /d 1 /f
