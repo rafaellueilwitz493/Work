@@ -15,63 +15,73 @@ jobs:
     - name: Enable and Persist RDP
       run: |
         Write-Host "🔄 Enabling RDP..."
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
+        $rdpKeys = @(
+          'HKLM:\System\CurrentControlSet\Control\Terminal Server',
+          'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
+        )
+        foreach ($key in $rdpKeys) {
+          Set-ItemProperty -Path $key -Name "fDenyTSConnections" -Value 0 -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $key -Name "UserAuthentication" -Value 1 -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path $key -Name "fSingleSessionPerUser" -Value 0 -ErrorAction SilentlyContinue
+        }
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
         Set-Service -Name TermService -StartupType Automatic
         Write-Host "✅ RDP Enabled Successfully!"
 
-    # 🔹 Install WinGet (multiple fallback methods)
+    # 🔹 Install WinGet (Multiple Methods)
     - name: Install WinGet
       run: |
         Write-Host "🔄 Checking for WinGet..."
         if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-          Write-Host "Installing WinGet..."
+          Write-Host "Installing WinGet via MSIXBUNDLE..."
           Invoke-WebRequest -Uri "https://aka.ms/getwinget" -OutFile "$env:TEMP\WinGet.msixbundle"
-          Add-AppxPackage -Path "$env:TEMP\WinGet.msixbundle" -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 10
+          Try { Add-AppxPackage -Path "$env:TEMP\WinGet.msixbundle" -ErrorAction Stop }
+          Catch {
+            Write-Host "⚠️ Add-AppxPackage failed. Trying DISM method..."
+            DISM /Online /Add-Capability /CapabilityName:Microsoft.DesktopAppInstaller~~~~0.0.1.0
+          }
         }
         if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-          Write-Host "⚠️ WinGet installation failed, trying alternate method..."
-          DISM /Online /Add-Capability /CapabilityName:Microsoft.DesktopAppInstaller~~~~0.0.1.0
+          Write-Host "⚠️ WinGet installation failed. Trying alternative EXE method..."
+          Invoke-WebRequest -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.appxbundle" -OutFile "$env:TEMP\winget.appxbundle"
+          Add-AppxPackage -Path "$env:TEMP\winget.appxbundle" -ErrorAction SilentlyContinue
         }
-        if (Get-Command winget -ErrorAction SilentlyContinue) {
-          Write-Host "✅ WinGet installed successfully!"
-        } else {
-          Write-Host "❌ WinGet installation failed. Continuing without it..."
-        }
+        if (Get-Command winget -ErrorAction SilentlyContinue) { Write-Host "✅ WinGet installed!" } else { Write-Host "❌ WinGet install failed." }
 
-    # 🔹 Enable Virtualization & Hyper-V (multiple fallback methods)
+    # 🔹 Enable Virtualization & Hyper-V (Multiple Fallbacks)
     - name: Enable Virtualization & Hyper-V
       run: |
         Write-Host "🔄 Enabling Virtualization..."
         bcdedit /set hypervisorlaunchtype Auto
         Write-Host "🔄 Enabling Hyper-V..."
-        $features = @("Microsoft-Hyper-V-All", "Microsoft-Hyper-V", "Microsoft-Hyper-V-Platform")
+        $features = @("Microsoft-Hyper-V-All", "Microsoft-Hyper-V", "Microsoft-Hyper-V-Platform", "HypervisorPlatform")
         foreach ($feature in $features) {
-          Write-Host "Trying to enable $feature..."
-          Enable-WindowsOptionalFeature -Online -FeatureName $feature -NoRestart -ErrorAction SilentlyContinue
+          Try { Enable-WindowsOptionalFeature -Online -FeatureName $feature -NoRestart -ErrorAction Stop }
+          Catch { Write-Host "⚠️ Failed to enable $feature, trying next..." }
         }
-        Write-Host "🔄 Trying DISM to enable Hyper-V..."
+        Write-Host "🔄 Trying DISM method for Hyper-V..."
         DISM /Online /Enable-Feature /FeatureName:Microsoft-Hyper-V-All /All /NoRestart
-        Write-Host "🔄 Enabling Windows Hypervisor Platform..."
-        Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -NoRestart -ErrorAction SilentlyContinue
-        Write-Host "✅ Virtualization & Hyper-V enabled!"
+        Write-Host "✅ Virtualization & Hyper-V Enabled!"
 
-    # 🔹 Install Playit
+    # 🔹 Install Playit (Multiple Methods)
     - name: Install Playit
       run: |
         Write-Host "🔄 Downloading Playit..."
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        Write-Host "✅ Playit Downloaded!"
+        $playitUrl = "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe"
+        Invoke-WebRequest -Uri $playitUrl -OutFile "$env:USERPROFILE\playit.exe" -ErrorAction SilentlyContinue
+        if (!(Test-Path "$env:USERPROFILE\playit.exe")) {
+          Write-Host "⚠️ Download failed, trying alternate source..."
+          Invoke-WebRequest -Uri "https://playit.gg/downloads/playit.exe" -OutFile "$env:USERPROFILE\playit.exe"
+        }
+        if (Test-Path "$env:USERPROFILE\playit.exe") { Write-Host "✅ Playit Downloaded!" } else { Write-Host "❌ Playit download failed." }
 
     # 🔹 Register Playit as a Service
     - name: Register Playit as a Service
       run: |
         Write-Host "🔄 Registering Playit as a service..."
         sc create PlayitService binPath= "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" start= auto
-        sc start PlayitService
+        Try { sc start PlayitService }
+        Catch { Write-Host "⚠️ Playit Service failed to start. Trying manual execution..."; Start-Process -FilePath "$env:USERPROFILE\playit.exe" }
         Write-Host "✅ Playit Service Registered!"
 
     # 🔹 Keep Session Active
