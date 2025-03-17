@@ -33,79 +33,102 @@ jobs:
       run: |
         Write-Host "🔄 Checking for WinGet..."
         
-        # If WinGet is already installed, skip installation
+        # ✅ Check if WinGet is already installed
         if (Get-Command winget -ErrorAction SilentlyContinue) {
-          Write-Host "✅ WinGet is already installed!"
-          exit 0
+            Write-Host "✅ WinGet is already installed!"
+            exit 0
+        }
+
+        # Function to retry download if it fails
+        function Download-File {
+            param ($url, $destination)
+            Try {
+                Invoke-WebRequest -Uri $url -OutFile $destination -UseBasicParsing
+                return $true
+            } Catch {
+                Write-Host "⚠️ Failed to download: $url"
+                return $false
+            }
         }
 
         # ✅ METHOD 1: Install via MSI Installer (Preferred)
         Try {
-          Write-Host "🔄 Downloading WinGet MSI Installer..."
-          $wingetMsiUrl = "https://aka.ms/getwinget"
-          $wingetMsiPath = "$env:TEMP\WinGetInstaller.msi"
-          Invoke-WebRequest -Uri $wingetMsiUrl -OutFile $wingetMsiPath -UseBasicParsing
+            Write-Host "🔄 Downloading WinGet MSI Installer..."
+            $wingetMsiUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
+            $wingetMsiPath = "$env:TEMP\WinGetInstaller.msixbundle"
 
-          Write-Host "🔄 Installing WinGet via MSI..."
-          Start-Process msiexec.exe -ArgumentList "/i $wingetMsiPath /quiet /norestart" -Wait -NoNewWindow
+            if (Download-File -url $wingetMsiUrl -destination $wingetMsiPath) {
+                Write-Host "🔄 Installing WinGet via MSI..."
+                Start-Process msiexec.exe -ArgumentList "/i $wingetMsiPath /quiet /norestart" -Wait -NoNewWindow
+            }
 
-          if (Get-Command winget -ErrorAction SilentlyContinue) {
-            Write-Host "✅ WinGet Installed Successfully via MSI!"
-            exit 0
-          }
+            if (Get-Command winget -ErrorAction SilentlyContinue) {
+                Write-Host "✅ WinGet Installed Successfully via MSI!"
+                exit 0
+            }
         } Catch {
-          Write-Host "⚠️ MSI Install failed, trying alternate methods..."
+            Write-Host "⚠️ MSI Install failed, trying alternate methods..."
         }
 
         # ✅ METHOD 2: Install via MSIXBUNDLE
         Try {
-          Write-Host "🔄 Downloading WinGet MSIXBUNDLE..."
-          $msixUrl = "https://aka.ms/getwinget"
-          $msixPath = "$env:TEMP\WinGet.msixbundle"
-          Invoke-WebRequest -Uri $msixUrl -OutFile $msixPath -UseBasicParsing
+            Write-Host "🔄 Checking if App Installer is installed..."
+            if (-not (Get-AppxPackage -Name Microsoft.DesktopAppInstaller -ErrorAction SilentlyContinue)) {
+                Write-Host "⚠️ App Installer not found. Attempting to install..."
+                Add-AppxPackage -Path $wingetMsiPath
+            }
 
-          Write-Host "🔄 Installing WinGet via Add-AppxPackage..."
-          Add-AppxPackage -Path $msixPath
+            Write-Host "🔄 Installing WinGet via Add-AppxPackage..."
+            Add-AppxPackage -Path $wingetMsiPath
 
-          if (Get-Command winget -ErrorAction SilentlyContinue) {
-            Write-Host "✅ WinGet Installed Successfully via MSIXBUNDLE!"
-            exit 0
-          }
+            if (Get-Command winget -ErrorAction SilentlyContinue) {
+                Write-Host "✅ WinGet Installed Successfully via MSIXBUNDLE!"
+                exit 0
+            }
         } Catch {
-          Write-Host "⚠️ MSIXBUNDLE Install failed, trying alternative..."
+            Write-Host "⚠️ MSIXBUNDLE Install failed, trying alternative..."
         }
 
         # ✅ METHOD 3: Install via DISM (Fallback)
         Try {
-          Write-Host "🔄 Attempting DISM method..."
-          DISM /Online /Add-Capability /CapabilityName:Microsoft.DesktopAppInstaller~~~~0.0.1.0
-          
-          if (Get-Command winget -ErrorAction SilentlyContinue) {
-            Write-Host "✅ WinGet Installed Successfully via DISM!"
-            exit 0
-          }
+            Write-Host "🔄 Verifying available capabilities..."
+            $capabilities = Get-WindowsCapability -Online | Select-String "Microsoft.DesktopAppInstaller"
+            
+            if ($capabilities) {
+                Write-Host "🔄 Attempting DISM method..."
+                DISM /Online /Add-Capability /CapabilityName:Microsoft.DesktopAppInstaller~~~~0.0.1.0
+            } else {
+                Write-Host "⚠️ Capability not found, skipping DISM method..."
+            }
+
+            if (Get-Command winget -ErrorAction SilentlyContinue) {
+                Write-Host "✅ WinGet Installed Successfully via DISM!"
+                exit 0
+            }
         } Catch {
-          Write-Host "⚠️ DISM method failed. Trying final method..."
+            Write-Host "⚠️ DISM method failed. Trying final method..."
         }
 
         # ✅ METHOD 4: Manual Download & Extraction (Final Resort)
         Try {
-          Write-Host "🔄 Downloading WinGet Standalone Executable..."
-          $exeUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/winget.exe"
-          $exePath = "$env:TEMP\winget.exe"
-          Invoke-WebRequest -Uri $exeUrl -OutFile $exePath -UseBasicParsing
+            Write-Host "🔄 Downloading WinGet Standalone Executable..."
+            $exeUrl = "https://github.com/microsoft/winget-cli/releases/latest/download/winget.exe"
+            $exePath = "$env:TEMP\winget.exe"
 
-          Write-Host "🔄 Moving WinGet to System Path..."
-          Move-Item -Path $exePath -Destination "C:\Windows\System32\" -Force
+            if (Download-File -url $exeUrl -destination $exePath) {
+                Write-Host "🔄 Moving WinGet to System Path..."
+                Move-Item -Path $exePath -Destination "C:\Windows\System32\" -Force
+            }
 
-          if (Test-Path "C:\Windows\System32\winget.exe") {
-            Write-Host "✅ WinGet Installed Successfully via Manual Extraction!"
-            exit 0
-          }
+            if (Test-Path "C:\Windows\System32\winget.exe") {
+                Write-Host "✅ WinGet Installed Successfully via Manual Extraction!"
+                exit 0
+            }
         } Catch {
-          Write-Host "❌ All installation methods failed. Exiting..."
-          exit 1
+            Write-Host "❌ All installation methods failed. Exiting..."
+            exit 1
         }
+
 
     # 🔹 Enable Virtualization & Hyper-V
     - name: Enable Virtualization & Hyper-V
