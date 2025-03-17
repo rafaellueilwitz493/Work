@@ -105,19 +105,20 @@ jobs:
     # ✅ Ensure Playit runs hidden using Scheduled Task
     - name: Add Playit as a Scheduled Task (No CMD Popups)
       run: |
-        schtasks /create /tn "PlayitAgent" /tr "$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY" /sc ONSTART /RL HIGHEST /F
+        schtasks /create /tn "PlayitAgent" /tr "cmd.exe /c start \"\" \"$env:USERPROFILE\playit.exe\" --secret $env:PLAYIT_AUTH_KEY" /sc ONSTART /RU SYSTEM /RL HIGHEST /F
 
     # ✅ Start Playit in the Background (No CMD Window)
     - name: Start Playit RDP Tunnel Silently
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -NoNewWindow
 
-    # Keep workflow running indefinitely
-    - name: Keep the GitHub Action Runner Alive
+    # ✅ Keep workflow running without a visible window
+    - name: Keep the GitHub Action Runner Alive Silently
       run: |
-        while ($true) {
-          Write-Host "Keeping runner alive... $(Get-Date)"
-          Start-Sleep -Seconds 300
+        Start-Job -ScriptBlock {
+            while ($true) {
+                Start-Sleep -Seconds 300
+            }
         }
