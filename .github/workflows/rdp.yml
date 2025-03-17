@@ -2,6 +2,8 @@ name: Persistent Playit RDP Tunnel
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 */5 * * *"  # Restarts every 5 hours to avoid the 6-hour limit
 
 jobs:
   setup-rdp-tunnel:
@@ -11,47 +13,50 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v2
 
+    # ✅ Restore previous progress if available
+    - name: Restore Previous Progress
+      uses: actions/download-artifact@v3
+      with:
+        name: progress
+        path: ./progress
+
+    - name: Load Last Execution Step
+      id: load-progress
+      run: |
+        if (Test-Path ./progress/last_step.txt) {
+          $LAST_STEP = Get-Content ./progress/last_step.txt
+          echo "::set-output name=step::$LAST_STEP"
+          Write-Host "Resuming from step $LAST_STEP"
+        } else {
+          echo "::set-output name=step::0"
+          Write-Host "Starting from Step 0"
+        }
+
     - name: Download and Install Playit
+      if: steps.load-progress.outputs.step == '0'
       run: |
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5
+        echo "1" > ./progress/last_step.txt  # Save progress
 
-    # 🔹 Enable Virtualization & Hyper-V
+    # ✅ Enable Virtualization & Hyper-V
     - name: Enable Virtualization & Hyper-V
+      if: steps.load-progress.outputs.step == '1'
       run: |
         Write-Host "🔄 Checking if system supports Hyper-V..."
-
-        # ✅ Check if system supports Hyper-V
         $hyperVSupport = Get-WindowsOptionalFeature -Online | Where-Object { $_.FeatureName -like "*Hyper-V*" }
-
         if (-not $hyperVSupport) {
             Write-Host "❌ This system does not support Hyper-V. Exiting..."
             exit 1
         } else {
             Write-Host "✅ System supports Hyper-V!"
         }
-
-        # ✅ Enable Virtualization in Boot Configuration
         Write-Host "🔄 Enabling Virtualization..."
         bcdedit /set hypervisorlaunchtype Auto
-        if ($?) {
-            Write-Host "✅ Virtualization Enabled!"
-        } else {
-            Write-Host "❌ Failed to enable Virtualization. Check BIOS settings."
-            exit 1
-        }
+        if ($?) { Write-Host "✅ Virtualization Enabled!" } else { exit 1 }
 
-        # ✅ List of Hyper-V Features
-        $features = @(
-            "Microsoft-Hyper-V-All",
-            "Microsoft-Hyper-V",
-            "Microsoft-Hyper-V-Platform",
-            "Microsoft-Hyper-V-Management-Tools",
-            "HypervisorPlatform"
-        )
-
-        # ✅ METHOD 1: Enable Hyper-V using Enable-WindowsOptionalFeature
-        Write-Host "🔄 Enabling Hyper-V using Windows Features..."
+        # Enable Hyper-V Features
+        $features = @("Microsoft-Hyper-V-All", "Microsoft-Hyper-V", "Microsoft-Hyper-V-Platform", "Microsoft-Hyper-V-Management-Tools", "HypervisorPlatform")
         foreach ($feature in $features) {
             Try {
                 Write-Host "🔄 Enabling $feature..."
@@ -61,90 +66,58 @@ jobs:
                 Write-Host "⚠️ Failed to enable $feature, trying next..."
             }
         }
+        echo "2" > ./progress/last_step.txt  # Save progress
 
-        # ✅ METHOD 2: Check if Hyper-V is fully enabled
-        $enabledFeatures = Get-WindowsOptionalFeature -Online | Where-Object { $_.State -eq "Enabled" -and $_.FeatureName -like "*Hyper-V*" }
-        if ($enabledFeatures) {
-            Write-Host "✅ Hyper-V is enabled successfully!"
-            exit 0
-        } else {
-            Write-Host "⚠️ Hyper-V installation may not be complete. Checking DISM method..."
-        }
-
-        # ✅ METHOD 3: Enable Hyper-V using DISM
-        Try {
-            Write-Host "🔄 Trying DISM method for Hyper-V..."
-            DISM /Online /Enable-Feature /FeatureName:Microsoft-Hyper-V-All /All /NoRestart
-            Write-Host "✅ DISM method executed for Hyper-V!"
-        } Catch {
-            Write-Host "⚠️ DISM method failed. Trying alternative..."
-        }
-
-        # ✅ METHOD 4: Manually Install Hyper-V (Final Resort)
-        Try {
-            Write-Host "🔄 Manually enabling Hyper-V registry settings..."
-            New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies" -Name "HyperV" -Value 1 -PropertyType DWord -Force
-            Restart-Computer -Force
-        } Catch {
-            Write-Host "❌ All installation methods failed. Exiting..."
-            exit 1
-        }
-        Write-Host "✅ Hyper-V installation completed!"
-        exit 0
-
-    # # Enable Remote Desktop (RDP) persistently
-    # - name: Enable Remote Desktop
-    #   run: |
-    #     Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-    #     Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-    #     Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-    #     Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
-
-    # # ✅ Create a Scheduled Task to Run Playit Silently on Startup
-    # - name: Add Playit as a Scheduled Task
-    #   run: |
-    #     $Action = New-ScheduledTaskAction -Execute "$env:USERPROFILE\playit.exe" -Argument "--secret $env:PLAYIT_AUTH_KEY"
-    #     $Trigger = New-ScheduledTaskTrigger -AtStartup
-    #     Register-ScheduledTask -TaskName "PlayitAgent" -Action $Action -Trigger $Trigger -RunLevel Highest -User "SYSTEM" -Force
-
-    # # ✅ Start Playit as a Background Process (No Visible Window)
-    # - name: Start Playit RDP Tunnel Silently
-    #   env:
-    #     PLAYIT_AUTH_KEY: ${{ secrets.PL }}
-    #   run: |
-    #     Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
-
-    # # ✅ Keep the GitHub Action Runner Alive
-    # - name: Keep the GitHub Action Runner Alive
-    #   run: |
-    #     while ($true) {
-    #       Write-Host "Keeping runner alive... $(Get-Date)"
-    #       Start-Sleep -Seconds 300
-    #     }
-    # ✅ Enable Remote Desktop (RDP) Persistently
-
+    # ✅ Enable Remote Desktop (RDP) persistently
     - name: Enable Remote Desktop
+      if: steps.load-progress.outputs.step == '2'
       run: |
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
         Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+        echo "3" > ./progress/last_step.txt  # Save progress
 
-    # ✅ Add Playit as a Hidden Scheduled Task
-    - name: Add Playit to Task Scheduler (Hidden)
+    # ✅ Install NSSM (Alternative to Task Scheduler)
+    - name: Install NSSM
+      if: steps.load-progress.outputs.step == '3'
+      run: |
+        Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile "$env:TEMP\nssm.zip"
+        Expand-Archive -Path "$env:TEMP\nssm.zip" -DestinationPath "$env:TEMP\nssm" -Force
+        Copy-Item -Path "$env:TEMP\nssm\nssm-2.24\win64\nssm.exe" -Destination "$env:SystemRoot\System32" -Force
+        echo "4" > ./progress/last_step.txt  # Save progress
+
+    # ✅ Create a Windows Service for Playit (Runs in Background)
+    - name: Run Playit as a Windows Service (Hidden)
+      if: steps.load-progress.outputs.step == '4'
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        $TaskAction = New-ScheduledTaskAction -Execute "$env:USERPROFILE\playit.exe" -Argument "--secret $env:PLAYIT_AUTH_KEY"
-        $TaskTrigger = New-ScheduledTaskTrigger -AtStartup
-        $TaskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Hidden
-        Register-ScheduledTask -TaskName "PlayitAgent" -Action $TaskAction -Trigger $TaskTrigger -Settings $TaskSettings -User "SYSTEM" -RunLevel Highest -Force
+        nssm install PlayitAgent "$env:USERPROFILE\playit.exe" "--secret $env:PLAYIT_AUTH_KEY"
+        nssm set PlayitAgent Start SERVICE_AUTO_START
+        nssm set PlayitAgent AppNoConsole 1
+        nssm set PlayitAgent ObjectName LocalSystem
+        nssm set PlayitAgent Type SERVICE_WIN32_OWN_PROCESS
+        nssm set PlayitAgent AppExit Default Restart
+        nssm start PlayitAgent
+        echo "5" > ./progress/last_step.txt  # Save progress
 
-        # Start Playit as a **hidden** background process
-        Start-ScheduledTask -TaskName "PlayitAgent"
+    # ✅ Keep GitHub Actions Alive (Restart Workflow Automatically)
+    - name: Save Progress
+      uses: actions/upload-artifact@v3
+      with:
+        name: progress
+        path: ./progress/last_step.txt
 
-    # ✅ Keep the GitHub Action Runner Alive
-    - name: Keep the GitHub Action Runner Alive
+    - name: Restart Workflow Before Timeout
+      if: always()
+      run: |
+        curl -X POST -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+             -H "Accept: application/vnd.github.v3+json" \
+             https://api.github.com/repos/${{ github.repository }}/actions/workflows/${{ github.workflow }}/dispatches \
+             -d '{"ref": "main"}'
+
+    - name: Keep GitHub Action Runner Alive
       run: |
         while ($true) {
           Write-Host "Keeping runner alive... $(Get-Date)"
