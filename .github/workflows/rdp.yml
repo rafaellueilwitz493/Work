@@ -20,13 +20,28 @@ jobs:
     - name: Restore Persistent Data
       run: |
         Write-Host "🔄 Restoring persistent files..."
-        if (Test-Path "D:\persistent_data") {
-          robocopy "D:\persistent_data" "C:\" /E /COPYALL /NFL /NDL /NJH /NJS
-          Write-Host "✅ Persistent data restored!"
-        } else {
-          Write-Host "⚠️ No previous persistent data found."
-        }
 
+        # Ensure persistent data directory exists before restoring
+        if (Test-Path "D:\persistent_data") {
+            Write-Host "📂 Restoring installed programs..."
+            robocopy "D:\persistent_data\Program Files" "C:\Program Files" /E /COPYALL /NFL /NDL /NJH /NJS
+            robocopy "D:\persistent_data\Program Files (x86)" "C:\Program Files (x86)" /E /COPYALL /NFL /NDL /NJH /NJS
+
+            Write-Host "📂 Restoring user data..."
+            robocopy "D:\persistent_data\runneradmin" "C:\Users\runneradmin" /E /COPYALL /NFL /NDL /NJH /NJS
+
+            Write-Host "📂 Restoring Playit..."
+            if (Test-Path "D:\persistent_data\playit.exe") {
+                Copy-Item "D:\persistent_data\playit.exe" -Destination "$env:USERPROFILE\playit.exe" -Force
+            } else {
+                Write-Host "⚠️ Playit backup not found!"
+            }
+
+            Write-Host "✅ Persistent data restored!"
+        } else {
+            Write-Host "⚠️ No previous persistent data found. Ensure the save step is working."
+        }
+            
     - name: Prevent Multiple Concurrent Runs
       run: |
         $workflowRuns = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/runs" -Headers @{Authorization="Bearer ${{ secrets.PAT_TOKEN }}"}).workflow_runs
