@@ -102,21 +102,37 @@ jobs:
     - name: Save Files Before Restart
       run: |
         Write-Host "💾 Saving user files and installed software..."
-        
+
+        # Ensure persistent data directory exists
         if (!(Test-Path "D:\persistent_data")) { 
-          New-Item -ItemType Directory -Path "D:\persistent_data" -Force 
+            New-Item -ItemType Directory -Path "D:\persistent_data" -Force 
         }
 
         Write-Host "📂 Backing up installed programs..."
-        robocopy "C:\Program Files" "D:\persistent_data\Program Files" /E /COPYALL /XD "WindowsApps" "ModifiableWindowsApps" "ProgramData" /NFL /NDL /NJH /NJS
+        try {
+            robocopy "C:\Program Files" "D:\persistent_data\Program Files" /E /COPYALL /B /XD "WindowsApps" "ModifiableWindowsApps" "ProgramData" "Windows Defender" /NFL /NDL /NJH /NJS
+            robocopy "C:\Program Files (x86)" "D:\persistent_data\Program Files (x86)" /E /COPYALL /B /NFL /NDL /NJH /NJS
+        } catch {
+            Write-Host "⚠️ Error while copying Program Files. Skipping..."
+        }
 
         Write-Host "📂 Backing up user data..."
-        robocopy "C:\Users\runneradmin" "D:\persistent_data\runneradmin" /E /COPYALL /NFL /NDL /NJH /NJS
+        try {
+            robocopy "C:\Users\runneradmin" "D:\persistent_data\runneradmin" /E /COPYALL /B /NFL /NDL /NJH /NJS
+        } catch {
+            Write-Host "⚠️ Error while copying user data. Skipping..."
+        }
 
         Write-Host "📂 Backing up Playit..."
-        Copy-Item -Path "$env:USERPROFILE\playit.exe" -Destination "D:\persistent_data\playit.exe" -Force
+        try {
+            Copy-Item -Path "$env:USERPROFILE\playit.exe" -Destination "D:\persistent_data\playit.exe" -Force
+        } catch {
+            Write-Host "⚠️ Error while copying Playit executable. Skipping..."
+        }
 
         Write-Host "✅ Files and programs saved!"
+      shell: pwsh
+
 
     - name: Restart Workflow Before Timeout
       env:
