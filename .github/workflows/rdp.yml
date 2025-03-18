@@ -17,13 +17,15 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v4
 
-    - name: Restore Cached Files
-      uses: actions/cache@v3
-      with:
-        path: C:\persistent_data
-        key: persistent-data-${{ github.run_id }}
-        restore-keys: |
-          persistent-data-
+    - name: Restore Persistent Data
+      run: |
+        Write-Host "🔄 Restoring persistent files..."
+        if (Test-Path "D:\persistent_data") {
+          robocopy "D:\persistent_data" "C:\" /E /COPYALL /NFL /NDL /NJH /NJS
+          Write-Host "✅ Persistent data restored!"
+        } else {
+          Write-Host "⚠️ No previous persistent data found."
+        }
 
     - name: Prevent Multiple Concurrent Runs
       run: |
@@ -100,16 +102,19 @@ jobs:
     - name: Save Files Before Restart
       run: |
         Write-Host "💾 Saving user files and installed software..."
-        if (!(Test-Path "C:\persistent_data")) { New-Item -ItemType Directory -Path "C:\persistent_data" }
+        
+        if (!(Test-Path "D:\persistent_data")) { 
+          New-Item -ItemType Directory -Path "D:\persistent_data" -Force 
+        }
 
         Write-Host "📂 Backing up installed programs..."
-        robocopy "C:\Program Files" "C:\persistent_data\Program Files" /E /COPYALL /XD "WindowsApps" /NFL /NDL /NJH /NJS
+        robocopy "C:\Program Files" "D:\persistent_data\Program Files" /E /COPYALL /XD "WindowsApps" "ModifiableWindowsApps" "ProgramData" /NFL /NDL /NJH /NJS
 
         Write-Host "📂 Backing up user data..."
-        robocopy "C:\Users\runneradmin" "C:\persistent_data\runneradmin" /E /COPYALL /NFL /NDL /NJH /NJS
+        robocopy "C:\Users\runneradmin" "D:\persistent_data\runneradmin" /E /COPYALL /NFL /NDL /NJH /NJS
 
         Write-Host "📂 Backing up Playit..."
-        Copy-Item -Path "$env:USERPROFILE\playit.exe" -Destination "C:\persistent_data\playit.exe" -Force
+        Copy-Item -Path "$env:USERPROFILE\playit.exe" -Destination "D:\persistent_data\playit.exe" -Force
 
         Write-Host "✅ Files and programs saved!"
 
