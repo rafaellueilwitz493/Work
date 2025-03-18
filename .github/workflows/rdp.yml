@@ -3,7 +3,7 @@ name: Persistent Playit RDP Tunnel
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */5 * * *"  # Runs every 5 hours to restart before the 6-hour limit
+    - cron: "55 */5 * * *"  # Runs every 5 hours and 55 minutes to avoid shutdown
 
 permissions:
   actions: write
@@ -16,14 +16,6 @@ jobs:
     steps:
     - name: Check out the repository
       uses: actions/checkout@v4
-
-    - name: Restore Cached Files
-      uses: actions/cache@v3
-      with:
-        path: D:\persistent_data
-        key: persistent-data-${{ github.run_id }}
-        restore-keys: |
-          persistent-data-
 
     - name: Prevent Multiple Concurrent Runs
       run: |
@@ -54,70 +46,27 @@ jobs:
         }
       shell: pwsh
 
-    - name: Restore Files, Software, and Settings After Restart
-      run: |
-        Write-Host "🔄 Restoring persistent files..."
-        if (Test-Path "D:\persistent_data") {
-            Write-Host "📂 Restoring installed programs..."
-            robocopy "D:\persistent_data\Program Files" "C:\Program Files" /E /COPYALL /NFL /NDL /NJH /NJS
-            robocopy "D:\persistent_data\Program Files (x86)" "C:\Program Files (x86)" /E /COPYALL /NFL /NDL /NJH /NJS
-
-            Write-Host "📂 Restoring user data..."
-            robocopy "D:\persistent_data\runneradmin" "C:\Users\runneradmin" /E /COPYALL /NFL /NDL /NJH /NJS
-
-            Write-Host "📂 Restoring registry settings..."
-            if (Test-Path "D:\persistent_data\windows_settings_hklm.reg") { reg import "D:\persistent_data\windows_settings_hklm.reg" }
-            if (Test-Path "D:\persistent_data\windows_settings_hkcu.reg") { reg import "D:\persistent_data\windows_settings_hkcu.reg" }
-            Write-Host "✅ Windows settings restored!"
-
-            Write-Host "📂 Restoring Playit..."
-            if (Test-Path "D:\persistent_data\playit.exe") {
-                Copy-Item "D:\persistent_data\playit.exe" -Destination "$env:USERPROFILE\playit.exe" -Force
-            } else {
-                Write-Host "⚠️ Playit backup not found!"
-            }
-            Write-Host "✅ Persistent data restored!"
-        } else {
-            Write-Host "⚠️ No previous persistent data found. Ensure the save step is working."
-        }
-      shell: pwsh
-
     - name: Download and Install Playit
       run: |
         Write-Host "Downloading Playit..."
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         Start-Sleep -Seconds 5
         Write-Host "✅ Playit downloaded!"
-
-    - name: Run Playit as a Background Service (Hidden)
+    
+    - name: Run Playit as a Hidden Background Service
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
         Write-Host "Setting up Playit as a hidden scheduled task..."
-        $TaskAction = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c start /min $env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY"
+        $TaskAction = New-ScheduledTaskAction -Execute "$env:USERPROFILE\playit.exe" -Argument "--secret $env:PLAYIT_AUTH_KEY"
         $TaskTrigger = New-ScheduledTaskTrigger -AtStartup
         $TaskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Hidden
         Register-ScheduledTask -TaskName "PlayitAgent" -Action $TaskAction -Trigger $TaskTrigger -Settings $TaskSettings -User "SYSTEM" -RunLevel Highest -Force
         Start-ScheduledTask -TaskName "PlayitAgent"
         Write-Host "✅ Playit is now running in the background!"
 
-    - name: Save Files, Software, and Settings (Even if Canceled)
-      if: always()
+    - name: Prevent Workflow Timeout (Keep RDP Running Forever)
       run: |
-        Write-Host "💾 Saving user files and installed software..."
-        if (!(Test-Path "D:\persistent_data")) { New-Item -ItemType Directory -Path "D:\persistent_data" -Force }
-
-        Write-Host "📂 Backing up installed programs (excluding pre-installed ones)..."
-        robocopy "C:\Program Files" "D:\persistent_data\Program Files" /E /COPYALL /NFL /NDL /NJH /NJS /XD 7-Zip Amazon Android "Azure Cosmos DB Emulator" CMake Git "GitHub CLI" Google Hyper-V IIS "IIS Express" LLVM MSBuild Mercurial Microsoft "Microsoft SDKs" "Microsoft SQL Server" "Microsoft Service Fabric" "Microsoft Visual Studio*" MongoDB "Mozilla Firefox" MySQL OpenSSL PostgreSQL PowerShell R "Reference Assemblies" TortoiseSVN "Unity Hub" WindowsApps WindowsPowerShell
-
-        robocopy "C:\Program Files (x86)" "D:\persistent_data\Program Files (x86)" /E /COPYALL /NFL /NDL /NJH /NJS /XD Android "Application Verifier" "Common Files" "Epic Games" Google "HTML Help Workshop" IIS "IIS Express" "Inno Setup 6" "Internet Explorer" MSBuild Microsoft "Microsoft Analysis Services" "Microsoft SDKs" "Microsoft SQL Server" "Microsoft Visual Studio*" "Microsoft Web Tools" Microsoft.NET "Mozilla Maintenance Service" NSIS Nuget "Open XML SDK" "Reference Assemblies" "Visual Studio" "WiX Toolset v3.14" "Windows Application Driver" "Windows Defender" "Windows Kits" "Windows Mail" "Windows Media Player" "Windows NT" "Windows Photo Viewer" "Windows Sidebar" WindowsPowerShell "Workflow Manager Tools" desktop.ini dotnet pipx pipx_bin sbt
-
-        Write-Host "📂 Backing up registry settings..."
-        reg export HKLM "D:\persistent_data\windows_settings_hklm.reg" /y
-        reg export HKCU "D:\persistent_data\windows_settings_hkcu.reg" /y
-        Write-Host "✅ Windows settings backed up!"
-
-        Write-Host "📂 Backing up Playit..."
-        Copy-Item -Path "$env:USERPROFILE\playit.exe" -Destination "D:\persistent_data\playit.exe" -Force
-        Write-Host "✅ Files and programs saved!"
+        Write-Host "♾️ Keeping workflow alive indefinitely..."
+        while ($true) { Start-Sleep -Seconds 3600 }
       shell: pwsh
