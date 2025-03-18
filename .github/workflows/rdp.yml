@@ -101,7 +101,8 @@ jobs:
         Start-ScheduledTask -TaskName "PlayitAgent"
         Write-Host "✅ Playit is now running in the background!"
 
-    - name: Save Files, Software, and Settings Before Restart
+    - name: Save Files, Software, and Settings (Even if Canceled)
+      if: always()
       run: |
         Write-Host "💾 Saving user files and installed software..."
         if (!(Test-Path "D:\persistent_data")) { New-Item -ItemType Directory -Path "D:\persistent_data" -Force }
