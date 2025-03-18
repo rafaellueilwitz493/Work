@@ -19,9 +19,30 @@ jobs:
 
     - name: Prevent Multiple Concurrent Runs
       run: |
-        $workflowRuns = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/runs" -Headers @{Authorization="Bearer ${{ secrets.PAT_TOKEN }}"}).workflow_runs
+        Write-Host "🔍 Checking for active workflow runs..."
+        $repo = "${{ github.repository }}"
+        $token = "${{ secrets.PAT_TOKEN }}"
+        $headers = @{ Authorization = "Bearer $token" }
+
+        # Get active runs
+        $workflowRuns = (Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/actions/runs" -Headers $headers).workflow_runs
         $activeRuns = $workflowRuns | Where-Object { $_.status -eq "in_progress" -and $_.name -eq "Persistent Playit RDP Tunnel" }
-        if ($activeRuns.Count -gt 1) { Write-Host "Another run is active. Exiting..."; exit 1 }
+
+        if ($activeRuns.Count -gt 1) {
+          Write-Host "❌ Another workflow run is active. Retrying in 1 minute..."
+          Start-Sleep -Seconds 60
+          
+          # Check again
+          $workflowRuns = (Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/actions/runs" -Headers $headers).workflow_runs
+          $activeRuns = $workflowRuns | Where-Object { $_.status -eq "in_progress" -and $_.name -eq "Persistent Playit RDP Tunnel" }
+          
+          if ($activeRuns.Count -gt 1) {
+            Write-Host "❌ Another run is still active. Exiting..."
+            exit 1
+          }
+        }
+
+        Write-Host "✅ No conflicting runs found. Proceeding..."
       shell: pwsh
 
     - name: Enable Remote Desktop & Setup User
