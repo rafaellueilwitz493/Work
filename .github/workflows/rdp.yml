@@ -12,7 +12,7 @@ permissions:
 jobs:
   setup-rdp-tunnel:
     runs-on: windows-latest
-    
+
     steps:
     - name: Check out the repository
       uses: actions/checkout@v4
