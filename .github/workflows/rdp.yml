@@ -58,14 +58,20 @@ jobs:
       run: |
         Write-Host "🔄 Restoring user files and installed programs..."
         if (Test-Path "C:\persistent_data\Program Files") {
+          Write-Host "📂 Restoring Program Files..."
           robocopy "C:\persistent_data\Program Files" "C:\Program Files" /E /COPYALL /NFL /NDL /NJH /NJS
         }
+
         if (Test-Path "C:\persistent_data\runneradmin") {
+          Write-Host "📂 Restoring User Data..."
           robocopy "C:\persistent_data\runneradmin" "C:\Users\runneradmin" /E /COPYALL /NFL /NDL /NJH /NJS
         }
+
         if (Test-Path "C:\persistent_data\playit.exe") {
+          Write-Host "📂 Restoring Playit..."
           Copy-Item -Path "C:\persistent_data\playit.exe" -Destination "$env:USERPROFILE\playit.exe" -Force
         }
+
         Write-Host "✅ Files and programs restored!"
 
     - name: Download and Install Playit (if missing)
@@ -95,9 +101,16 @@ jobs:
       run: |
         Write-Host "💾 Saving user files and installed software..."
         if (!(Test-Path "C:\persistent_data")) { New-Item -ItemType Directory -Path "C:\persistent_data" }
-        robocopy "C:\Program Files" "C:\persistent_data\Program Files" /E /COPYALL /NFL /NDL /NJH /NJS
+
+        Write-Host "📂 Backing up installed programs..."
+        robocopy "C:\Program Files" "C:\persistent_data\Program Files" /E /COPYALL /XD "WindowsApps" /NFL /NDL /NJH /NJS
+
+        Write-Host "📂 Backing up user data..."
         robocopy "C:\Users\runneradmin" "C:\persistent_data\runneradmin" /E /COPYALL /NFL /NDL /NJH /NJS
+
+        Write-Host "📂 Backing up Playit..."
         Copy-Item -Path "$env:USERPROFILE\playit.exe" -Destination "C:\persistent_data\playit.exe" -Force
+
         Write-Host "✅ Files and programs saved!"
 
     - name: Restart Workflow Before Timeout
