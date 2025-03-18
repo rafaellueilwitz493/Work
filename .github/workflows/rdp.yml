@@ -12,36 +12,19 @@ permissions:
 jobs:
   setup-rdp-tunnel:
     runs-on: windows-latest
-
+    
     steps:
     - name: Check out the repository
       uses: actions/checkout@v4
 
-    - name: Restore Persistent Data
-      run: |
-        Write-Host "🔄 Restoring persistent files..."
+    - name: Restore Cached Files
+      uses: actions/cache@v3
+      with:
+        path: D:\persistent_data
+        key: persistent-data-${{ github.run_id }}
+        restore-keys: |
+          persistent-data-
 
-        # Ensure persistent data directory exists before restoring
-        if (Test-Path "D:\persistent_data") {
-            Write-Host "📂 Restoring installed programs..."
-            robocopy "D:\persistent_data\Program Files" "C:\Program Files" /E /COPYALL /NFL /NDL /NJH /NJS
-            robocopy "D:\persistent_data\Program Files (x86)" "C:\Program Files (x86)" /E /COPYALL /NFL /NDL /NJH /NJS
-
-            Write-Host "📂 Restoring user data..."
-            robocopy "D:\persistent_data\runneradmin" "C:\Users\runneradmin" /E /COPYALL /NFL /NDL /NJH /NJS
-
-            Write-Host "📂 Restoring Playit..."
-            if (Test-Path "D:\persistent_data\playit.exe") {
-                Copy-Item "D:\persistent_data\playit.exe" -Destination "$env:USERPROFILE\playit.exe" -Force
-            } else {
-                Write-Host "⚠️ Playit backup not found!"
-            }
-
-            Write-Host "✅ Persistent data restored!"
-        } else {
-            Write-Host "⚠️ No previous persistent data found. Ensure the save step is working."
-        }
-            
     - name: Prevent Multiple Concurrent Runs
       run: |
         $workflowRuns = (Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/actions/runs" -Headers @{Authorization="Bearer ${{ secrets.PAT_TOKEN }}"}).workflow_runs
@@ -71,36 +54,39 @@ jobs:
         }
       shell: pwsh
 
-    - name: Restore Files After Restart
+    - name: Restore Files and Software After Restart
       run: |
-        Write-Host "🔄 Restoring user files and installed programs..."
-        if (Test-Path "C:\persistent_data\Program Files") {
-          Write-Host "📂 Restoring Program Files..."
-          robocopy "C:\persistent_data\Program Files" "C:\Program Files" /E /COPYALL /NFL /NDL /NJH /NJS
-        }
+        Write-Host "🔄 Restoring persistent files..."
+        if (Test-Path "D:\persistent_data") {
+            Write-Host "📂 Restoring installed programs..."
+            robocopy "D:\persistent_data\Program Files" "C:\Program Files" /E /COPYALL /NFL /NDL /NJH /NJS
+            robocopy "D:\persistent_data\Program Files (x86)" "C:\Program Files (x86)" /E /COPYALL /NFL /NDL /NJH /NJS
 
-        if (Test-Path "C:\persistent_data\runneradmin") {
-          Write-Host "📂 Restoring User Data..."
-          robocopy "C:\persistent_data\runneradmin" "C:\Users\runneradmin" /E /COPYALL /NFL /NDL /NJH /NJS
-        }
+            Write-Host "📂 Restoring user data..."
+            robocopy "D:\persistent_data\runneradmin" "C:\Users\runneradmin" /E /COPYALL /NFL /NDL /NJH /NJS
 
-        if (Test-Path "C:\persistent_data\playit.exe") {
-          Write-Host "📂 Restoring Playit..."
-          Copy-Item -Path "C:\persistent_data\playit.exe" -Destination "$env:USERPROFILE\playit.exe" -Force
-        }
+            Write-Host "📂 Restoring registry settings..."
+            reg import "D:\persistent_data\windows_settings.reg"
+            Write-Host "✅ Windows settings restored!"
 
-        Write-Host "✅ Files and programs restored!"
-
-    - name: Download and Install Playit (if missing)
-      run: |
-        if (!(Test-Path "$env:USERPROFILE\playit.exe")) {
-          Write-Host "Downloading Playit..."
-          Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-          Start-Sleep -Seconds 5
-          Write-Host "✅ Playit downloaded!"
+            Write-Host "📂 Restoring Playit..."
+            if (Test-Path "D:\persistent_data\playit.exe") {
+                Copy-Item "D:\persistent_data\playit.exe" -Destination "$env:USERPROFILE\playit.exe" -Force
+            } else {
+                Write-Host "⚠️ Playit backup not found!"
+            }
+            Write-Host "✅ Persistent data restored!"
         } else {
-          Write-Host "✅ Playit is already restored!"
+            Write-Host "⚠️ No previous persistent data found. Ensure the save step is working."
         }
+      shell: pwsh
+
+    - name: Download and Install Playit
+      run: |
+        Write-Host "Downloading Playit..."
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+        Start-Sleep -Seconds 5
+        Write-Host "✅ Playit downloaded!"
 
     - name: Run Playit as a Background Service
       env:
@@ -114,62 +100,23 @@ jobs:
         Start-ScheduledTask -TaskName "PlayitAgent"
         Write-Host "✅ Playit is now running in the background!"
 
-    - name: Save Files Before Restart
+    - name: Save Files, Software, and Settings Before Restart
       run: |
         Write-Host "💾 Saving user files and installed software..."
-
-        # Ensure persistent data directory exists
-        if (!(Test-Path "D:\persistent_data")) { 
-            New-Item -ItemType Directory -Path "D:\persistent_data" -Force 
-        }
+        if (!(Test-Path "D:\persistent_data")) { New-Item -ItemType Directory -Path "D:\persistent_data" -Force }
 
         Write-Host "📂 Backing up installed programs..."
-        try {
-            robocopy "C:\Program Files" "D:\persistent_data\Program Files" /E /COPYALL /B /XD "WindowsApps" "ModifiableWindowsApps" "ProgramData" "Windows Defender" /NFL /NDL /NJH /NJS
-            robocopy "C:\Program Files (x86)" "D:\persistent_data\Program Files (x86)" /E /COPYALL /B /NFL /NDL /NJH /NJS
-        } catch {
-            Write-Host "⚠️ Error while copying Program Files. Skipping..."
-        }
+        robocopy "C:\Program Files" "D:\persistent_data\Program Files" /E /COPYALL /NFL /NDL /NJH /NJS
+        robocopy "C:\Program Files (x86)" "D:\persistent_data\Program Files (x86)" /E /COPYALL /NFL /NDL /NJH /NJS
 
         Write-Host "📂 Backing up user data..."
-        try {
-            robocopy "C:\Users\runneradmin" "D:\persistent_data\runneradmin" /E /COPYALL /B /NFL /NDL /NJH /NJS
-        } catch {
-            Write-Host "⚠️ Error while copying user data. Skipping..."
-        }
+        robocopy "C:\Users\runneradmin" "D:\persistent_data\runneradmin" /E /COPYALL /NFL /NDL /NJH /NJS
+
+        Write-Host "📂 Backing up registry settings..."
+        reg export HKLM "D:\persistent_data\windows_settings.reg" /y
+        Write-Host "✅ Windows settings backed up!"
 
         Write-Host "📂 Backing up Playit..."
-        try {
-            Copy-Item -Path "$env:USERPROFILE\playit.exe" -Destination "D:\persistent_data\playit.exe" -Force
-        } catch {
-            Write-Host "⚠️ Error while copying Playit executable. Skipping..."
-        }
-
+        Copy-Item -Path "$env:USERPROFILE\playit.exe" -Destination "D:\persistent_data\playit.exe" -Force
         Write-Host "✅ Files and programs saved!"
       shell: pwsh
-
-
-    - name: Restart Workflow Before Timeout
-      env:
-        GH_TOKEN: ${{ secrets.PAT_TOKEN }}
-      run: |
-        $headers = @{
-          "Authorization" = "Bearer $env:GH_TOKEN"
-          "Accept" = "application/vnd.github.v3+json"
-        }
-        $body = @{ "ref" = "main" } | ConvertTo-Json -Compress
-    
-        $workflowFileName = "rdp.yml"  # Ensure this is correct
-        $repo = "${{ github.repository }}"
-        $url = "https://api.github.com/repos/$repo/actions/workflows/$workflowFileName/dispatches"
-    
-        Write-Host "Triggering workflow restart..."
-        Invoke-RestMethod -Uri $url -Method Post -Headers $headers -Body $body
-      shell: pwsh
-
-    - name: Keep GitHub Action Runner Alive
-      run: |
-        while ($true) {
-          Write-Host "Keeping runner alive... $(Get-Date)"
-          Start-Sleep -Seconds 300
-        }
