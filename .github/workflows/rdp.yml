@@ -68,5 +68,9 @@ jobs:
     - name: Prevent Workflow Timeout (Keep RDP Running Forever)
       run: |
         Write-Host "♾️ Keeping workflow alive indefinitely..."
-        while ($true) { Start-Sleep -Seconds 3600 }
+        while ($true) {
+          Write-Host "✅ Still running... Preventing timeout."
+          Start-Sleep -Seconds 300  # Wait 5 minutes
+        }
       shell: pwsh
+    
