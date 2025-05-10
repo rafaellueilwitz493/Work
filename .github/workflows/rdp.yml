@@ -1,13 +1,7 @@
-name: Persistent Playit RDP Tunnel
+name: Playit RDP Tunnel
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "55 */5 * * *"  # Runs every 5 hours and 55 minutes to avoid shutdown
-
-permissions:
-  actions: write
-  contents: write
 
 jobs:
   setup-rdp-tunnel:
@@ -15,73 +9,28 @@ jobs:
 
     steps:
     - name: Check out the repository
-      uses: actions/checkout@v4
-
-    - name: Prevent Multiple Concurrent Runs
-      run: |
-        Write-Host "🔍 Checking for active workflow runs..."
-        $repo = "${{ github.repository }}"
-        $token = "${{ secrets.PAT_TOKEN }}"
-        $headers = @{ Authorization = "Bearer $token" }
-
-        # Get active runs
-        $workflowRuns = (Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/actions/runs" -Headers $headers).workflow_runs
-        $activeRuns = $workflowRuns | Where-Object { $_.status -eq "in_progress" -and $_.name -eq "Persistent Playit RDP Tunnel" }
-
-        if ($activeRuns.Count -gt 1) {
-          Write-Host "❌ Another workflow run is active. Retrying in 1 minute..."
-          Start-Sleep -Seconds 60
-
-          # Check again
-          $workflowRuns = (Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/actions/runs" -Headers $headers).workflow_runs
-          $activeRuns = $workflowRuns | Where-Object { $_.status -eq "in_progress" -and $_.name -eq "Persistent Playit RDP Tunnel" }
-
-          if ($activeRuns.Count -gt 1) {
-            Write-Host "❌ Another run is still active. Exiting..."
-            exit 1
-          }
-        }
-
-        Write-Host "✅ No conflicting runs found. Proceeding..."
-      shell: pwsh
-
-    - name: Enable Remote Desktop & Setup User
-      run: |
-        Write-Host "🔹 Enabling Remote Desktop..."
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-
-        Write-Host "🔹 Checking if 'runneradmin' user exists..."
-        $userExists = Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue
-
-        if ($userExists) {
-          Write-Host "✅ User 'runneradmin' already exists. Updating password..."
-          Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
-        } else {
-          Write-Host "🔹 Creating 'runneradmin' user..."
-          net user runneradmin "p@ssw0rd!" /add
-          net localgroup Administrators runneradmin /add
-          net localgroup "Remote Desktop Users" runneradmin /add
-          Write-Host "✅ User 'runneradmin' created and added to RDP!"
-        }
-      shell: pwsh
+      uses: actions/checkout@v2
 
     - name: Download and Install Playit
       run: |
-        Write-Host "Downloading Playit..."
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        Start-Sleep -Seconds 5
-        Write-Host "✅ Playit downloaded!"
+        Start-Sleep -Seconds 5  # Give some time for the download to complete
 
-    - name: Run Playit as a Hidden Background Service
+    # Default, optional.
+    - name: Enable TS
+      run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
+    - run: Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+    - run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
+    - run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+
+    - name: Start Playit and Set Up RDP Tunnel
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Write-Host "Setting up Playit as a hidden scheduled task..."
-        $TaskAction = New-ScheduledTaskAction -Execute "$env:USERPROFILE\playit.exe" -Argument "--secret $env:PLAYIT_AUTH_KEY"
-        $TaskTrigger = New-ScheduledTaskTrigger -AtStartup
-        $TaskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Hidden
-        Register-ScheduledTask -TaskName "PlayitAgent" -Action $TaskAction -Trigger $TaskTrigger -Settings $TaskSettings -User "SYSTEM" -RunLevel Highest -Force
-        Start-ScheduledTask -TaskName "PlayitAgent"
-        Write-Host "✅ Playit is now running in the background!"
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow
+
+    # Prevent workflow to stop (for the maximum allowed duration)
+    - name: Keep the GitHub Action Runner Alive
+      run: |
+        Start-Sleep -Seconds 21540 # Approximately 5 hours and 59 minutes (just under 6 hours)
