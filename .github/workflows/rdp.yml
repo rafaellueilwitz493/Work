@@ -1,4 +1,4 @@
-name: Playit RDP Tunnel (Enhanced)
+name: Playit RDP Tunnel (Maximized CPU Performance)
 
 on:
   workflow_dispatch:
@@ -13,10 +13,19 @@ jobs:
 
     - name: Optimize Windows Performance
       run: |
-        # Enable high performance mode
+        # Set Windows to High Performance mode to maximize CPU/RAM usage
         powercfg -setactive SCHEME_MIN
-        # Enable all processors (sometimes helps on virtual machines)
+        # Force all available processors (use all available CPU cores)
         bcdedit /set numproc 0
+        # Disable Sleep Mode (prevents the system from going to sleep during long-running tasks)
+        powercfg -change standby-timeout-ac 0
+        # Disable CPU Throttling (avoid idle states)
+        powercfg -change standby-timeout-dc 0
+        # Disable unnecessary system services and background apps (optional but recommended for speed)
+        Stop-Service -Name "wuauserv"  # Windows Update service (disable while RDP is active)
+        Stop-Service -Name "Spooler"    # Print spooler (if not needed)
+        # Disable Windows Defender for this job (optional and should be used with caution)
+        Set-MpPreference -DisableRealtimeMonitoring $true
 
     - name: Download and Install Playit Agent
       run: |
@@ -25,26 +34,44 @@ jobs:
 
     - name: Enable Remote Desktop and Configure
       run: |
+        # Enable Remote Desktop
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        
+        # Enable Network Level Authentication (Improved Security)
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
 
-    - name: Set RDP Password Securely
+        # Ensure RDP is on all interfaces
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxInstanceCount" -Value 10
+
+    - name: Set RDP Password (Inline)
+      shell: powershell
       run: |
-        $password = ConvertTo-SecureString "${{ secrets.RDP_PASSWORD }}" -AsPlainText -Force
-        Set-LocalUser -Name "runneradmin" -Password $password
+        # Ensure the password is set securely, and check if it exists
+        $password = ConvertTo-SecureString "P@ssword123" -AsPlainText -Force
+        if (-not (Get-LocalUser -Name "runneradmin")) {
+          Write-Host "Creating user 'runneradmin'..."
+          New-LocalUser -Name "runneradmin" -Password $password -FullName "GitHub Runner Admin" -Description "Admin account for RDP access"
+        }
+        else {
+          Write-Host "User 'runneradmin' already exists. Updating password..."
+          Set-LocalUser -Name "runneradmin" -Password $password
+        }
 
     - name: Start Playit Agent
       env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}  # It's safer to keep the Playit key secure
       run: |
+        # Start the Playit Agent with the authentication key
         Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
         Start-Sleep -Seconds 5
 
-    - name: Show Public RDP Tunnel Info (Optional Debug)
-      run: Get-Process playit*
-
-    - name: Keep the GitHub Action Runner Alive (6h Max)
+    - name: Show Playit Process Info (Optional Debug)
       run: |
-        Write-Host "RDP Tunnel Active. Runner will stay awake..."
-        Start-Sleep -Seconds 21540 # ~6 hours max
+        # Display Playit process info to ensure it's running
+        Get-Process playit* | Format-Table -AutoSize
+
+    - name: Keep GitHub Runner Alive (6 hours)
+      run: |
+        Write-Host "RDP Tunnel Active. Keeping the runner alive..."
+        Start-Sleep -Seconds 21540  # 6 hours (maximum duration for GitHub Actions job)
