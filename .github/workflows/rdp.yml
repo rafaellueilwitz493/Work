@@ -1,4 +1,4 @@
-name: Playit RDP Tunnel
+name: Playit RDP Tunnel (Enhanced)
 
 on:
   workflow_dispatch:
@@ -11,26 +11,40 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v2
 
-    - name: Download and Install Playit
+    - name: Optimize Windows Performance
+      run: |
+        # Enable high performance mode
+        powercfg -setactive SCHEME_MIN
+        # Enable all processors (sometimes helps on virtual machines)
+        bcdedit /set numproc 0
+
+    - name: Download and Install Playit Agent
       run: |
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        Start-Sleep -Seconds 5  # Give some time for the download to complete
+        Start-Sleep -Seconds 5
 
-    # Default, optional.
-    - name: Enable TS
-      run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
-    - run: Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-    - run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
-    - run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "p@ssw0rd!" -Force)
+    - name: Enable Remote Desktop and Configure
+      run: |
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
 
-    - name: Start Playit and Set Up RDP Tunnel
+    - name: Set RDP Password Securely
+      run: |
+        $password = ConvertTo-SecureString "${{ secrets.RDP_PASSWORD }}" -AsPlainText -Force
+        Set-LocalUser -Name "runneradmin" -Password $password
+
+    - name: Start Playit Agent
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -NoNewWindow -Wait
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -NoNewWindow
+        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
+        Start-Sleep -Seconds 5
 
-    # Prevent workflow to stop (for the maximum allowed duration)
-    - name: Keep the GitHub Action Runner Alive
+    - name: Show Public RDP Tunnel Info (Optional Debug)
+      run: Get-Process playit*
+
+    - name: Keep the GitHub Action Runner Alive (6h Max)
       run: |
-        Start-Sleep -Seconds 21540 # Approximately 5 hours and 59 minutes (just under 6 hours)
+        Write-Host "RDP Tunnel Active. Runner will stay awake..."
+        Start-Sleep -Seconds 21540 # ~6 hours max
