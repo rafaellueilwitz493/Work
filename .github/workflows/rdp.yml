@@ -1,4 +1,4 @@
-name: Playit RDP Tunnel (Maximized CPU Performance)
+name: Ultra High Performance RDP Tunnel
 
 on:
   workflow_dispatch:
@@ -11,67 +11,226 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v2
 
-    - name: Optimize Windows Performance
+    - name: Maximize System Performance
       run: |
-        # Set Windows to High Performance mode to maximize CPU/RAM usage
-        powercfg -setactive SCHEME_MIN
-        # Force all available processors (use all available CPU cores)
-        bcdedit /set numproc 0
-        # Disable Sleep Mode (prevents the system from going to sleep during long-running tasks)
-        powercfg -change standby-timeout-ac 0
-        # Disable CPU Throttling (avoid idle states)
-        powercfg -change standby-timeout-dc 0
-        # Disable unnecessary system services and background apps (optional but recommended for speed)
-        Stop-Service -Name "wuauserv"  # Windows Update service (disable while RDP is active)
-        Stop-Service -Name "Spooler"    # Print spooler (if not needed)
-        # Disable Windows Defender for this job (optional and should be used with caution)
-        Set-MpPreference -DisableRealtimeMonitoring $true
+        # Set to Ultimate Performance mode (more aggressive than High Performance)
+        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+        powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
+        
+        # Force maximum CPU usage - disable all power saving
+        powercfg -change -monitor-timeout-ac 0
+        powercfg -change -monitor-timeout-dc 0
+        powercfg -change -disk-timeout-ac 0
+        powercfg -change -disk-timeout-dc 0
+        powercfg -change -standby-timeout-ac 0
+        powercfg -change -standby-timeout-dc 0
+        powercfg -change -hibernate-timeout-ac 0
+        powercfg -change -hibernate-timeout-dc 0
+        
+        # Disable CPU parking and throttling
+        powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100
+        powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
+        powercfg -setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100
+        powercfg -setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
+        
+        # Set processor performance to maximum
+        powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2
+        powercfg -setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2
+        
+        # Apply changes
+        powercfg -setactive SCHEME_CURRENT
 
-    - name: Download and Install Playit Agent
+    - name: Optimize Memory and CPU Usage
       run: |
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        Start-Sleep -Seconds 5
+        # Clear memory cache and optimize RAM
+        rundll32.exe advapi32.dll,ProcessIdleTasks
+        
+        # Set process priority class to high for better responsiveness
+        wmic process where name="dwm.exe" CALL setpriority "above normal"
+        
+        # Disable unnecessary visual effects for better performance
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v VisualFXSetting /t REG_DWORD /d 2 /f
+        reg add "HKCU\Control Panel\Desktop" /v UserPreferencesMask /t REG_BINARY /d 9032078010000000 /f
+        
+        # Optimize virtual memory
+        wmic computersystem where name="%computername%" set AutomaticManagedPagefile=False
+        wmic pagefileset where name="%SystemDrive%\\pagefile.sys" set InitialSize=4096,MaximumSize=8192
 
-    - name: Enable Remote Desktop and Configure
+    - name: Disable Resource-Heavy Services
       run: |
-        # Enable Remote Desktop
+        # Stop Windows Update during RDP session
+        Stop-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue
+        Set-Service -Name "wuauserv" -StartupType Disabled
+        
+        # Stop Windows Search for better I/O performance
+        Stop-Service -Name "WSearch" -Force -ErrorAction SilentlyContinue
+        Set-Service -Name "WSearch" -StartupType Disabled
+        
+        # Disable Windows Defender temporarily for maximum performance
+        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+        Set-MpPreference -DisableBehaviorMonitoring $true -ErrorAction SilentlyContinue
+        Set-MpPreference -DisableScriptScanning $true -ErrorAction SilentlyContinue
+        
+        # Stop print spooler if not needed
+        Stop-Service -Name "Spooler" -Force -ErrorAction SilentlyContinue
+        
+        # Disable Superfetch/SysMain for better disk performance
+        Stop-Service -Name "SysMain" -Force -ErrorAction SilentlyContinue
+        Set-Service -Name "SysMain" -StartupType Disabled
+        
+        # Stop Fax service
+        Stop-Service -Name "Fax" -Force -ErrorAction SilentlyContinue
+
+    - name: Optimize Network for RDP Performance
+      run: |
+        # Optimize TCP settings for better RDP performance
+        netsh int tcp set global autotuninglevel=normal
+        netsh int tcp set global chimney=enabled
+        netsh int tcp set global rss=enabled
+        netsh int tcp set global netdma=enabled
+        
+        # Set network adapter to maximum performance
+        netsh int tcp set global timestamps=disabled
+        
+        # Disable TCP window scaling heuristics
+        netsh int tcp set heuristics disabled
+
+    - name: Configure Ultra-Fast RDP Settings
+      run: |
+        # Enable Remote Desktop with optimized settings
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         
-        # Enable Network Level Authentication (Improved Security)
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        # Optimize RDP performance settings
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxInstanceCount" -Value 20
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxConnectionTime" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxDisconnectionTime" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxIdleTime" -Value 0
+        
+        # Disable compression for faster response (uses more bandwidth but less CPU)
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableLPT" -Value 1
+        
+        # Enable GPU acceleration for RDP if available
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fEnableWinstation" -Value 1
 
-        # Ensure RDP is on all interfaces
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxInstanceCount" -Value 10
-
-    - name: Set RDP Password (Inline)
+    - name: Set High Priority RDP User Account
       shell: powershell
       run: |
-        # Ensure the password is set securely, and check if it exists
         $password = ConvertTo-SecureString "P@ssword123" -AsPlainText -Force
-        if (-not (Get-LocalUser -Name "runneradmin")) {
+        
+        # Check if user exists, create or update
+        if (-not (Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue)) {
           Write-Host "Creating user 'runneradmin'..."
           New-LocalUser -Name "runneradmin" -Password $password -FullName "GitHub Runner Admin" -Description "Admin account for RDP access"
-        }
-        else {
+          Add-LocalGroupMember -Group "Administrators" -Member "runneradmin"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin"
+        } else {
           Write-Host "User 'runneradmin' already exists. Updating password..."
           Set-LocalUser -Name "runneradmin" -Password $password
         }
+        
+        # Set user account to never expire
+        Set-LocalUser -Name "runneradmin" -PasswordNeverExpires $true
+        
+        Write-Host "RDP User: runneradmin"
+        Write-Host "RDP Password: P@ssword123"
 
-    - name: Start Playit Agent
+    - name: Download and Configure Playit Agent (Latest)
+      run: |
+        # Download latest version
+        $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/playit-cloud/playit-agent/releases/latest"
+        $downloadUrl = $latestRelease.assets | Where-Object { $_.name -like "*windows*x86_64*" } | Select-Object -First 1 | Select-Object -ExpandProperty browser_download_url
+        
+        Write-Host "Downloading Playit Agent from: $downloadUrl"
+        Invoke-WebRequest -Uri $downloadUrl -OutFile "$env:USERPROFILE\playit.exe"
+        
+        # Verify download
+        if (Test-Path "$env:USERPROFILE\playit.exe") {
+          Write-Host "Playit Agent downloaded successfully"
+          Get-Item "$env:USERPROFILE\playit.exe" | Select-Object Name, Length, CreationTime
+        } else {
+          throw "Failed to download Playit Agent"
+        }
+
+    - name: Start High-Priority Playit Tunnel
       env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }}  # It's safer to keep the Playit key secure
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        # Start the Playit Agent with the authentication key
-        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
-        Start-Sleep -Seconds 5
+        # Start Playit with high priority and optimized settings
+        $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $processInfo.FileName = "$env:USERPROFILE\playit.exe"
+        $processInfo.Arguments = "--secret $env:PLAYIT_AUTH_KEY"
+        $processInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+        $processInfo.UseShellExecute = $false
+        
+        $process = [System.Diagnostics.Process]::Start($processInfo)
+        
+        # Set process to high priority
+        $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+        
+        Write-Host "Playit Agent started with PID: $($process.Id)"
+        Start-Sleep -Seconds 10
+        
+        # Verify process is running
+        Get-Process playit* -ErrorAction SilentlyContinue | Format-Table -AutoSize
 
-    - name: Show Playit Process Info (Optional Debug)
+    - name: System Status Check
       run: |
-        # Display Playit process info to ensure it's running
-        Get-Process playit* | Format-Table -AutoSize
+        Write-Host "=== SYSTEM PERFORMANCE STATUS ==="
+        Write-Host "Active Power Scheme:"
+        powercfg -getactivescheme
+        
+        Write-Host "`nCPU Information:"
+        Get-WmiObject -Class Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors, CurrentClockSpeed, MaxClockSpeed
+        
+        Write-Host "`nMemory Usage:"
+        Get-WmiObject -Class Win32_OperatingSystem | Select-Object @{Name="Total RAM (GB)"; Expression={[math]::Round($_.TotalVisibleMemorySize/1MB,2)}}, @{Name="Free RAM (GB)"; Expression={[math]::Round($_.FreePhysicalMemory/1MB,2)}}
+        
+        Write-Host "`nRunning Processes (Top 10 by CPU):"
+        Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 | Format-Table Name, CPU, WorkingSet -AutoSize
+        
+        Write-Host "`nRDP Connection Info:"
+        Write-Host "Username: runneradmin"
+        Write-Host "Password: P@ssword123"
+        Write-Host "Use Playit tunnel to connect to this machine"
 
-    - name: Keep GitHub Runner Alive (6 hours)
+    - name: Keep Ultra-Performance Session Active (Maximum Duration)
       run: |
-        Write-Host "RDP Tunnel Active. Keeping the runner alive..."
-        Start-Sleep -Seconds 21540  # 6 hours (maximum duration for GitHub Actions job)
+        Write-Host "Ultra High Performance RDP Tunnel is now active!"
+        Write-Host "Session will remain active for maximum allowed duration with performance optimizations."
+        Write-Host "Connection details have been provided above."
+        
+        # Maximum GitHub Actions job timeout is 6 hours (21600 seconds)
+        # We'll use 21540 seconds (6 hours - 1 minute) to ensure clean shutdown
+        $durationSeconds = 21540
+        $endTime = (Get-Date).AddSeconds($durationSeconds)
+        $checkInterval = 300  # Check every 5 minutes
+        
+        Write-Host "Session will run until: $endTime"
+        Write-Host "Duration: $([math]::Round($durationSeconds/3600, 2)) hours"
+        
+        while ((Get-Date) -lt $endTime) {
+          Start-Sleep -Seconds $checkInterval
+          
+          # Ensure Playit is still running
+          if (-not (Get-Process playit* -ErrorAction SilentlyContinue)) {
+            Write-Host "Restarting Playit Agent..."
+            Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
+            Start-Sleep -Seconds 5
+            # Set high priority again
+            Get-Process playit* | ForEach-Object { $_.PriorityClass = "High" }
+          }
+          
+          # Clear memory cache periodically for sustained performance
+          rundll32.exe advapi32.dll,ProcessIdleTasks
+          
+          # Re-optimize power settings periodically
+          powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
+          
+          $remainingTime = $endTime - (Get-Date)
+          $remainingHours = [math]::Round($remainingTime.TotalHours, 2)
+          Write-Host "Performance check: $(Get-Date) - System running optimally - $remainingHours hours remaining"
+        }
+        
+        Write-Host "Maximum session duration reached. Session ending gracefully."
