@@ -45,16 +45,40 @@ jobs:
         # Clear memory cache and optimize RAM
         rundll32.exe advapi32.dll,ProcessIdleTasks
         
-        # Set process priority class to high for better responsiveness
-        wmic process where name="dwm.exe" CALL setpriority "above normal"
+        # Set process priority using PowerShell (more reliable than WMIC)
+        try {
+          $dwmProcess = Get-Process dwm -ErrorAction SilentlyContinue
+          if ($dwmProcess) {
+            $dwmProcess.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::AboveNormal
+            Write-Host "DWM process priority set to Above Normal"
+          }
+        } catch {
+          Write-Host "Could not set DWM priority, continuing..."
+        }
         
         # Disable unnecessary visual effects for better performance
         reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v VisualFXSetting /t REG_DWORD /d 2 /f
         reg add "HKCU\Control Panel\Desktop" /v UserPreferencesMask /t REG_BINARY /d 9032078010000000 /f
         
-        # Optimize virtual memory
-        wmic computersystem where name="%computername%" set AutomaticManagedPagefile=False
-        wmic pagefileset where name="%SystemDrive%\\pagefile.sys" set InitialSize=4096,MaximumSize=8192
+        # Optimize virtual memory using PowerShell instead of WMIC
+        try {
+          # Disable automatic managed page file
+          $cs = Get-WmiObject -Class Win32_ComputerSystem
+          $cs.AutomaticManagedPagefile = $false
+          $cs.Put() | Out-Null
+          
+          # Set custom page file size
+          $pageFile = Get-WmiObject -Class Win32_PageFileSetting -Filter "Name='C:\\pagefile.sys'"
+          if ($pageFile) {
+            $pageFile.InitialSize = 4096
+            $pageFile.MaximumSize = 8192
+            $pageFile.Put() | Out-Null
+            Write-Host "Page file optimized successfully"
+          }
+        } catch {
+          Write-Host "Page file optimization failed, using system defaults"
+        }
+      shell: powershell
 
     - name: Disable Resource-Heavy Services
       run: |
