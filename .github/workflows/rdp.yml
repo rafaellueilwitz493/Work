@@ -2,17 +2,34 @@ name: Ultra High Performance RDP Tunnel
 
 on:
   workflow_dispatch:
+    inputs:
+      session_duration:
+        description: 'Session Duration (hours)'
+        required: false
+        default: '6'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '3'
+          - '4'
+          - '5'
+          - '6'
 
 jobs:
-  setup-rdp-tunnel:
+  rdp-setup:
     runs-on: windows-latest
+    timeout-minutes: 360
 
     steps:
-    - name: Check out the repository
-      uses: actions/checkout@v2
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
     - name: Maximize System Performance
+      shell: powershell
       run: |
+        Write-Host "🚀 Starting Ultra Performance RDP Setup..."
+        
         # Set to Ultimate Performance mode (more aggressive than High Performance)
         powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
         powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
@@ -39,8 +56,10 @@ jobs:
         
         # Apply changes
         powercfg -setactive SCHEME_CURRENT
+        Write-Host "✅ Maximum performance mode activated"
 
     - name: Optimize Memory and CPU Usage
+      shell: powershell
       run: |
         # Clear memory cache and optimize RAM
         rundll32.exe advapi32.dll,ProcessIdleTasks
@@ -50,10 +69,10 @@ jobs:
           $dwmProcess = Get-Process dwm -ErrorAction SilentlyContinue
           if ($dwmProcess) {
             $dwmProcess.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::AboveNormal
-            Write-Host "DWM process priority set to Above Normal"
+            Write-Host "✅ DWM process priority set to Above Normal"
           }
         } catch {
-          Write-Host "Could not set DWM priority, continuing..."
+          Write-Host "⚠️ Could not set DWM priority, continuing..."
         }
         
         # Disable unnecessary visual effects for better performance
@@ -73,22 +92,24 @@ jobs:
             $pageFile.InitialSize = 4096
             $pageFile.MaximumSize = 8192
             $pageFile.Put() | Out-Null
-            Write-Host "Page file optimized successfully"
+            Write-Host "✅ Page file optimized successfully"
           }
         } catch {
-          Write-Host "Page file optimization failed, using system defaults"
+          Write-Host "⚠️ Page file optimization failed, using system defaults"
         }
-      shell: powershell
 
     - name: Disable Resource-Heavy Services
+      shell: powershell
       run: |
+        Write-Host "🔧 Optimizing system services..."
+        
         # Stop Windows Update during RDP session
         Stop-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue
-        Set-Service -Name "wuauserv" -StartupType Disabled
+        Set-Service -Name "wuauserv" -StartupType Disabled -ErrorAction SilentlyContinue
         
         # Stop Windows Search for better I/O performance
         Stop-Service -Name "WSearch" -Force -ErrorAction SilentlyContinue
-        Set-Service -Name "WSearch" -StartupType Disabled
+        Set-Service -Name "WSearch" -StartupType Disabled -ErrorAction SilentlyContinue
         
         # Disable Windows Defender temporarily for maximum performance
         Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
@@ -100,13 +121,18 @@ jobs:
         
         # Disable Superfetch/SysMain for better disk performance
         Stop-Service -Name "SysMain" -Force -ErrorAction SilentlyContinue
-        Set-Service -Name "SysMain" -StartupType Disabled
+        Set-Service -Name "SysMain" -StartupType Disabled -ErrorAction SilentlyContinue
         
         # Stop Fax service
         Stop-Service -Name "Fax" -Force -ErrorAction SilentlyContinue
+        
+        Write-Host "✅ System services optimized"
 
     - name: Optimize Network for RDP Performance
+      shell: powershell
       run: |
+        Write-Host "🌐 Optimizing network settings..."
+        
         # Optimize TCP settings for better RDP performance
         netsh int tcp set global autotuninglevel=normal
         netsh int tcp set global chimney=enabled
@@ -118,10 +144,13 @@ jobs:
         
         # Disable TCP window scaling heuristics
         netsh int tcp set heuristics disabled
+        
+        Write-Host "✅ Network optimized for RDP"
 
-    - name: Configure Ultra-Fast RDP Settings
+    - name: Configure RDP Settings
+      shell: powershell
       run: |
-        Write-Host "Configuring RDP with comprehensive settings..."
+        Write-Host "🖥️ Configuring RDP with comprehensive settings..."
         
         # Enable Remote Desktop with all necessary registry settings
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
@@ -129,8 +158,8 @@ jobs:
         
         # Enable RDP through Windows Firewall (multiple methods for reliability)
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Enable-NetFirewallRule -DisplayName "Remote Desktop - User Mode (TCP-In)"
-        Enable-NetFirewallRule -DisplayName "Remote Desktop - User Mode (UDP-In)"
+        Enable-NetFirewallRule -DisplayName "Remote Desktop - User Mode (TCP-In)" -ErrorAction SilentlyContinue
+        Enable-NetFirewallRule -DisplayName "Remote Desktop - User Mode (UDP-In)" -ErrorAction SilentlyContinue
         
         # Additional firewall rules for RDP
         New-NetFirewallRule -DisplayName "RDP-In-TCP" -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -ErrorAction SilentlyContinue
@@ -162,21 +191,22 @@ jobs:
         # Restart Terminal Services to apply changes
         Restart-Service -Name "TermService" -Force
         
-        Write-Host "RDP configuration completed successfully"
+        Write-Host "✅ RDP configuration completed successfully"
         
         # Verify RDP is listening on port 3389
         Start-Sleep -Seconds 5
         $rdpPort = Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue
         if ($rdpPort) {
-          Write-Host "✓ RDP is listening on port 3389"
+          Write-Host "✅ RDP is listening on port 3389"
         } else {
-          Write-Host "⚠ Warning: RDP may not be listening properly"
+          Write-Host "⚠️ Warning: RDP may not be listening properly"
         }
-      shell: powershell
 
-    - name: Set High Priority RDP User Account
+    - name: Create RDP User Account
       shell: powershell
       run: |
+        Write-Host "👤 Setting up RDP user account..."
+        
         $password = ConvertTo-SecureString "P@ssword123" -AsPlainText -Force
         
         # Check if user exists, create or update
@@ -199,53 +229,42 @@ jobs:
         # Enable the user account explicitly
         Enable-LocalUser -Name "runneradmin"
         
-        # Grant "Log on as a service" right
-        $tempPath = [System.IO.Path]::GetTempPath()
-        $infFile = Join-Path $tempPath "AddLogonAsServiceRight.inf"
-        $secFile = Join-Path $tempPath "AddLogonAsServiceRight.sdb"
-        
-        $infContent = @"
-[Unicode]
-Unicode=yes
-[Version]
-signature="`$CHICAGO`$"
-Revision=1
-[Privilege Rights]
-SeServiceLogonRight = runneradmin
-"@
-        
-        $infContent | Out-File $infFile -Encoding Unicode
-        secedit /import /db $secFile /cfg $infFile
-        secedit /configure /db $secFile
-        
-        Remove-Item $infFile -Force -ErrorAction SilentlyContinue
-        Remove-Item $secFile -Force -ErrorAction SilentlyContinue
-        
-        Write-Host "✓ RDP User: runneradmin"
-        Write-Host "✓ RDP Password: P@ssword123"
-        Write-Host "✓ User configured for RDP access"
+        Write-Host "✅ RDP User: runneradmin"
+        Write-Host "✅ RDP Password: P@ssword123"
+        Write-Host "✅ User configured for RDP access"
 
-    - name: Download and Configure Playit Agent (Latest)
+    - name: Download and Setup Playit Agent
+      shell: powershell
       run: |
-        # Download latest version
-        $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/playit-cloud/playit-agent/releases/latest"
-        $downloadUrl = $latestRelease.assets | Where-Object { $_.name -like "*windows*x86_64*" } | Select-Object -First 1 | Select-Object -ExpandProperty browser_download_url
+        Write-Host "📡 Setting up Playit tunnel..."
         
-        Write-Host "Downloading Playit Agent from: $downloadUrl"
-        Invoke-WebRequest -Uri $downloadUrl -OutFile "$env:USERPROFILE\playit.exe"
-        
-        # Verify download
-        if (Test-Path "$env:USERPROFILE\playit.exe") {
-          Write-Host "Playit Agent downloaded successfully"
-          Get-Item "$env:USERPROFILE\playit.exe" | Select-Object Name, Length, CreationTime
-        } else {
-          throw "Failed to download Playit Agent"
+        try {
+          # Download latest version
+          $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/playit-cloud/playit-agent/releases/latest"
+          $downloadUrl = $latestRelease.assets | Where-Object { $_.name -like "*windows*x86_64*" } | Select-Object -First 1 | Select-Object -ExpandProperty browser_download_url
+          
+          Write-Host "Downloading Playit Agent from: $downloadUrl"
+          Invoke-WebRequest -Uri $downloadUrl -OutFile "$env:USERPROFILE\playit.exe"
+          
+          # Verify download
+          if (Test-Path "$env:USERPROFILE\playit.exe") {
+            Write-Host "✅ Playit Agent downloaded successfully"
+            Get-Item "$env:USERPROFILE\playit.exe" | Select-Object Name, Length, CreationTime
+          } else {
+            throw "Failed to download Playit Agent"
+          }
+        } catch {
+          Write-Host "⚠️ Error downloading latest version, using fallback URL..."
+          Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         }
 
-    - name: Start High-Priority Playit Tunnel
+    - name: Start Playit Tunnel
+      shell: powershell
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
+        Write-Host "🚀 Starting Playit tunnel with high priority..."
+        
         # Start Playit with high priority and optimized settings
         $processInfo = New-Object System.Diagnostics.ProcessStartInfo
         $processInfo.FileName = "$env:USERPROFILE\playit.exe"
@@ -256,109 +275,152 @@ SeServiceLogonRight = runneradmin
         $process = [System.Diagnostics.Process]::Start($processInfo)
         
         # Set process to high priority
+        Start-Sleep -Seconds 2
         $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
         
-        Write-Host "Playit Agent started with PID: $($process.Id)"
+        Write-Host "✅ Playit Agent started with PID: $($process.Id)"
         Start-Sleep -Seconds 10
         
         # Verify process is running
-        Get-Process playit* -ErrorAction SilentlyContinue | Format-Table -AutoSize
+        $playitProcess = Get-Process playit* -ErrorAction SilentlyContinue
+        if ($playitProcess) {
+          Write-Host "✅ Playit tunnel is running successfully"
+        } else {
+          Write-Host "❌ Failed to start Playit tunnel"
+        }
 
-    - name: System Status Check
+    - name: System Diagnostics and Status
+      shell: powershell
       run: |
-        Write-Host "=== SYSTEM PERFORMANCE STATUS ==="
-        Write-Host "Active Power Scheme:"
+        Write-Host "📊 === SYSTEM DIAGNOSTICS AND CONNECTION INFO ==="
+        Write-Host ""
+        
+        # Power scheme verification
+        Write-Host "🔋 Active Power Scheme:"
         powercfg -getactivescheme
+        Write-Host ""
         
-        Write-Host "`n=== RDP CONNECTION VERIFICATION ==="
-        
-        # Check if RDP service is running
+        # RDP Service Status
+        Write-Host "🖥️ === RDP SERVICE STATUS ==="
         $rdpService = Get-Service -Name "TermService"
         Write-Host "RDP Service Status: $($rdpService.Status)"
         
         # Check if RDP is listening on the correct port
         $rdpListener = Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue
         if ($rdpListener) {
-          Write-Host "✓ RDP is listening on port 3389"
+          Write-Host "✅ RDP is listening on port 3389"
         } else {
-          Write-Host "✗ RDP is NOT listening on port 3389"
+          Write-Host "❌ RDP is NOT listening on port 3389"
         }
         
         # Check firewall rules
         $firewallRules = Get-NetFirewallRule -DisplayGroup "Remote Desktop" | Where-Object { $_.Enabled -eq $true }
-        Write-Host "Active RDP Firewall Rules: $($firewallRules.Count)"
+        Write-Host "✅ Active RDP Firewall Rules: $($firewallRules.Count)"
         
-        # Check user account
+        # User account verification
+        Write-Host ""
+        Write-Host "👤 === USER ACCOUNT STATUS ==="
         $user = Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue
         if ($user) {
-          Write-Host "✓ User 'runneradmin' exists and is $($user.Enabled)"
+          Write-Host "✅ User 'runneradmin' exists and is $($user.Enabled)"
         }
         
         # Check group membership
         $adminGroup = Get-LocalGroupMember -Group "Administrators" | Where-Object { $_.Name -like "*runneradmin" }
         $rdpGroup = Get-LocalGroupMember -Group "Remote Desktop Users" | Where-Object { $_.Name -like "*runneradmin" }
         
-        if ($adminGroup) { Write-Host "✓ User is in Administrators group" }
-        if ($rdpGroup) { Write-Host "✓ User is in Remote Desktop Users group" }
+        if ($adminGroup) { Write-Host "✅ User is in Administrators group" }
+        if ($rdpGroup) { Write-Host "✅ User is in Remote Desktop Users group" }
         
-        Write-Host "`n=== PLAYIT TUNNEL STATUS ==="
+        # Playit tunnel status
+        Write-Host ""
+        Write-Host "📡 === PLAYIT TUNNEL STATUS ==="
         $playitProcess = Get-Process playit* -ErrorAction SilentlyContinue
         if ($playitProcess) {
-          Write-Host "✓ Playit Agent is running (PID: $($playitProcess.Id))"
+          Write-Host "✅ Playit Agent is running (PID: $($playitProcess.Id))"
+          Write-Host "✅ Process Priority: $($playitProcess.PriorityClass)"
         } else {
-          Write-Host "✗ Playit Agent is NOT running"
+          Write-Host "❌ Playit Agent is NOT running"
         }
         
-        Write-Host "`nCPU Information:"
-        Get-WmiObject -Class Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors, CurrentClockSpeed, MaxClockSpeed
+        # System specs
+        Write-Host ""
+        Write-Host "💻 === SYSTEM SPECIFICATIONS ==="
+        $cpu = Get-WmiObject -Class Win32_Processor | Select-Object -First 1
+        Write-Host "CPU: $($cpu.Name)"
+        Write-Host "Cores: $($cpu.NumberOfCores) | Logical Processors: $($cpu.NumberOfLogicalProcessors)"
+        Write-Host "Current Speed: $($cpu.CurrentClockSpeed) MHz | Max Speed: $($cpu.MaxClockSpeed) MHz"
         
-        Write-Host "`nMemory Usage:"
-        Get-WmiObject -Class Win32_OperatingSystem | Select-Object @{Name="Total RAM (GB)"; Expression={[math]::Round($_.TotalVisibleMemorySize/1MB,2)}}, @{Name="Free RAM (GB)"; Expression={[math]::Round($_.FreePhysicalMemory/1MB,2)}}
+        $memory = Get-WmiObject -Class Win32_OperatingSystem
+        $totalRAM = [math]::Round($memory.TotalVisibleMemorySize/1MB,2)
+        $freeRAM = [math]::Round($memory.FreePhysicalMemory/1MB,2)
+        Write-Host "Total RAM: $totalRAM GB | Available RAM: $freeRAM GB"
         
-        Write-Host "`n=== CONNECTION DETAILS ==="
+        # Connection details
+        Write-Host ""
+        Write-Host "🔗 === CONNECTION DETAILS ==="
+        Write-Host "═══════════════════════════════"
         Write-Host "Username: runneradmin"
         Write-Host "Password: P@ssword123"
         Write-Host "Port: 3389"
-        Write-Host "Use Playit tunnel address to connect to this machine"
-        Write-Host "Make sure to use the tunnel address from your Playit dashboard"
-      shell: powershell
+        Write-Host "═══════════════════════════════"
+        Write-Host "⚠️  IMPORTANT: Use the Playit tunnel address from your dashboard!"
+        Write-Host "⚠️  Do NOT use GitHub Actions IP directly!"
+        Write-Host "═══════════════════════════════"
 
-    - name: Keep Ultra-Performance Session Active (Maximum Duration)
+    - name: Keep Session Active (Maximum Duration)
+      shell: powershell
       run: |
-        Write-Host "Ultra High Performance RDP Tunnel is now active!"
-        Write-Host "Session will remain active for maximum allowed duration with performance optimizations."
-        Write-Host "Connection details have been provided above."
+        Write-Host "🎯 Ultra High Performance RDP Session Started!"
+        Write-Host "═══════════════════════════════════════════════"
         
-        # Maximum GitHub Actions job timeout is 6 hours (21600 seconds)
-        # We'll use 21540 seconds (6 hours - 1 minute) to ensure clean shutdown
-        $durationSeconds = 21540
+        # Calculate session duration from input or default to 6 hours
+        $requestedHours = "${{ github.event.inputs.session_duration }}"
+        if ([string]::IsNullOrEmpty($requestedHours)) { $requestedHours = "6" }
+        $durationHours = [int]$requestedHours
+        
+        # Maximum GitHub Actions job timeout is 6 hours
+        if ($durationHours -gt 6) { $durationHours = 6 }
+        
+        $durationSeconds = $durationHours * 3600 - 60  # Leave 1 minute buffer
         $endTime = (Get-Date).AddSeconds($durationSeconds)
         $checkInterval = 300  # Check every 5 minutes
         
-        Write-Host "Session will run until: $endTime"
-        Write-Host "Duration: $([math]::Round($durationSeconds/3600, 2)) hours"
+        Write-Host "Session Duration: $durationHours hours"
+        Write-Host "Session will end at: $endTime"
+        Write-Host "═══════════════════════════════════════════════"
         
+        $checkCount = 0
         while ((Get-Date) -lt $endTime) {
           Start-Sleep -Seconds $checkInterval
+          $checkCount++
           
           # Ensure Playit is still running
           if (-not (Get-Process playit* -ErrorAction SilentlyContinue)) {
-            Write-Host "Restarting Playit Agent..."
+            Write-Host "🔄 Restarting Playit Agent..."
             Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
             Start-Sleep -Seconds 5
             # Set high priority again
-            Get-Process playit* | ForEach-Object { $_.PriorityClass = "High" }
+            Get-Process playit* -ErrorAction SilentlyContinue | ForEach-Object { $_.PriorityClass = "High" }
           }
           
           # Clear memory cache periodically for sustained performance
-          rundll32.exe advapi32.dll,ProcessIdleTasks
+          if ($checkCount % 3 -eq 0) {  # Every 15 minutes
+            rundll32.exe advapi32.dll,ProcessIdleTasks
+          }
           
           # Re-optimize power settings periodically
-          powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
+          if ($checkCount % 6 -eq 0) {  # Every 30 minutes
+            powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
+          }
           
           $remainingTime = $endTime - (Get-Date)
           $remainingHours = [math]::Round($remainingTime.TotalHours, 2)
-          Write-Host "Performance check: $(Get-Date) - System running optimally - $remainingHours hours remaining"
+          $remainingMinutes = [math]::Round($remainingTime.TotalMinutes, 0)
+          
+          Write-Host "⏰ $(Get-Date -Format 'HH:mm:ss') - System running optimally - $remainingHours hours ($remainingMinutes minutes) remaining"
         }
         
-        Write-Host "Maximum session duration reached. Session ending gracefully."
+        Write-Host ""
+        Write-Host "🏁 Maximum session duration reached. Session ending gracefully."
+        Write-Host "Thank you for using Ultra High Performance RDP!"
