@@ -28,7 +28,7 @@ jobs:
     - name: Maximize System Performance
       shell: powershell
       run: |
-        Write-Host "🚀 Starting Ultra Performance RDP Setup..."
+        Write-Host "Starting Ultra Performance RDP Setup..."
         
         # Set to Ultimate Performance mode (more aggressive than High Performance)
         powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
@@ -56,7 +56,7 @@ jobs:
         
         # Apply changes
         powercfg -setactive SCHEME_CURRENT
-        Write-Host "✅ Maximum performance mode activated"
+        Write-Host "[OK] Maximum performance mode activated"
 
     - name: Optimize Memory and CPU Usage
       shell: powershell
@@ -69,10 +69,10 @@ jobs:
           $dwmProcess = Get-Process dwm -ErrorAction SilentlyContinue
           if ($dwmProcess) {
             $dwmProcess.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::AboveNormal
-            Write-Host "✅ DWM process priority set to Above Normal"
+            Write-Host "[OK] DWM process priority set to Above Normal"
           }
         } catch {
-          Write-Host "⚠️ Could not set DWM priority, continuing..."
+          Write-Host "[WARN] Could not set DWM priority, continuing..."
         }
         
         # Disable unnecessary visual effects for better performance
@@ -92,16 +92,16 @@ jobs:
             $pageFile.InitialSize = 4096
             $pageFile.MaximumSize = 8192
             $pageFile.Put() | Out-Null
-            Write-Host "✅ Page file optimized successfully"
+            Write-Host "[OK] Page file optimized successfully"
           }
         } catch {
-          Write-Host "⚠️ Page file optimization failed, using system defaults"
+          Write-Host "[WARN] Page file optimization failed, using system defaults"
         }
 
     - name: Disable Resource-Heavy Services
       shell: powershell
       run: |
-        Write-Host "🔧 Optimizing system services..."
+        Write-Host "Optimizing system services..."
         
         # Stop Windows Update during RDP session
         Stop-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue
@@ -126,12 +126,12 @@ jobs:
         # Stop Fax service
         Stop-Service -Name "Fax" -Force -ErrorAction SilentlyContinue
         
-        Write-Host "✅ System services optimized"
+        Write-Host "[OK] System services optimized"
 
     - name: Optimize Network for RDP Performance
       shell: powershell
       run: |
-        Write-Host "🌐 Optimizing network settings..."
+        Write-Host "Optimizing network settings..."
         
         # Optimize TCP settings for better RDP performance
         netsh int tcp set global autotuninglevel=normal
@@ -145,12 +145,12 @@ jobs:
         # Disable TCP window scaling heuristics
         netsh int tcp set heuristics disabled
         
-        Write-Host "✅ Network optimized for RDP"
+        Write-Host "[OK] Network optimized for RDP"
 
     - name: Configure RDP Settings
       shell: powershell
       run: |
-        Write-Host "🖥️ Configuring RDP with comprehensive settings..."
+        Write-Host "Configuring RDP with comprehensive settings..."
         
         # Enable Remote Desktop with all necessary registry settings
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
@@ -191,21 +191,21 @@ jobs:
         # Restart Terminal Services to apply changes
         Restart-Service -Name "TermService" -Force
         
-        Write-Host "✅ RDP configuration completed successfully"
+        Write-Host "[OK] RDP configuration completed successfully"
         
         # Verify RDP is listening on port 3389
         Start-Sleep -Seconds 5
         $rdpPort = Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue
         if ($rdpPort) {
-          Write-Host "✅ RDP is listening on port 3389"
+          Write-Host "[OK] RDP is listening on port 3389"
         } else {
-          Write-Host "⚠️ Warning: RDP may not be listening properly"
+          Write-Host "[WARN] Warning: RDP may not be listening properly"
         }
 
     - name: Create RDP User Account
       shell: powershell
       run: |
-        Write-Host "👤 Setting up RDP user account..."
+        Write-Host "Setting up RDP user account..."
         
         $password = ConvertTo-SecureString "P@ssword123" -AsPlainText -Force
         
@@ -229,14 +229,14 @@ jobs:
         # Enable the user account explicitly
         Enable-LocalUser -Name "runneradmin"
         
-        Write-Host "✅ RDP User: runneradmin"
-        Write-Host "✅ RDP Password: P@ssword123"
-        Write-Host "✅ User configured for RDP access"
+        Write-Host "[OK] RDP User: runneradmin"
+        Write-Host "[OK] RDP Password: P@ssword123"
+        Write-Host "[OK] User configured for RDP access"
 
     - name: Download and Setup Playit Agent
       shell: powershell
       run: |
-        Write-Host "📡 Setting up Playit tunnel..."
+        Write-Host "Setting up Playit tunnel..."
         
         try {
           # Download latest version
@@ -248,13 +248,13 @@ jobs:
           
           # Verify download
           if (Test-Path "$env:USERPROFILE\playit.exe") {
-            Write-Host "✅ Playit Agent downloaded successfully"
+            Write-Host "[OK] Playit Agent downloaded successfully"
             Get-Item "$env:USERPROFILE\playit.exe" | Select-Object Name, Length, CreationTime
           } else {
             throw "Failed to download Playit Agent"
           }
         } catch {
-          Write-Host "⚠️ Error downloading latest version, using fallback URL..."
+          Write-Host "[WARN] Error downloading latest version, using fallback URL..."
           Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
         }
 
@@ -263,7 +263,7 @@ jobs:
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Write-Host "🚀 Starting Playit tunnel with high priority..."
+        Write-Host "Starting Playit tunnel with high priority..."
         
         # Start Playit with high priority and optimized settings
         $processInfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -278,74 +278,74 @@ jobs:
         Start-Sleep -Seconds 2
         $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
         
-        Write-Host "✅ Playit Agent started with PID: $($process.Id)"
+        Write-Host "[OK] Playit Agent started with PID: $($process.Id)"
         Start-Sleep -Seconds 10
         
         # Verify process is running
         $playitProcess = Get-Process playit* -ErrorAction SilentlyContinue
         if ($playitProcess) {
-          Write-Host "✅ Playit tunnel is running successfully"
+          Write-Host "[OK] Playit tunnel is running successfully"
         } else {
-          Write-Host "❌ Failed to start Playit tunnel"
+          Write-Host "[ERROR] Failed to start Playit tunnel"
         }
 
     - name: System Diagnostics and Status
       shell: powershell
       run: |
-        Write-Host "📊 === SYSTEM DIAGNOSTICS AND CONNECTION INFO ==="
+        Write-Host "=== SYSTEM DIAGNOSTICS AND CONNECTION INFO ==="
         Write-Host ""
         
         # Power scheme verification
-        Write-Host "🔋 Active Power Scheme:"
+        Write-Host "Active Power Scheme:"
         powercfg -getactivescheme
         Write-Host ""
         
         # RDP Service Status
-        Write-Host "🖥️ === RDP SERVICE STATUS ==="
+        Write-Host "=== RDP SERVICE STATUS ==="
         $rdpService = Get-Service -Name "TermService"
         Write-Host "RDP Service Status: $($rdpService.Status)"
         
         # Check if RDP is listening on the correct port
         $rdpListener = Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue
         if ($rdpListener) {
-          Write-Host "✅ RDP is listening on port 3389"
+          Write-Host "[OK] RDP is listening on port 3389"
         } else {
-          Write-Host "❌ RDP is NOT listening on port 3389"
+          Write-Host "[ERROR] RDP is NOT listening on port 3389"
         }
         
         # Check firewall rules
         $firewallRules = Get-NetFirewallRule -DisplayGroup "Remote Desktop" | Where-Object { $_.Enabled -eq $true }
-        Write-Host "✅ Active RDP Firewall Rules: $($firewallRules.Count)"
+        Write-Host "[OK] Active RDP Firewall Rules: $($firewallRules.Count)"
         
         # User account verification
         Write-Host ""
-        Write-Host "👤 === USER ACCOUNT STATUS ==="
+        Write-Host "=== USER ACCOUNT STATUS ==="
         $user = Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue
         if ($user) {
-          Write-Host "✅ User 'runneradmin' exists and is $($user.Enabled)"
+          Write-Host "[OK] User 'runneradmin' exists and is $($user.Enabled)"
         }
         
         # Check group membership
         $adminGroup = Get-LocalGroupMember -Group "Administrators" | Where-Object { $_.Name -like "*runneradmin" }
         $rdpGroup = Get-LocalGroupMember -Group "Remote Desktop Users" | Where-Object { $_.Name -like "*runneradmin" }
         
-        if ($adminGroup) { Write-Host "✅ User is in Administrators group" }
-        if ($rdpGroup) { Write-Host "✅ User is in Remote Desktop Users group" }
+        if ($adminGroup) { Write-Host "[OK] User is in Administrators group" }
+        if ($rdpGroup) { Write-Host "[OK] User is in Remote Desktop Users group" }
         
         # Playit tunnel status
         Write-Host ""
-        Write-Host "📡 === PLAYIT TUNNEL STATUS ==="
+        Write-Host "=== PLAYIT TUNNEL STATUS ==="
         $playitProcess = Get-Process playit* -ErrorAction SilentlyContinue
         if ($playitProcess) {
-          Write-Host "✅ Playit Agent is running (PID: $($playitProcess.Id))"
-          Write-Host "✅ Process Priority: $($playitProcess.PriorityClass)"
+          Write-Host "[OK] Playit Agent is running (PID: $($playitProcess.Id))"
+          Write-Host "[OK] Process Priority: $($playitProcess.PriorityClass)"
         } else {
-          Write-Host "❌ Playit Agent is NOT running"
+          Write-Host "[ERROR] Playit Agent is NOT running"
         }
         
         # System specs
         Write-Host ""
-        Write-Host "💻 === SYSTEM SPECIFICATIONS ==="
+        Write-Host "=== SYSTEM SPECIFICATIONS ==="
         $cpu = Get-WmiObject -Class Win32_Processor | Select-Object -First 1
         Write-Host "CPU: $($cpu.Name)"
         Write-Host "Cores: $($cpu.NumberOfCores) | Logical Processors: $($cpu.NumberOfLogicalProcessors)"
@@ -358,21 +358,21 @@ jobs:
         
         # Connection details
         Write-Host ""
-        Write-Host "🔗 === CONNECTION DETAILS ==="
-        Write-Host "═══════════════════════════════"
+        Write-Host "=== CONNECTION DETAILS ==="
+        Write-Host "==============================="
         Write-Host "Username: runneradmin"
         Write-Host "Password: P@ssword123"
         Write-Host "Port: 3389"
-        Write-Host "═══════════════════════════════"
-        Write-Host "⚠️  IMPORTANT: Use the Playit tunnel address from your dashboard!"
-        Write-Host "⚠️  Do NOT use GitHub Actions IP directly!"
-        Write-Host "═══════════════════════════════"
+        Write-Host "==============================="
+        Write-Host "IMPORTANT: Use the Playit tunnel address from your dashboard!"
+        Write-Host "Do NOT use GitHub Actions IP directly!"
+        Write-Host "==============================="
 
     - name: Keep Session Active (Maximum Duration)
       shell: powershell
       run: |
-        Write-Host "🎯 Ultra High Performance RDP Session Started!"
-        Write-Host "═══════════════════════════════════════════════"
+        Write-Host "Ultra High Performance RDP Session Started!"
+        Write-Host "==========================================="
         
         # Calculate session duration from input or default to 6 hours
         $requestedHours = "${{ github.event.inputs.session_duration }}"
@@ -388,7 +388,7 @@ jobs:
         
         Write-Host "Session Duration: $durationHours hours"
         Write-Host "Session will end at: $endTime"
-        Write-Host "═══════════════════════════════════════════════"
+        Write-Host "==========================================="
         
         $checkCount = 0
         while ((Get-Date) -lt $endTime) {
@@ -397,7 +397,7 @@ jobs:
           
           # Ensure Playit is still running
           if (-not (Get-Process playit* -ErrorAction SilentlyContinue)) {
-            Write-Host "🔄 Restarting Playit Agent..."
+            Write-Host "Restarting Playit Agent..."
             Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
             Start-Sleep -Seconds 5
             # Set high priority again
@@ -418,9 +418,9 @@ jobs:
           $remainingHours = [math]::Round($remainingTime.TotalHours, 2)
           $remainingMinutes = [math]::Round($remainingTime.TotalMinutes, 0)
           
-          Write-Host "⏰ $(Get-Date -Format 'HH:mm:ss') - System running optimally - $remainingHours hours ($remainingMinutes minutes) remaining"
+          Write-Host "$(Get-Date -Format 'HH:mm:ss') - System running optimally - $remainingHours hours ($remainingMinutes minutes) remaining"
         }
         
         Write-Host ""
-        Write-Host "🏁 Maximum session duration reached. Session ending gracefully."
+        Write-Host "Maximum session duration reached. Session ending gracefully."
         Write-Host "Thank you for using Ultra High Performance RDP!"
