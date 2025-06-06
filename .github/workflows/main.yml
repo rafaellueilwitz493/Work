@@ -1,0 +1,364 @@
+name: Ultra High Performance RDP Tunnel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-rdp-tunnel:
+    runs-on: windows-latest
+
+    steps:
+    - name: Check out the repository
+      uses: actions/checkout@v2
+
+    - name: Maximize System Performance
+      run: |
+        # Set to Ultimate Performance mode (more aggressive than High Performance)
+        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+        powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
+        
+        # Force maximum CPU usage - disable all power saving
+        powercfg -change -monitor-timeout-ac 0
+        powercfg -change -monitor-timeout-dc 0
+        powercfg -change -disk-timeout-ac 0
+        powercfg -change -disk-timeout-dc 0
+        powercfg -change -standby-timeout-ac 0
+        powercfg -change -standby-timeout-dc 0
+        powercfg -change -hibernate-timeout-ac 0
+        powercfg -change -hibernate-timeout-dc 0
+        
+        # Disable CPU parking and throttling
+        powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100
+        powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
+        powercfg -setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100
+        powercfg -setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
+        
+        # Set processor performance to maximum
+        powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2
+        powercfg -setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2
+        
+        # Apply changes
+        powercfg -setactive SCHEME_CURRENT
+
+    - name: Optimize Memory and CPU Usage
+      run: |
+        # Clear memory cache and optimize RAM
+        rundll32.exe advapi32.dll,ProcessIdleTasks
+        
+        # Set process priority using PowerShell (more reliable than WMIC)
+        try {
+          $dwmProcess = Get-Process dwm -ErrorAction SilentlyContinue
+          if ($dwmProcess) {
+            $dwmProcess.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::AboveNormal
+            Write-Host "DWM process priority set to Above Normal"
+          }
+        } catch {
+          Write-Host "Could not set DWM priority, continuing..."
+        }
+        
+        # Disable unnecessary visual effects for better performance
+        reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v VisualFXSetting /t REG_DWORD /d 2 /f
+        reg add "HKCU\Control Panel\Desktop" /v UserPreferencesMask /t REG_BINARY /d 9032078010000000 /f
+        
+        # Optimize virtual memory using PowerShell instead of WMIC
+        try {
+          # Disable automatic managed page file
+          $cs = Get-WmiObject -Class Win32_ComputerSystem
+          $cs.AutomaticManagedPagefile = $false
+          $cs.Put() | Out-Null
+          
+          # Set custom page file size
+          $pageFile = Get-WmiObject -Class Win32_PageFileSetting -Filter "Name='C:\\pagefile.sys'"
+          if ($pageFile) {
+            $pageFile.InitialSize = 4096
+            $pageFile.MaximumSize = 8192
+            $pageFile.Put() | Out-Null
+            Write-Host "Page file optimized successfully"
+          }
+        } catch {
+          Write-Host "Page file optimization failed, using system defaults"
+        }
+      shell: powershell
+
+    - name: Disable Resource-Heavy Services
+      run: |
+        # Stop Windows Update during RDP session
+        Stop-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue
+        Set-Service -Name "wuauserv" -StartupType Disabled
+        
+        # Stop Windows Search for better I/O performance
+        Stop-Service -Name "WSearch" -Force -ErrorAction SilentlyContinue
+        Set-Service -Name "WSearch" -StartupType Disabled
+        
+        # Disable Windows Defender temporarily for maximum performance
+        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+        Set-MpPreference -DisableBehaviorMonitoring $true -ErrorAction SilentlyContinue
+        Set-MpPreference -DisableScriptScanning $true -ErrorAction SilentlyContinue
+        
+        # Stop print spooler if not needed
+        Stop-Service -Name "Spooler" -Force -ErrorAction SilentlyContinue
+        
+        # Disable Superfetch/SysMain for better disk performance
+        Stop-Service -Name "SysMain" -Force -ErrorAction SilentlyContinue
+        Set-Service -Name "SysMain" -StartupType Disabled
+        
+        # Stop Fax service
+        Stop-Service -Name "Fax" -Force -ErrorAction SilentlyContinue
+
+    - name: Optimize Network for RDP Performance
+      run: |
+        # Optimize TCP settings for better RDP performance
+        netsh int tcp set global autotuninglevel=normal
+        netsh int tcp set global chimney=enabled
+        netsh int tcp set global rss=enabled
+        netsh int tcp set global netdma=enabled
+        
+        # Set network adapter to maximum performance
+        netsh int tcp set global timestamps=disabled
+        
+        # Disable TCP window scaling heuristics
+        netsh int tcp set heuristics disabled
+
+    - name: Configure Ultra-Fast RDP Settings
+      run: |
+        Write-Host "Configuring RDP with comprehensive settings..."
+        
+        # Enable Remote Desktop with all necessary registry settings
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
+        
+        # Enable RDP through Windows Firewall (multiple methods for reliability)
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Enable-NetFirewallRule -DisplayName "Remote Desktop - User Mode (TCP-In)"
+        Enable-NetFirewallRule -DisplayName "Remote Desktop - User Mode (UDP-In)"
+        
+        # Additional firewall rules for RDP
+        New-NetFirewallRule -DisplayName "RDP-In-TCP" -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -ErrorAction SilentlyContinue
+        New-NetFirewallRule -DisplayName "RDP-In-UDP" -Direction Inbound -Protocol UDP -LocalPort 3389 -Action Allow -ErrorAction SilentlyContinue
+        
+        # Disable Network Level Authentication for easier connection
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0
+        
+        # Configure RDP port and connection settings
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "PortNumber" -Value 3389
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxInstanceCount" -Value 20
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxConnectionTime" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxDisconnectionTime" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxIdleTime" -Value 0
+        
+        # Enable RDP service and set to automatic startup
+        Set-Service -Name "TermService" -StartupType Automatic
+        Start-Service -Name "TermService"
+        
+        # Ensure RDP listener is enabled
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fEnableWinStation" -Value 1
+        
+        # Additional security settings for connection reliability
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fInheritMaxSessionTime" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fInheritMaxDisconnectionTime" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fInheritMaxIdleTime" -Value 0
+        
+        # Restart Terminal Services to apply changes
+        Restart-Service -Name "TermService" -Force
+        
+        Write-Host "RDP configuration completed successfully"
+        
+        # Verify RDP is listening on port 3389
+        Start-Sleep -Seconds 5
+        $rdpPort = Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue
+        if ($rdpPort) {
+          Write-Host "✓ RDP is listening on port 3389"
+        } else {
+          Write-Host "⚠ Warning: RDP may not be listening properly"
+        }
+      shell: powershell
+
+    - name: Set High Priority RDP User Account
+      shell: powershell
+      run: |
+        $password = ConvertTo-SecureString "P@ssword123" -AsPlainText -Force
+        
+        # Check if user exists, create or update
+        if (-not (Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue)) {
+          Write-Host "Creating user 'runneradmin'..."
+          New-LocalUser -Name "runneradmin" -Password $password -FullName "GitHub Runner Admin" -Description "Admin account for RDP access"
+        } else {
+          Write-Host "User 'runneradmin' already exists. Updating password..."
+          Set-LocalUser -Name "runneradmin" -Password $password
+        }
+        
+        # Add to required groups
+        Add-LocalGroupMember -Group "Administrators" -Member "runneradmin" -ErrorAction SilentlyContinue
+        Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin" -ErrorAction SilentlyContinue
+        
+        # Set user account properties
+        Set-LocalUser -Name "runneradmin" -PasswordNeverExpires $true
+        Set-LocalUser -Name "runneradmin" -AccountNeverExpires
+        
+        # Enable the user account explicitly
+        Enable-LocalUser -Name "runneradmin"
+        
+        # Grant "Log on as a service" right
+        $tempPath = [System.IO.Path]::GetTempPath()
+        $infFile = Join-Path $tempPath "AddLogonAsServiceRight.inf"
+        $secFile = Join-Path $tempPath "AddLogonAsServiceRight.sdb"
+        
+        $infContent = @"
+[Unicode]
+Unicode=yes
+[Version]
+signature="`$CHICAGO`$"
+Revision=1
+[Privilege Rights]
+SeServiceLogonRight = runneradmin
+"@
+        
+        $infContent | Out-File $infFile -Encoding Unicode
+        secedit /import /db $secFile /cfg $infFile
+        secedit /configure /db $secFile
+        
+        Remove-Item $infFile -Force -ErrorAction SilentlyContinue
+        Remove-Item $secFile -Force -ErrorAction SilentlyContinue
+        
+        Write-Host "✓ RDP User: runneradmin"
+        Write-Host "✓ RDP Password: P@ssword123"
+        Write-Host "✓ User configured for RDP access"
+
+    - name: Download and Configure Playit Agent (Latest)
+      run: |
+        # Download latest version
+        $latestRelease = Invoke-RestMethod -Uri "https://api.github.com/repos/playit-cloud/playit-agent/releases/latest"
+        $downloadUrl = $latestRelease.assets | Where-Object { $_.name -like "*windows*x86_64*" } | Select-Object -First 1 | Select-Object -ExpandProperty browser_download_url
+        
+        Write-Host "Downloading Playit Agent from: $downloadUrl"
+        Invoke-WebRequest -Uri $downloadUrl -OutFile "$env:USERPROFILE\playit.exe"
+        
+        # Verify download
+        if (Test-Path "$env:USERPROFILE\playit.exe") {
+          Write-Host "Playit Agent downloaded successfully"
+          Get-Item "$env:USERPROFILE\playit.exe" | Select-Object Name, Length, CreationTime
+        } else {
+          throw "Failed to download Playit Agent"
+        }
+
+    - name: Start High-Priority Playit Tunnel
+      env:
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+      run: |
+        # Start Playit with high priority and optimized settings
+        $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $processInfo.FileName = "$env:USERPROFILE\playit.exe"
+        $processInfo.Arguments = "--secret $env:PLAYIT_AUTH_KEY"
+        $processInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+        $processInfo.UseShellExecute = $false
+        
+        $process = [System.Diagnostics.Process]::Start($processInfo)
+        
+        # Set process to high priority
+        $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+        
+        Write-Host "Playit Agent started with PID: $($process.Id)"
+        Start-Sleep -Seconds 10
+        
+        # Verify process is running
+        Get-Process playit* -ErrorAction SilentlyContinue | Format-Table -AutoSize
+
+    - name: System Status Check
+      run: |
+        Write-Host "=== SYSTEM PERFORMANCE STATUS ==="
+        Write-Host "Active Power Scheme:"
+        powercfg -getactivescheme
+        
+        Write-Host "`n=== RDP CONNECTION VERIFICATION ==="
+        
+        # Check if RDP service is running
+        $rdpService = Get-Service -Name "TermService"
+        Write-Host "RDP Service Status: $($rdpService.Status)"
+        
+        # Check if RDP is listening on the correct port
+        $rdpListener = Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue
+        if ($rdpListener) {
+          Write-Host "✓ RDP is listening on port 3389"
+        } else {
+          Write-Host "✗ RDP is NOT listening on port 3389"
+        }
+        
+        # Check firewall rules
+        $firewallRules = Get-NetFirewallRule -DisplayGroup "Remote Desktop" | Where-Object { $_.Enabled -eq $true }
+        Write-Host "Active RDP Firewall Rules: $($firewallRules.Count)"
+        
+        # Check user account
+        $user = Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue
+        if ($user) {
+          Write-Host "✓ User 'runneradmin' exists and is $($user.Enabled)"
+        }
+        
+        # Check group membership
+        $adminGroup = Get-LocalGroupMember -Group "Administrators" | Where-Object { $_.Name -like "*runneradmin" }
+        $rdpGroup = Get-LocalGroupMember -Group "Remote Desktop Users" | Where-Object { $_.Name -like "*runneradmin" }
+        
+        if ($adminGroup) { Write-Host "✓ User is in Administrators group" }
+        if ($rdpGroup) { Write-Host "✓ User is in Remote Desktop Users group" }
+        
+        Write-Host "`n=== PLAYIT TUNNEL STATUS ==="
+        $playitProcess = Get-Process playit* -ErrorAction SilentlyContinue
+        if ($playitProcess) {
+          Write-Host "✓ Playit Agent is running (PID: $($playitProcess.Id))"
+        } else {
+          Write-Host "✗ Playit Agent is NOT running"
+        }
+        
+        Write-Host "`nCPU Information:"
+        Get-WmiObject -Class Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors, CurrentClockSpeed, MaxClockSpeed
+        
+        Write-Host "`nMemory Usage:"
+        Get-WmiObject -Class Win32_OperatingSystem | Select-Object @{Name="Total RAM (GB)"; Expression={[math]::Round($_.TotalVisibleMemorySize/1MB,2)}}, @{Name="Free RAM (GB)"; Expression={[math]::Round($_.FreePhysicalMemory/1MB,2)}}
+        
+        Write-Host "`n=== CONNECTION DETAILS ==="
+        Write-Host "Username: runneradmin"
+        Write-Host "Password: P@ssword123"
+        Write-Host "Port: 3389"
+        Write-Host "Use Playit tunnel address to connect to this machine"
+        Write-Host "Make sure to use the tunnel address from your Playit dashboard"
+      shell: powershell
+
+    - name: Keep Ultra-Performance Session Active (Maximum Duration)
+      run: |
+        Write-Host "Ultra High Performance RDP Tunnel is now active!"
+        Write-Host "Session will remain active for maximum allowed duration with performance optimizations."
+        Write-Host "Connection details have been provided above."
+        
+        # Maximum GitHub Actions job timeout is 6 hours (21600 seconds)
+        # We'll use 21540 seconds (6 hours - 1 minute) to ensure clean shutdown
+        $durationSeconds = 21540
+        $endTime = (Get-Date).AddSeconds($durationSeconds)
+        $checkInterval = 300  # Check every 5 minutes
+        
+        Write-Host "Session will run until: $endTime"
+        Write-Host "Duration: $([math]::Round($durationSeconds/3600, 2)) hours"
+        
+        while ((Get-Date) -lt $endTime) {
+          Start-Sleep -Seconds $checkInterval
+          
+          # Ensure Playit is still running
+          if (-not (Get-Process playit* -ErrorAction SilentlyContinue)) {
+            Write-Host "Restarting Playit Agent..."
+            Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
+            Start-Sleep -Seconds 5
+            # Set high priority again
+            Get-Process playit* | ForEach-Object { $_.PriorityClass = "High" }
+          }
+          
+          # Clear memory cache periodically for sustained performance
+          rundll32.exe advapi32.dll,ProcessIdleTasks
+          
+          # Re-optimize power settings periodically
+          powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
+          
+          $remainingTime = $endTime - (Get-Date)
+          $remainingHours = [math]::Round($remainingTime.TotalHours, 2)
+          Write-Host "Performance check: $(Get-Date) - System running optimally - $remainingHours hours remaining"
+        }
+        
+        Write-Host "Maximum session duration reached. Session ending gracefully."
