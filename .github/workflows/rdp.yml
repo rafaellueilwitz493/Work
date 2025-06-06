@@ -121,22 +121,58 @@ jobs:
 
     - name: Configure Ultra-Fast RDP Settings
       run: |
-        # Enable Remote Desktop with optimized settings
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Write-Host "Configuring RDP with comprehensive settings..."
         
-        # Optimize RDP performance settings
+        # Enable Remote Desktop with all necessary registry settings
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0
+        
+        # Enable RDP through Windows Firewall (multiple methods for reliability)
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Enable-NetFirewallRule -DisplayName "Remote Desktop - User Mode (TCP-In)"
+        Enable-NetFirewallRule -DisplayName "Remote Desktop - User Mode (UDP-In)"
+        
+        # Additional firewall rules for RDP
+        New-NetFirewallRule -DisplayName "RDP-In-TCP" -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -ErrorAction SilentlyContinue
+        New-NetFirewallRule -DisplayName "RDP-In-UDP" -Direction Inbound -Protocol UDP -LocalPort 3389 -Action Allow -ErrorAction SilentlyContinue
+        
+        # Disable Network Level Authentication for easier connection
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0
+        
+        # Configure RDP port and connection settings
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "PortNumber" -Value 3389
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxInstanceCount" -Value 20
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxConnectionTime" -Value 0
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxDisconnectionTime" -Value 0
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxIdleTime" -Value 0
         
-        # Disable compression for faster response (uses more bandwidth but less CPU)
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableLPT" -Value 1
+        # Enable RDP service and set to automatic startup
+        Set-Service -Name "TermService" -StartupType Automatic
+        Start-Service -Name "TermService"
         
-        # Enable GPU acceleration for RDP if available
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fEnableWinstation" -Value 1
+        # Ensure RDP listener is enabled
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fEnableWinStation" -Value 1
+        
+        # Additional security settings for connection reliability
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fInheritMaxSessionTime" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fInheritMaxDisconnectionTime" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fInheritMaxIdleTime" -Value 0
+        
+        # Restart Terminal Services to apply changes
+        Restart-Service -Name "TermService" -Force
+        
+        Write-Host "RDP configuration completed successfully"
+        
+        # Verify RDP is listening on port 3389
+        Start-Sleep -Seconds 5
+        $rdpPort = Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue
+        if ($rdpPort) {
+          Write-Host "✓ RDP is listening on port 3389"
+        } else {
+          Write-Host "⚠ Warning: RDP may not be listening properly"
+        }
+      shell: powershell
 
     - name: Set High Priority RDP User Account
       shell: powershell
@@ -147,18 +183,47 @@ jobs:
         if (-not (Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue)) {
           Write-Host "Creating user 'runneradmin'..."
           New-LocalUser -Name "runneradmin" -Password $password -FullName "GitHub Runner Admin" -Description "Admin account for RDP access"
-          Add-LocalGroupMember -Group "Administrators" -Member "runneradmin"
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin"
         } else {
           Write-Host "User 'runneradmin' already exists. Updating password..."
           Set-LocalUser -Name "runneradmin" -Password $password
         }
         
-        # Set user account to never expire
-        Set-LocalUser -Name "runneradmin" -PasswordNeverExpires $true
+        # Add to required groups
+        Add-LocalGroupMember -Group "Administrators" -Member "runneradmin" -ErrorAction SilentlyContinue
+        Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin" -ErrorAction SilentlyContinue
         
-        Write-Host "RDP User: runneradmin"
-        Write-Host "RDP Password: P@ssword123"
+        # Set user account properties
+        Set-LocalUser -Name "runneradmin" -PasswordNeverExpires $true
+        Set-LocalUser -Name "runneradmin" -AccountNeverExpires
+        
+        # Enable the user account explicitly
+        Enable-LocalUser -Name "runneradmin"
+        
+        # Grant "Log on as a service" right
+        $tempPath = [System.IO.Path]::GetTempPath()
+        $infFile = Join-Path $tempPath "AddLogonAsServiceRight.inf"
+        $secFile = Join-Path $tempPath "AddLogonAsServiceRight.sdb"
+        
+        $infContent = @"
+[Unicode]
+Unicode=yes
+[Version]
+signature="`$CHICAGO`$"
+Revision=1
+[Privilege Rights]
+SeServiceLogonRight = runneradmin
+"@
+        
+        $infContent | Out-File $infFile -Encoding Unicode
+        secedit /import /db $secFile /cfg $infFile
+        secedit /configure /db $secFile
+        
+        Remove-Item $infFile -Force -ErrorAction SilentlyContinue
+        Remove-Item $secFile -Force -ErrorAction SilentlyContinue
+        
+        Write-Host "✓ RDP User: runneradmin"
+        Write-Host "✓ RDP Password: P@ssword123"
+        Write-Host "✓ User configured for RDP access"
 
     - name: Download and Configure Playit Agent (Latest)
       run: |
@@ -205,19 +270,58 @@ jobs:
         Write-Host "Active Power Scheme:"
         powercfg -getactivescheme
         
+        Write-Host "`n=== RDP CONNECTION VERIFICATION ==="
+        
+        # Check if RDP service is running
+        $rdpService = Get-Service -Name "TermService"
+        Write-Host "RDP Service Status: $($rdpService.Status)"
+        
+        # Check if RDP is listening on the correct port
+        $rdpListener = Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue
+        if ($rdpListener) {
+          Write-Host "✓ RDP is listening on port 3389"
+        } else {
+          Write-Host "✗ RDP is NOT listening on port 3389"
+        }
+        
+        # Check firewall rules
+        $firewallRules = Get-NetFirewallRule -DisplayGroup "Remote Desktop" | Where-Object { $_.Enabled -eq $true }
+        Write-Host "Active RDP Firewall Rules: $($firewallRules.Count)"
+        
+        # Check user account
+        $user = Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue
+        if ($user) {
+          Write-Host "✓ User 'runneradmin' exists and is $($user.Enabled)"
+        }
+        
+        # Check group membership
+        $adminGroup = Get-LocalGroupMember -Group "Administrators" | Where-Object { $_.Name -like "*runneradmin" }
+        $rdpGroup = Get-LocalGroupMember -Group "Remote Desktop Users" | Where-Object { $_.Name -like "*runneradmin" }
+        
+        if ($adminGroup) { Write-Host "✓ User is in Administrators group" }
+        if ($rdpGroup) { Write-Host "✓ User is in Remote Desktop Users group" }
+        
+        Write-Host "`n=== PLAYIT TUNNEL STATUS ==="
+        $playitProcess = Get-Process playit* -ErrorAction SilentlyContinue
+        if ($playitProcess) {
+          Write-Host "✓ Playit Agent is running (PID: $($playitProcess.Id))"
+        } else {
+          Write-Host "✗ Playit Agent is NOT running"
+        }
+        
         Write-Host "`nCPU Information:"
         Get-WmiObject -Class Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors, CurrentClockSpeed, MaxClockSpeed
         
         Write-Host "`nMemory Usage:"
         Get-WmiObject -Class Win32_OperatingSystem | Select-Object @{Name="Total RAM (GB)"; Expression={[math]::Round($_.TotalVisibleMemorySize/1MB,2)}}, @{Name="Free RAM (GB)"; Expression={[math]::Round($_.FreePhysicalMemory/1MB,2)}}
         
-        Write-Host "`nRunning Processes (Top 10 by CPU):"
-        Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 | Format-Table Name, CPU, WorkingSet -AutoSize
-        
-        Write-Host "`nRDP Connection Info:"
+        Write-Host "`n=== CONNECTION DETAILS ==="
         Write-Host "Username: runneradmin"
         Write-Host "Password: P@ssword123"
-        Write-Host "Use Playit tunnel to connect to this machine"
+        Write-Host "Port: 3389"
+        Write-Host "Use Playit tunnel address to connect to this machine"
+        Write-Host "Make sure to use the tunnel address from your Playit dashboard"
+      shell: powershell
 
     - name: Keep Ultra-Performance Session Active (Maximum Duration)
       run: |
