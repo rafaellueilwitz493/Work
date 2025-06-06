@@ -261,13 +261,13 @@ jobs:
     - name: Start Playit Tunnel
       shell: powershell
       env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+        https://github.com/rafaellueilwitz493/Work/settings/secrets/actions: ${{ secrets.PL }}
       run: |
         Write-Host "Starting Playit tunnel with high priority..."
         
         # Verify the secret is available
-        if ([string]::IsNullOrEmpty($env:PLAYIT_AUTH_KEY)) {
-          Write-Host "[ERROR] PLAYIT_AUTH_KEY secret is not set!"
+        if ([string]::IsNullOrEmpty($env:https://github.com/rafaellueilwitz493/Work/settings/secrets/actions)) {
+          Write-Host "[ERROR] https://github.com/rafaellueilwitz493/Work/settings/secrets/actions secret is not set!"
           Write-Host "Please add your Playit secret key to GitHub repository secrets as 'PL'"
           exit 1
         }
@@ -285,7 +285,7 @@ jobs:
         try {
           $processInfo = New-Object System.Diagnostics.ProcessStartInfo
           $processInfo.FileName = "$env:USERPROFILE\playit.exe"
-          $processInfo.Arguments = "--secret $env:PLAYIT_AUTH_KEY"
+          $processInfo.Arguments = "--secret $env:https://github.com/rafaellueilwitz493/Work/settings/secrets/actions"
           $processInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
           $processInfo.UseShellExecute = $false
           $processInfo.RedirectStandardOutput = $true
@@ -309,7 +309,7 @@ jobs:
           # Method 2: Fallback using Start-Process
           Write-Host "Trying fallback method..."
           try {
-            Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "$env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
+            Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "$env:https://github.com/rafaellueilwitz493/Work/settings/secrets/actions" -WindowStyle Hidden -PassThru
             Write-Host "[INFO] Playit started using Start-Process fallback"
           } catch {
             Write-Host "[ERROR] Fallback method also failed: $($_.Exception.Message)"
@@ -354,7 +354,7 @@ jobs:
             $job = Start-Job -ScriptBlock {
               param($playitPath, $secret)
               & $playitPath --secret $secret
-            } -ArgumentList "$env:USERPROFILE\playit.exe", "$env:PLAYIT_AUTH_KEY"
+            } -ArgumentList "$env:USERPROFILE\playit.exe", "$env:https://github.com/rafaellueilwitz493/Work/settings/secrets/actions"
             
             Start-Sleep -Seconds 5
             $playitProcess = Get-Process playit* -ErrorAction SilentlyContinue
@@ -451,7 +451,7 @@ jobs:
     - name: Keep Session Active (Maximum Duration)
       shell: powershell
       env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+        https://github.com/rafaellueilwitz493/Work/settings/secrets/actions: ${{ secrets.PL }}
       run: |
         Write-Host "Ultra High Performance RDP Session Started!"
         Write-Host "==========================================="
@@ -489,7 +489,7 @@ jobs:
             try {
               $processInfo = New-Object System.Diagnostics.ProcessStartInfo
               $processInfo.FileName = "$env:USERPROFILE\playit.exe"
-              $processInfo.Arguments = "--secret $env:PLAYIT_AUTH_KEY"
+              $processInfo.Arguments = "--secret $env:https://github.com/rafaellueilwitz493/Work/settings/secrets/actions"
               $processInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
               $processInfo.UseShellExecute = $false
               
@@ -508,7 +508,7 @@ jobs:
             # Method 2: Start-Process fallback
             if (-not $restartSuccess) {
               try {
-                Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "$env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
+                Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "$env:https://github.com/rafaellueilwitz493/Work/settings/secrets/actions" -WindowStyle Hidden -PassThru
                 Start-Sleep -Seconds 3
                 
                 $checkProcess = Get-Process playit* -ErrorAction SilentlyContinue
@@ -528,7 +528,7 @@ jobs:
                 $job = Start-Job -ScriptBlock {
                   param($playitPath, $secret)
                   & $playitPath --secret $secret
-                } -ArgumentList "$env:USERPROFILE\playit.exe", "$env:PLAYIT_AUTH_KEY"
+                } -ArgumentList "$env:USERPROFILE\playit.exe", "$env:https://github.com/rafaellueilwitz493/Work/settings/secrets/actions"
                 
                 Start-Sleep -Seconds 5
                 $checkProcess = Get-Process playit* -ErrorAction SilentlyContinue
