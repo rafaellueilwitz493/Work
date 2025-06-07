@@ -10,12 +10,15 @@ jobs:
     
     - name: Maximize System Performance and Resource Usage
       run: |
-        # Set Windows to Ultimate Performance mode (maximum CPU usage)
-        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
-        powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
+        # Set Windows to High Performance mode (GitHub Actions compatible)
+        powercfg -setactive SCHEME_MIN
         
-        # Force maximum CPU cores usage
-        bcdedit /set numproc 0
+        # Force maximum CPU cores usage (requires admin privileges)
+        try {
+            bcdedit /set numproc 0
+        } catch {
+            Write-Host "Could not modify boot config, continuing..."
+        }
         
         # Disable all power saving features
         powercfg -change standby-timeout-ac 0
@@ -25,45 +28,72 @@ jobs:
         powercfg -change disk-timeout-ac 0
         powercfg -change disk-timeout-dc 0
         
-        # Set CPU to never throttle (100% performance)
-        powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
-        powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100
-        powercfg -setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
-        powercfg -setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100
-        
-        # Disable CPU parking (use all cores actively)
-        powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR CPMINCORES 100
-        powercfg -setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR CPMINCORES 100
-        
-        # Set active power scheme
-        powercfg -setactive SCHEME_CURRENT
-        
-        # Maximize virtual memory (pagefile) for more RAM usage
-        $cs = Get-WmiObject -Class Win32_ComputerSystem
-        $cs.AutomaticManagedPagefile = $false
-        $cs.Put()
-        
-        # Set large pagefile (8GB minimum, 16GB maximum)
-        $pageFile = Get-WmiObject -Class Win32_PageFileSetting
-        if ($pageFile) {
-            $pageFile.Delete()
+        # Set CPU to never throttle (100% performance) - using alternative method
+        try {
+            $guid = (powercfg -getactivescheme).Split()[3]
+            powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
+            powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
+            powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
+            powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
+            powercfg -setactive $guid
+        } catch {
+            Write-Host "Could not modify CPU throttling settings, using alternative approach..."
         }
-        Set-WmiInstance -Class Win32_PageFileSetting -Arguments @{name="C:\pagefile.sys"; InitialSize=8192; MaximumSize=16384}
+        
+        # Alternative method for pagefile configuration using CIM instead of WMI
+        try {
+            # Disable automatic pagefile management
+            $cs = Get-CimInstance -ClassName Win32_ComputerSystem
+            if ($cs.AutomaticManagedPagefile) {
+                Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile=$false}
+            }
+            
+            # Remove existing pagefile settings
+            Get-CimInstance -ClassName Win32_PageFileSetting | Remove-CimInstance -ErrorAction SilentlyContinue
+            
+            # Create new pagefile with large size
+            New-CimInstance -ClassName Win32_PageFileSetting -Property @{
+                Name = "C:\pagefile.sys"
+                InitialSize = 4096  # 4GB - reduced for GitHub Actions
+                MaximumSize = 8192  # 8GB - reduced for GitHub Actions
+            } -ErrorAction SilentlyContinue
+        } catch {
+            Write-Host "Could not configure pagefile, using system defaults..."
+        }
         
         # Disable unnecessary services to free up resources for our use
         $servicesToStop = @("wuauserv", "Spooler", "Fax", "Themes", "TabletInputService", "WSearch")
         foreach ($service in $servicesToStop) {
             try {
-                Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
-                Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
-            } catch {}
+                $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
+                if ($svc -and $svc.Status -eq 'Running') {
+                    Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+                    Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
+                    Write-Host "Stopped and disabled service: $service"
+                }
+            } catch {
+                Write-Host "Could not modify service: $service"
+            }
         }
         
         # Disable Windows Defender real-time protection
-        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+        try {
+            Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+            Write-Host "Disabled Windows Defender real-time monitoring"
+        } catch {
+            Write-Host "Could not disable Windows Defender"
+        }
         
         # Set system priority to high performance
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26
+        try {
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -ErrorAction SilentlyContinue
+            Write-Host "Set system priority to high performance"
+        } catch {
+            Write-Host "Could not modify system priority settings"
+        }
+        
+        # Set process priority class to high for current PowerShell session
+        [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
     
     - name: Create High CPU Usage Background Tasks
       run: |
@@ -84,21 +114,25 @@ jobs:
     
     - name: Create Memory Usage Tasks
       run: |
-        # Create memory-intensive tasks to maximize RAM usage
+        # Create memory-intensive tasks to maximize RAM usage (GitHub Actions compatible)
         Start-Job -ScriptBlock {
             $arrays = @()
+            $maxArrays = 15  # Reduced for GitHub Actions limits
             while ($true) {
                 try {
-                    # Create large arrays to consume memory
-                    $array = New-Object byte[] (100MB)
+                    # Create smaller arrays to avoid out-of-memory in constrained environment
+                    $array = New-Object byte[] (50MB)  # Reduced from 100MB
                     $arrays += $array
-                    if ($arrays.Count -gt 20) {
-                        # Keep memory usage high but prevent out-of-memory
-                        $arrays = $arrays[10..19]
+                    if ($arrays.Count -gt $maxArrays) {
+                        # Keep memory usage high but manageable
+                        $arrays = $arrays[5..$($maxArrays-1)]
                         [System.GC]::Collect()
+                        [System.GC]::WaitForPendingFinalizers()
                     }
-                    Start-Sleep -Seconds 5
+                    Start-Sleep -Seconds 3
                 } catch {
+                    # If memory allocation fails, reduce array size and continue
+                    [System.GC]::Collect()
                     Start-Sleep -Seconds 10
                 }
             }
@@ -108,13 +142,17 @@ jobs:
     
     - name: Create Disk I/O Tasks
       run: |
-        # Create disk-intensive tasks to maximize storage usage
+        # Create disk-intensive tasks to maximize storage usage (GitHub Actions compatible)
         Start-Job -ScriptBlock {
             $counter = 0
+            $tempDir = "$env:TEMP\diskload"
+            New-Item -Path $tempDir -ItemType Directory -Force -ErrorAction SilentlyContinue
+            
             while ($true) {
                 try {
-                    $fileName = "C:\temp_file_$counter.tmp"
-                    $data = [byte[]]::new(50MB)
+                    $fileName = "$tempDir\temp_file_$counter.tmp"
+                    # Use smaller file size for GitHub Actions constraints
+                    $data = [byte[]]::new(25MB)  # Reduced from 50MB
                     [System.IO.File]::WriteAllBytes($fileName, $data)
                     
                     # Read the file back
@@ -124,8 +162,12 @@ jobs:
                     Remove-Item $fileName -Force -ErrorAction SilentlyContinue
                     
                     $counter++
-                    if ($counter -gt 100) { $counter = 0 }
-                    Start-Sleep -Milliseconds 100
+                    if ($counter -gt 50) { 
+                        $counter = 0 
+                        # Clean up temp directory periodically
+                        Get-ChildItem $tempDir -File | Remove-Item -Force -ErrorAction SilentlyContinue
+                    }
+                    Start-Sleep -Milliseconds 200  # Slightly slower to prevent overwhelming
                 } catch {
                     Start-Sleep -Seconds 5
                 }
