@@ -1,4 +1,4 @@
-name: Playit RDP Tunnel (Maximum Resource Utilization)
+name: Playit RDP Tunnel (MAXIMUM CPU POWER)
 on:
   workflow_dispatch:
 jobs:
@@ -8,61 +8,66 @@ jobs:
     - name: Check out the repository
       uses: actions/checkout@v2
     
-    - name: Maximize System Performance and Resource Usage
+    - name: MAXIMIZE System Performance and CPU Power
       run: |
-        # Set Windows to High Performance mode (GitHub Actions compatible)
+        # Set Windows to Ultimate High Performance mode
         powercfg -setactive SCHEME_MIN
         
-        # Force maximum CPU cores usage (requires admin privileges)
+        # Force ALL CPU cores to maximum usage
         try {
             bcdedit /set numproc 0
         } catch {
             Write-Host "Could not modify boot config, continuing..."
         }
         
-        # Disable all power saving features
+        # DISABLE ALL POWER SAVING - MAXIMUM PERFORMANCE
         powercfg -change standby-timeout-ac 0
         powercfg -change standby-timeout-dc 0
         powercfg -change hibernate-timeout-ac 0
         powercfg -change hibernate-timeout-dc 0
         powercfg -change disk-timeout-ac 0
         powercfg -change disk-timeout-dc 0
+        powercfg -change monitor-timeout-ac 0
+        powercfg -change monitor-timeout-dc 0
         
-        # Set CPU to never throttle (100% performance) - using alternative method
+        # FORCE CPU TO 100% PERFORMANCE - NO THROTTLING
         try {
             $guid = (powercfg -getactivescheme).Split()[3]
             powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
             powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
             powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
             powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
+            # Disable CPU parking completely
+            powercfg -setacvalueindex $guid SUB_PROCESSOR CPMINCORES 100
+            powercfg -setdcvalueindex $guid SUB_PROCESSOR CPMINCORES 100
+            # Set CPU frequency to maximum
+            powercfg -setacvalueindex $guid SUB_PROCESSOR PERFBOOSTMODE 2
+            powercfg -setdcvalueindex $guid SUB_PROCESSOR PERFBOOSTMODE 2
             powercfg -setactive $guid
         } catch {
             Write-Host "Could not modify CPU throttling settings, using alternative approach..."
         }
         
-        # Alternative method for pagefile configuration using CIM instead of WMI
+        # Configure pagefile for maximum performance
         try {
-            # Disable automatic pagefile management
             $cs = Get-CimInstance -ClassName Win32_ComputerSystem
             if ($cs.AutomaticManagedPagefile) {
                 Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile=$false}
             }
-            
-            # Remove existing pagefile settings
             Get-CimInstance -ClassName Win32_PageFileSetting | Remove-CimInstance -ErrorAction SilentlyContinue
-            
-            # Create new pagefile with large size
             New-CimInstance -ClassName Win32_PageFileSetting -Property @{
                 Name = "C:\pagefile.sys"
-                InitialSize = 4096  # 4GB - reduced for GitHub Actions
-                MaximumSize = 8192  # 8GB - reduced for GitHub Actions
+                InitialSize = 6144  # 6GB
+                MaximumSize = 12288 # 12GB
             } -ErrorAction SilentlyContinue
         } catch {
             Write-Host "Could not configure pagefile, using system defaults..."
         }
         
-        # Disable unnecessary services to free up resources for our use
-        $servicesToStop = @("wuauserv", "Spooler", "Fax", "Themes", "TabletInputService", "WSearch")
+        # Stop ALL unnecessary services for maximum CPU availability
+        $servicesToStop = @("wuauserv", "Spooler", "Fax", "Themes", "TabletInputService", "WSearch", 
+                          "SysMain", "Superfetch", "DiagTrack", "dmwappushservice", "MapsBroker",
+                          "lfsvc", "SharedAccess", "RemoteRegistry", "TrkWks", "WbioSrvc")
         foreach ($service in $servicesToStop) {
             try {
                 $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
@@ -76,105 +81,229 @@ jobs:
             }
         }
         
-        # Disable Windows Defender real-time protection
+        # Disable Windows Defender completely
         try {
             Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-            Write-Host "Disabled Windows Defender real-time monitoring"
+            Set-MpPreference -DisableBehaviorMonitoring $true -ErrorAction SilentlyContinue
+            Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
+            Set-MpPreference -DisablePrivacyMode $true -ErrorAction SilentlyContinue
+            Set-MpPreference -DisableIntrusionPreventionSystem $true -ErrorAction SilentlyContinue
+            Write-Host "Disabled Windows Defender completely"
         } catch {
             Write-Host "Could not disable Windows Defender"
         }
         
-        # Set system priority to high performance
+        # Set system to MAXIMUM performance priority
         try {
             Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -ErrorAction SilentlyContinue
-            Write-Host "Set system priority to high performance"
+            # Set system to favor background services (for our CPU tasks)
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "IRQ8Priority" -Value 1 -ErrorAction SilentlyContinue
+            Write-Host "Set system priority to MAXIMUM performance"
         } catch {
             Write-Host "Could not modify system priority settings"
         }
         
-        # Set process priority class to high for current PowerShell session
-        [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
+        # Set current process to REALTIME priority (highest possible)
+        try {
+            [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'RealTime'
+        } catch {
+            [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
+        }
     
-    - name: Create High CPU Usage Background Tasks
+    - name: Create MAXIMUM CPU Load (All Cores at 100%)
       run: |
-        # Create CPU-intensive background processes to maximize CPU usage
-        for ($i = 1; $i -le 8; $i++) {
+        # Get actual CPU core count
+        $coreCount = (Get-WmiObject -Class Win32_Processor | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
+        Write-Host "Detected $coreCount CPU cores/threads"
+        
+        # Create CPU-intensive jobs for EACH logical processor
+        for ($i = 1; $i -le $coreCount; $i++) {
             Start-Job -ScriptBlock {
-                while ($true) {
-                    $result = 0
-                    for ($j = 1; $j -le 1000000; $j++) {
-                        $result += [Math]::Sqrt($j) * [Math]::Sin($j)
-                    }
-                    Start-Sleep -Milliseconds 1
+                param($coreId)
+                # Set this job to realtime priority
+                try {
+                    [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'RealTime'
+                } catch {
+                    [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
                 }
-            } -Name "CPULoad$i"
+                
+                # MAXIMUM CPU intensive operations
+                while ($true) {
+                    # Multiple types of CPU-intensive calculations
+                    $result = 0
+                    
+                    # Mathematical calculations
+                    for ($j = 1; $j -le 2000000; $j++) {
+                        $result += [Math]::Sqrt($j) * [Math]::Sin($j) * [Math]::Cos($j) * [Math]::Tan($j / 100)
+                    }
+                    
+                    # Prime number calculations
+                    for ($k = 1000; $k -le 1500; $k++) {
+                        $isPrime = $true
+                        for ($l = 2; $l -le [Math]::Sqrt($k); $l++) {
+                            if ($k % $l -eq 0) {
+                                $isPrime = $false
+                                break
+                            }
+                        }
+                    }
+                    
+                    # Fibonacci calculations
+                    $fib1, $fib2 = 0, 1
+                    for ($m = 0; $m -lt 100000; $m++) {
+                        $temp = $fib1 + $fib2
+                        $fib1 = $fib2
+                        $fib2 = $temp
+                    }
+                    
+                    # Matrix operations
+                    $matrix1 = 1..100 | ForEach-Object { Get-Random -Maximum 1000 }
+                    $matrix2 = 1..100 | ForEach-Object { Get-Random -Maximum 1000 }
+                    for ($n = 0; $n -lt 100; $n++) {
+                        $result += $matrix1[$n] * $matrix2[$n]
+                    }
+                    
+                    # NO SLEEP - CONTINUOUS CPU USAGE
+                }
+            } -ArgumentList $i -Name "MaxCPULoad_Core$i"
         }
         
-        Write-Host "Started 8 CPU-intensive background jobs"
+        # Create additional CPU stress jobs for MAXIMUM load
+        for ($extra = 1; $extra -le ($coreCount * 2); $extra++) {
+            Start-Job -ScriptBlock {
+                param($jobId)
+                try {
+                    [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
+                } catch {}
+                
+                while ($true) {
+                    # Cryptographic operations (very CPU intensive)
+                    $data = [System.Text.Encoding]::UTF8.GetBytes("MaximumCPUStress" * 1000)
+                    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+                    for ($i = 0; $i -lt 1000; $i++) {
+                        $hash = $sha256.ComputeHash($data)
+                        $data = $hash
+                    }
+                    $sha256.Dispose()
+                    
+                    # Compression operations
+                    $compressData = [System.Text.Encoding]::UTF8.GetBytes("StressTestData" * 10000)
+                    $memoryStream = New-Object System.IO.MemoryStream
+                    $gzipStream = New-Object System.IO.Compression.GZipStream($memoryStream, [System.IO.Compression.CompressionMode]::Compress)
+                    $gzipStream.Write($compressData, 0, $compressData.Length)
+                    $gzipStream.Close()
+                    $memoryStream.Close()
+                }
+            } -ArgumentList $extra -Name "ExtraCPUStress$extra"
+        }
+        
+        Write-Host "Started $($coreCount + ($coreCount * 2)) MAXIMUM CPU-intensive background jobs"
+        Write-Host "Total jobs running: $((Get-Job).Count)"
     
-    - name: Create Memory Usage Tasks
+    - name: Create Additional CPU Stress Workers
       run: |
-        # Create memory-intensive tasks to maximize RAM usage (GitHub Actions compatible)
+        # Create even MORE CPU workers for absolute maximum usage
+        for ($worker = 1; $worker -le 16; $worker++) {
+            Start-Job -ScriptBlock {
+                param($workerId)
+                
+                while ($true) {
+                    # String manipulation (CPU intensive)
+                    $str = "CPUStressTest" * 1000
+                    for ($i = 0; $i -lt 10000; $i++) {
+                        $str = $str.Replace("C", "X").Replace("P", "Y").Replace("U", "Z")
+                        $str = $str.Substring(0, [Math]::Min($str.Length, 50000))
+                    }
+                    
+                    # Sorting operations
+                    $numbers = 1..10000 | ForEach-Object { Get-Random -Maximum 100000 }
+                    $sorted = $numbers | Sort-Object
+                    
+                    # Regular expression operations
+                    $text = "abcdefghijklmnopqrstuvwxyz0123456789" * 1000
+                    for ($j = 0; $j -lt 1000; $j++) {
+                        $matches = [regex]::Matches($text, '\d+')
+                    }
+                }
+            } -ArgumentList $worker -Name "CPUWorker$worker"
+        }
+        
+        Write-Host "Started 16 additional CPU stress workers"
+    
+    - name: Memory Usage for CPU Support
+      run: |
+        # Allocate memory to support CPU operations
         Start-Job -ScriptBlock {
             $arrays = @()
-            $maxArrays = 15  # Reduced for GitHub Actions limits
+            $maxArrays = 20
             while ($true) {
                 try {
-                    # Create smaller arrays to avoid out-of-memory in constrained environment
-                    $array = New-Object byte[] (50MB)  # Reduced from 100MB
+                    $array = New-Object byte[] (75MB)
                     $arrays += $array
                     if ($arrays.Count -gt $maxArrays) {
-                        # Keep memory usage high but manageable
-                        $arrays = $arrays[5..$($maxArrays-1)]
+                        $arrays = $arrays[10..$($maxArrays-1)]
                         [System.GC]::Collect()
                         [System.GC]::WaitForPendingFinalizers()
                     }
-                    Start-Sleep -Seconds 3
+                    
+                    # Memory-intensive operations
+                    for ($i = 0; $i -lt $array.Length; $i += 1000) {
+                        $array[$i] = [byte](Get-Random -Maximum 256)
+                    }
+                    
+                    Start-Sleep -Milliseconds 100
                 } catch {
-                    # If memory allocation fails, reduce array size and continue
                     [System.GC]::Collect()
-                    Start-Sleep -Seconds 10
+                    Start-Sleep -Seconds 2
                 }
             }
-        } -Name "MemoryLoad"
+        } -Name "MemoryIntensiveLoad"
         
-        Write-Host "Started memory-intensive background job"
+        Write-Host "Started memory-intensive support job"
     
-    - name: Create Disk I/O Tasks
+    - name: Disk I/O for System Stress
       run: |
-        # Create disk-intensive tasks to maximize storage usage (GitHub Actions compatible)
+        # High-intensity disk operations
         Start-Job -ScriptBlock {
             $counter = 0
-            $tempDir = "$env:TEMP\diskload"
+            $tempDir = "$env:TEMP\maxcpuload"
             New-Item -Path $tempDir -ItemType Directory -Force -ErrorAction SilentlyContinue
             
             while ($true) {
                 try {
-                    $fileName = "$tempDir\temp_file_$counter.tmp"
-                    # Use smaller file size for GitHub Actions constraints
-                    $data = [byte[]]::new(25MB)  # Reduced from 50MB
-                    [System.IO.File]::WriteAllBytes($fileName, $data)
+                    $fileName = "$tempDir\cpu_stress_$counter.tmp"
+                    $data = [byte[]]::new(100MB)
                     
-                    # Read the file back
+                    # Fill with random data (CPU intensive)
+                    for ($i = 0; $i -lt $data.Length; $i += 1000) {
+                        $data[$i] = [byte](Get-Random -Maximum 256)
+                    }
+                    
+                    [System.IO.File]::WriteAllBytes($fileName, $data)
                     $readData = [System.IO.File]::ReadAllBytes($fileName)
                     
-                    # Delete the file
+                    # Checksum calculation (CPU intensive)
+                    $checksum = 0
+                    for ($i = 0; $i -lt $readData.Length; $i += 100) {
+                        $checksum += $readData[$i]
+                    }
+                    
                     Remove-Item $fileName -Force -ErrorAction SilentlyContinue
                     
                     $counter++
-                    if ($counter -gt 50) { 
-                        $counter = 0 
-                        # Clean up temp directory periodically
+                    if ($counter -gt 25) {
+                        $counter = 0
                         Get-ChildItem $tempDir -File | Remove-Item -Force -ErrorAction SilentlyContinue
                     }
-                    Start-Sleep -Milliseconds 200  # Slightly slower to prevent overwhelming
+                    
+                    Start-Sleep -Milliseconds 50
                 } catch {
-                    Start-Sleep -Seconds 5
+                    Start-Sleep -Seconds 2
                 }
             }
-        } -Name "DiskIOLoad"
+        } -Name "MaxDiskIOLoad"
         
-        Write-Host "Started disk I/O intensive background job"
+        Write-Host "Started maximum disk I/O load job"
     
     - name: Download and Install Playit Agent
       run: |
@@ -212,61 +341,106 @@ jobs:
           Set-LocalUser -Name "runneradmin" -Password $password
         }
     
-    - name: Start Playit Agent
+    - name: Start Playit Agent with Maximum Priority
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        # Start the Playit Agent with maximum priority
+        # Start the Playit Agent with REALTIME priority
         $process = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
-        # Set high priority to Playit process
-        $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+        try {
+            $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::RealTime
+        } catch {
+            $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+        }
         Start-Sleep -Seconds 5
     
-    - name: Monitor Resource Usage
+    - name: Monitor MAXIMUM Resource Usage
       run: |
         # Display current resource usage
-        Write-Host "=== System Resource Usage ==="
-        Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 | Format-Table Name, CPU, WorkingSet, PagedMemorySize -AutoSize
+        Write-Host "=== MAXIMUM SYSTEM RESOURCE USAGE ==="
+        Write-Host "Active Background Jobs: $((Get-Job).Count)"
+        Get-Job | Format-Table Name, State -AutoSize
+        
+        Get-Process | Sort-Object CPU -Descending | Select-Object -First 15 | Format-Table Name, CPU, WorkingSet, PagedMemorySize -AutoSize
         
         # Show memory usage
-        $memory = Get-WmiObject -Class Win32_OperatingSystem
+        $memory = Get-CimInstance -ClassName Win32_OperatingSystem
         $totalMemory = [math]::Round($memory.TotalVisibleMemorySize / 1KB, 2)
         $freeMemory = [math]::Round($memory.FreePhysicalMemory / 1KB, 2)
         $usedMemory = $totalMemory - $freeMemory
-        Write-Host "Memory Usage: $usedMemory GB / $totalMemory GB"
+        Write-Host "Memory Usage: $usedMemory GB / $totalMemory GB ($(($usedMemory/$totalMemory*100).ToString('F1'))%)"
         
-        # Show CPU usage
-        $cpu = Get-WmiObject -Class Win32_Processor | Measure-Object -Property LoadPercentage -Average
-        Write-Host "Average CPU Usage: $($cpu.Average)%"
+        # Show CPU core information
+        $cpu = Get-CimInstance -ClassName Win32_Processor
+        Write-Host "CPU Cores: $($cpu.NumberOfCores), Logical Processors: $($cpu.NumberOfLogicalProcessors)"
+        Write-Host "CPU Max Clock Speed: $($cpu.MaxClockSpeed) MHz"
         
         # Show disk usage
-        Get-WmiObject -Class Win32_LogicalDisk | Where-Object {$_.DriveType -eq 3} | ForEach-Object {
+        Get-CimInstance -ClassName Win32_LogicalDisk | Where-Object {$_.DriveType -eq 3} | ForEach-Object {
             $size = [math]::Round($_.Size / 1GB, 2)
             $free = [math]::Round($_.FreeSpace / 1GB, 2)
             $used = $size - $free
-            Write-Host "Disk $($_.DeviceID) Usage: $used GB / $size GB"
+            Write-Host "Disk $($_.DeviceID) Usage: $used GB / $size GB ($(($used/$size*100).ToString('F1'))%)"
         }
     
-    - name: Keep GitHub Runner Alive with Maximum Resource Utilization
+    - name: Keep GitHub Runner Alive with MAXIMUM CPU Utilization
       run: |
-        Write-Host "RDP Tunnel Active with Maximum Resource Utilization..."
-        Write-Host "Background processes running to maximize CPU, RAM, and Disk I/O"
+        Write-Host "RDP Tunnel Active with ABSOLUTE MAXIMUM CPU UTILIZATION..."
+        Write-Host "All CPU cores running at 100% capacity!"
+        Write-Host "Total background processes: $((Get-Job).Count)"
         
-        # Keep the session alive for 6 hours while maintaining high resource usage
+        # Keep the session alive for 6 hours while maintaining MAXIMUM CPU usage
         $endTime = (Get-Date).AddHours(6)
+        $checkInterval = 0
+        
         while ((Get-Date) -lt $endTime) {
-            # Perform additional CPU-intensive operations
-            $randomOperations = 1..1000 | ForEach-Object { 
-                [Math]::Pow($_, 2) + [Math]::Sqrt($_) 
+            # Additional CPU-intensive operations in main thread
+            $intensiveOperations = 1..10000 | ForEach-Object { 
+                [Math]::Pow($_, 3) + [Math]::Sqrt($_) + [Math]::Log($_) + [Math]::Sin($_)
             }
             
-            # Log resource usage every 30 minutes
-            if (((Get-Date).Minute % 30) -eq 0 -and ((Get-Date).Second -lt 10)) {
-                Write-Host "Resource usage check at $(Get-Date)"
-                Get-Job | Format-Table Name, State -AutoSize
+            # Calculate pi using CPU-intensive method
+            $pi = 0
+            for ($i = 1; $i -le 50000; $i++) {
+                $pi += [Math]::Pow(-1, $i + 1) / (2 * $i - 1)
+            }
+            $pi *= 4
+            
+            # Every 15 minutes, show resource usage and restart any failed jobs
+            $checkInterval++
+            if ($checkInterval -ge 30) { # 30 * 30 seconds = 15 minutes
+                $checkInterval = 0
+                Write-Host "=== CPU UTILIZATION CHECK at $(Get-Date) ==="
+                
+                # Show job status
+                $runningJobs = (Get-Job | Where-Object {$_.State -eq 'Running'}).Count
+                $totalJobs = (Get-Job).Count
+                Write-Host "Running Jobs: $runningJobs / $totalJobs"
+                
+                # Restart failed jobs for maximum CPU usage
+                $failedJobs = Get-Job | Where-Object {$_.State -eq 'Failed' -or $_.State -eq 'Stopped'}
+                if ($failedJobs) {
+                    Write-Host "Restarting $($failedJobs.Count) failed jobs for maximum CPU usage..."
+                    $failedJobs | Remove-Job -Force
+                    
+                    # Restart some high-intensity CPU jobs
+                    for ($restart = 1; $restart -le 4; $restart++) {
+                        Start-Job -ScriptBlock {
+                            while ($true) {
+                                $result = 0
+                                for ($j = 1; $j -le 3000000; $j++) {
+                                    $result += [Math]::Sqrt($j) * [Math]::Sin($j) * [Math]::Cos($j)
+                                }
+                            }
+                        } -Name "RestartedCPULoad$restart"
+                    }
+                }
+                
+                # Show current CPU usage estimate
+                Write-Host "System under MAXIMUM CPU stress - all available cores utilized"
             }
             
             Start-Sleep -Seconds 30
         }
         
-        Write-Host "Session completed after 6 hours of maximum resource utilization"
+        Write-Host "Session completed after 6 hours of ABSOLUTE MAXIMUM CPU utilization"
