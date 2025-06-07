@@ -341,95 +341,18 @@ jobs:
           Set-LocalUser -Name "runneradmin" -Password $password
         }
     
-    - name: Start Playit Agent with Maximum Priority (HIDDEN WINDOW)
+    - name: Start Playit Agent with Maximum Priority
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        # Create a PowerShell script to run Playit completely hidden
-        $hiddenScript = @"
-Add-Type -TypeDefinition '
-using System;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
-
-public class WindowHelper
-{
-    [DllImport("kernel32.dll")]
-    public static extern IntPtr GetConsoleWindow();
-    
-    [DllImport("user32.dll")]
-    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-    
-    public const int SW_HIDE = 0;
-    public const int SW_MINIMIZE = 6;
-}
-'
-
-# Hide the current console window
-`$consoleWindow = [WindowHelper]::GetConsoleWindow()
-[WindowHelper]::ShowWindow(`$consoleWindow, [WindowHelper]::SW_HIDE)
-
-# Start Playit Agent completely hidden using WMI
-`$processInfo = ([WMIClass]'Win32_ProcessStartup').CreateInstance()
-`$processInfo.ShowWindow = 0  # Hidden window
-`$processInfo.PriorityClass = 256  # High priority
-
-# Create the process hidden
-`$process = ([WMIClass]'Win32_Process').Create("$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY", `$null, `$processInfo)
-
-if (`$process.ReturnValue -eq 0) {
-    Write-Host "Playit Agent started successfully (PID: `$(`$process.ProcessId)) - COMPLETELY HIDDEN"
-    
-    # Get the process and set it to maximum priority
-    try {
-        `$playitProcess = Get-Process -Id `$process.ProcessId -ErrorAction SilentlyContinue
-        if (`$playitProcess) {
-            `$playitProcess.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::RealTime
-            Write-Host "Set Playit Agent to REALTIME priority"
-        }
-    } catch {
+        # Start the Playit Agent with REALTIME priority
+        $process = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
         try {
-            `$playitProcess.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-            Write-Host "Set Playit Agent to HIGH priority"
+            $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::RealTime
         } catch {
-            Write-Host "Could not modify Playit Agent priority"
+            $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
         }
-    }
-} else {
-    Write-Host "Failed to start Playit Agent. Return code: `$(`$process.ReturnValue)"
-}
-
-# Keep script running to maintain hidden state
-while (`$true) {
-    Start-Sleep -Seconds 30
-    # Verify Playit is still running
-    if (-not (Get-Process -Name "playit*" -ErrorAction SilentlyContinue)) {
-        Write-Host "Playit Agent stopped, attempting restart..."
-        `$process = ([WMIClass]'Win32_Process').Create("$env:USERPROFILE\playit.exe --secret $env:PLAYIT_AUTH_KEY", `$null, `$processInfo)
-    }
-}
-"@
-        
-        # Save the hidden script
-        $hiddenScript | Out-File -FilePath "$env:USERPROFILE\playit_hidden.ps1" -Encoding UTF8
-        
-        # Start the hidden script as a background job with no window
-        Start-Job -ScriptBlock {
-            param($scriptPath, $authKey)
-            $env:PLAYIT_AUTH_KEY = $authKey
-            & powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File $scriptPath
-        } -ArgumentList "$env:USERPROFILE\playit_hidden.ps1", $env:PLAYIT_AUTH_KEY -Name "PlayitHiddenAgent"
-        
-        Write-Host "Playit Agent started in completely hidden mode - no windows will be visible"
-        Start-Sleep -Seconds 10
-        
-        # Verify it's running
-        $playitProcess = Get-Process -Name "*playit*" -ErrorAction SilentlyContinue
-        if ($playitProcess) {
-            Write-Host "Playit Agent confirmed running (PID: $($playitProcess.Id)) - HIDDEN FROM VIEW"
-        } else {
-            Write-Host "Playit Agent may still be starting up..."
-        }
+        Start-Sleep -Seconds 5
     
     - name: Monitor MAXIMUM Resource Usage
       run: |
@@ -465,7 +388,6 @@ while (`$true) {
         Write-Host "RDP Tunnel Active with ABSOLUTE MAXIMUM CPU UTILIZATION..."
         Write-Host "All CPU cores running at 100% capacity!"
         Write-Host "Total background processes: $((Get-Job).Count)"
-        Write-Host "Playit Agent running completely hidden - no visible windows!"
         
         # Keep the session alive for 6 hours while maintaining MAXIMUM CPU usage
         $endTime = (Get-Date).AddHours(6)
@@ -495,14 +417,6 @@ while (`$true) {
                 $totalJobs = (Get-Job).Count
                 Write-Host "Running Jobs: $runningJobs / $totalJobs"
                 
-                # Check if Playit Agent is still running
-                $playitProcess = Get-Process -Name "*playit*" -ErrorAction SilentlyContinue
-                if ($playitProcess) {
-                    Write-Host "Playit Agent confirmed running (HIDDEN) - PID: $($playitProcess.Id)"
-                } else {
-                    Write-Host "Playit Agent not detected, checking background job status..."
-                }
-                
                 # Restart failed jobs for maximum CPU usage
                 $failedJobs = Get-Job | Where-Object {$_.State -eq 'Failed' -or $_.State -eq 'Stopped'}
                 if ($failedJobs) {
@@ -524,7 +438,6 @@ while (`$true) {
                 
                 # Show current CPU usage estimate
                 Write-Host "System under MAXIMUM CPU stress - all available cores utilized"
-                Write-Host "Playit Agent running invisibly in background"
             }
             
             Start-Sleep -Seconds 30
