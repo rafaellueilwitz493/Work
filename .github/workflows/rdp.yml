@@ -34,35 +34,37 @@ jobs:
         powercfg -change disk-timeout-ac 0
         powercfg -change disk-timeout-dc 0
 
-        # Configure pagefile using alternative method
-        $computersys = Get-WmiObject Win32_ComputerSystem -EnableAllPrivileges
-        $computersys.AutomaticManagedPagefile = $false
-        $computersys.Put()
+        # Configure pagefile using registry method
+        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v PagingFiles /t REG_MULTI_SZ /d "C:\pagefile.sys 4096 8192" /f
 
-        $currentPageFile = Get-WmiObject -Query "Select * From Win32_PageFileSetting Where Name='c:\\pagefile.sys'"
-        if ($currentPageFile) {
-            $currentPageFile.Delete()
-        }
-
-        $pageFile = ([wmiclass]"Win32_PageFileSetting").CreateInstance()
-        $pageFile.Name = "C:\pagefile.sys"
-        $pageFile.InitialSize = 4096
-        $pageFile.MaximumSize = 8192
-        $pageFile.Put()
+        # Disable automatic pagefile management
+        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v AutoManagePagefile /t REG_DWORD /d 0 /f
 
         # Disable services
         $services = @("wuauserv", "Spooler", "Fax", "Themes", "TabletInputService", "WSearch")
         foreach ($service in $services) {
-            Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
-            Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
+            try {
+                Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+                Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
+            } catch {
+                Write-Host "Could not modify service $service"
+            }
         }
 
         # Disable Windows Defender
-        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+        try {
+            Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+        } catch {
+            Write-Host "Could not disable Windows Defender"
+        }
 
         # Set high priority
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -ErrorAction SilentlyContinue
-        [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
+        try {
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -ErrorAction SilentlyContinue
+            [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
+        } catch {
+            Write-Host "Could not set process priority"
+        }
 
     - name: Create CPU Load
       shell: pwsh
@@ -89,7 +91,7 @@ jobs:
             $arrays = @()
             try {
                 while ($true) {
-                    $chunk = New-Object byte[] 50MB
+                    $chunk = New-Object byte[] 25MB
                     $arrays += $chunk
                     if ($arrays.Count -gt 10) {
                         $arrays = $arrays[5..$arrays.Count]
@@ -114,7 +116,7 @@ jobs:
             while ($true) {
                 try {
                     $file = "$tempDir\temp_$counter.dat"
-                    $data = New-Object byte[] 25MB
+                    $data = New-Object byte[] 10MB
                     [System.IO.File]::WriteAllBytes($file, $data)
                     $readData = [System.IO.File]::ReadAllBytes($file)
                     Remove-Item $file -Force
@@ -135,6 +137,7 @@ jobs:
       shell: pwsh
       run: |
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+        Start-Sleep -Seconds 5
 
     - name: Configure RDP
       shell: pwsh
@@ -175,7 +178,10 @@ jobs:
             $usedMem = [math]::Round(($mem.TotalVisibleMemorySize - $mem.FreePhysicalMemory) / 1MB, 2)
             $totalMem = [math]::Round($mem.TotalVisibleMemorySize / 1MB, 2)
             
-            Write-Host "CPU: $cpu% | Memory: $usedMem/$totalMem GB"
+            Write-Host "=== Resource Usage ==="
+            Write-Host "CPU Usage: $cpu%"
+            Write-Host "Memory Usage: $usedMem/$totalMem GB"
+            Write-Host "Top Processes:"
             Get-Process | Sort-Object CPU -Descending | Select-Object -First 5 | Format-Table Name, CPU, WorkingSet -AutoSize
             
             Start-Sleep -Seconds 30
