@@ -1,188 +1,273 @@
-name: Playit RDP Tunnel (Maximum Performance)
-
+name: Playit RDP Tunnel (Maximum Resource Utilization)
 on:
-  workflow_dispatch:
-
+ workflow_dispatch:
 jobs:
-  setup-rdp-tunnel:
-    runs-on: windows-latest
-    timeout-minutes: 360
-    steps:
-    - name: Check out repository
-      uses: actions/checkout@v2
+ setup-rdp-tunnel:
+   runs-on: windows-latest
+   steps:
+   - name: Check out the repository
+     uses: actions/checkout@v2
+  
+   - name: Maximize System Performance and Resource Usage
+     run: |
+       # Set Windows to High Performance mode (GitHub Actions compatible)
+       powercfg -setactive SCHEME_MIN
+      
+       # Force maximum CPU cores usage (requires admin privileges)
+       try {
+           bcdedit /set numproc 0
+       } catch {
+           Write-Host "Could not modify boot config, continuing..."
+       }
+      
+       # Disable all power saving features
+       powercfg -change standby-timeout-ac 0
+       powercfg -change standby-timeout-dc 0
+       powercfg -change hibernate-timeout-ac 0
+       powercfg -change hibernate-timeout-dc 0
+       powercfg -change disk-timeout-ac 0
+       powercfg -change disk-timeout-dc 0
+      
+       # Set CPU to never throttle (100% performance) - using alternative method
+       try {
+           $guid = (powercfg -getactivescheme).Split()[3]
+           powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
+           powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
+           powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
+           powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
+           powercfg -setactive $guid
+       } catch {
+           Write-Host "Could not modify CPU throttling settings, using alternative approach..."
+       }
+      
+       # Alternative method for pagefile configuration using CIM instead of WMI
+       try {
+           # Disable automatic pagefile management
+           $cs = Get-CimInstance -ClassName Win32_ComputerSystem
+           if ($cs.AutomaticManagedPagefile) {
+               Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile=$false}
+           }
+          
+           # Remove existing pagefile settings
+           Get-CimInstance -ClassName Win32_PageFileSetting | Remove-CimInstance -ErrorAction SilentlyContinue
+          
+           # Create new pagefile with large size
+           New-CimInstance -ClassName Win32_PageFileSetting -Property @{
+               Name = "C:\pagefile.sys"
+               InitialSize = 4096  # 4GB - reduced for GitHub Actions
+               MaximumSize = 8192  # 8GB - reduced for GitHub Actions
+           } -ErrorAction SilentlyContinue
+       } catch {
+           Write-Host "Could not configure pagefile, using system defaults..."
+       }
+      
+       # Disable unnecessary services to free up resources for our use
+       $servicesToStop = @("wuauserv", "Spooler", "Fax", "Themes", "TabletInputService", "WSearch")
+       foreach ($service in $servicesToStop) {
+           try {
+               $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
+               if ($svc -and $svc.Status -eq 'Running') {
+                   Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+                   Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
+                   Write-Host "Stopped and disabled service: $service"
+               }
+           } catch {
+               Write-Host "Could not modify service: $service"
+           }
+       }
+      
+       # Disable Windows Defender real-time protection
+       try {
+           Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+           Write-Host "Disabled Windows Defender real-time monitoring"
+       } catch {
+           Write-Host "Could not disable Windows Defender"
+       }
+      
+       # Set system priority to high performance
+       try {
+           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -ErrorAction SilentlyContinue
+           Write-Host "Set system priority to high performance"
+       } catch {
+           Write-Host "Could not modify system priority settings"
+       }
+      
+       # Set process priority class to high for current PowerShell session
+       [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
+  
+   - name: Create High CPU Usage Background Tasks
+     run: |
+       # Create CPU-intensive background processes to maximize CPU usage
+       for ($i = 1; $i -le 8; $i++) {
+           Start-Job -ScriptBlock {
+               while ($true) {
+                   $result = 0
+                   for ($j = 1; $j -le 1000000; $j++) {
+                       $result += [Math]::Sqrt($j) * [Math]::Sin($j)
+                   }
+                   Start-Sleep -Milliseconds 1
+               }
+           } -Name "CPULoad$i"
+       }
+      
+       Write-Host "Started 8 CPU-intensive background jobs"
+  
+   - name: Create Memory Usage Tasks
+     run: |
+       # Create memory-intensive tasks to maximize RAM usage (GitHub Actions compatible)
+       Start-Job -ScriptBlock {
+           $arrays = @()
+           $maxArrays = 15  # Reduced for GitHub Actions limits
+           while ($true) {
+               try {
+                   # Create smaller arrays to avoid out-of-memory in constrained environment
+                   $array = New-Object byte[] (50MB)  # Reduced from 100MB
+                   $arrays += $array
+                   if ($arrays.Count -gt $maxArrays) {
+                       # Keep memory usage high but manageable
+                       $arrays = $arrays[5..$($maxArrays-1)]
+                       [System.GC]::Collect()
+                       [System.GC]::WaitForPendingFinalizers()
+                   }
+                   Start-Sleep -Seconds 3
+               } catch {
+                   # If memory allocation fails, reduce array size and continue
+                   [System.GC]::Collect()
+                   Start-Sleep -Seconds 10
+               }
+           }
+       } -Name "MemoryLoad"
+      
+       Write-Host "Started memory-intensive background job"
+  
+   - name: Create Disk I/O Tasks
+     run: |
+       # Create disk-intensive tasks to maximize storage usage (GitHub Actions compatible)
+       Start-Job -ScriptBlock {
+           $counter = 0
+           $tempDir = "$env:TEMP\diskload"
+           New-Item -Path $tempDir -ItemType Directory -Force -ErrorAction SilentlyContinue
+          
+           while ($true) {
+               try {
+                   $fileName = "$tempDir\temp_file_$counter.tmp"
+                   # Use smaller file size for GitHub Actions constraints
+                   $data = [byte[]]::new(25MB)  # Reduced from 50MB
+                   [System.IO.File]::WriteAllBytes($fileName, $data)
+                  
+                   # Read the file back
+                   $readData = [System.IO.File]::ReadAllBytes($fileName)
+                  
+                   # Delete the file
+                   Remove-Item $fileName -Force -ErrorAction SilentlyContinue
+                  
+                   $counter++
+                   if ($counter -gt 50) {
+                       $counter = 0
+                       # Clean up temp directory periodically
+                       Get-ChildItem $tempDir -File | Remove-Item -Force -ErrorAction SilentlyContinue
+                   }
+                   Start-Sleep -Milliseconds 200  # Slightly slower to prevent overwhelming
+               } catch {
+                   Start-Sleep -Seconds 5
+               }
+           }
+       } -Name "DiskIOLoad"
+      
+       Write-Host "Started disk I/O intensive background job"
+  
+   - name: Download and Install Playit Agent
+     run: |
+       Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+       Start-Sleep -Seconds 5
+  
+   - name: Enable Remote Desktop and Configure
+     run: |
+       # Enable Remote Desktop
+       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+       Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+      
+       # Enable Network Level Authentication
+       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+      
+       # Maximize RDP connections
+       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxInstanceCount" -Value 20
+      
+       # Set RDP to use maximum bandwidth
+       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxConnectionTime" -Value 0
+       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxIdleTime" -Value 0
+  
+   - name: Set RDP Password (Unchanged)
+     shell: powershell
+     run: |
+       # Keep original password and username as requested
+       $password = ConvertTo-SecureString "P@ssword123" -AsPlainText -Force
+       if (-not (Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue)) {
+         Write-Host "Creating user 'runneradmin'..."
+         New-LocalUser -Name "runneradmin" -Password $password -FullName "GitHub Runner Admin" -Description "Admin account for RDP access"
+         Add-LocalGroupMember -Group "Administrators" -Member "runneradmin"
+       }
+       else {
+         Write-Host "User 'runneradmin' already exists. Updating password..."
+         Set-LocalUser -Name "runneradmin" -Password $password
+       }
+  
+   - name: Start Playit Agent
+     env:
+       PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+     run: |
+       # Start the Playit Agent with maximum priority
+       $process = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
+       # Set high priority to Playit process
+       $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+       Start-Sleep -Seconds 5
+  
+   - name: Monitor Resource Usage
+     run: |
+       # Display current resource usage
+       Write-Host "=== System Resource Usage ==="
+       Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 | Format-Table Name, CPU, WorkingSet, PagedMemorySize -AutoSize
+      
+       # Show memory usage
+       $memory = Get-WmiObject -Class Win32_OperatingSystem
+       $totalMemory = [math]::Round($memory.TotalVisibleMemorySize / 1KB, 2)
+       $freeMemory = [math]::Round($memory.FreePhysicalMemory / 1KB, 2)
+       $usedMemory = $totalMemory - $freeMemory
+       Write-Host "Memory Usage: $usedMemory GB / $totalMemory GB"
+      
+       # Show CPU usage
+       $cpu = Get-WmiObject -Class Win32_Processor | Measure-Object -Property LoadPercentage -Average
+       Write-Host "Average CPU Usage: $($cpu.Average)%"
+      
+       # Show disk usage
+       Get-WmiObject -Class Win32_LogicalDisk | Where-Object {$_.DriveType -eq 3} | ForEach-Object {
+           $size = [math]::Round($_.Size / 1GB, 2)
+           $free = [math]::Round($_.FreeSpace / 1GB, 2)
+           $used = $size - $free
+           Write-Host "Disk $($_.DeviceID) Usage: $used GB / $size GB"
+       }
+  
+   - name: Keep GitHub Runner Alive with Maximum Resource Utilization
+     run: |
+       Write-Host "RDP Tunnel Active with Maximum Resource Utilization..."
+       Write-Host "Background processes running to maximize CPU, RAM, and Disk I/O"
+      
+       # Keep the session alive for 6 hours while maintaining high resource usage
+       $endTime = (Get-Date).AddHours(6)
+       while ((Get-Date) -lt $endTime) {
+           # Perform additional CPU-intensive operations
+           $randomOperations = 1..1000 | ForEach-Object {
+               [Math]::Pow($_, 2) + [Math]::Sqrt($_)
+           }
+          
+           # Log resource usage every 30 minutes
+           if (((Get-Date).Minute % 30) -eq 0 -and ((Get-Date).Second -lt 10)) {
+               Write-Host "Resource usage check at $(Get-Date)"
+               Get-Job | Format-Table Name, State -AutoSize
+           }
+          
+           Start-Sleep -Seconds 30
+       }
+      
+       Write-Host "Session completed after 6 hours of maximum resource utilization"
 
-    - name: Maximize System Performance
-      shell: pwsh
-      run: |
-        # Set High Performance power scheme
-        powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
-        
-        # Disable CPU throttling
-        $scheme = powercfg -getactivescheme
-        $guid = ($scheme -split " ")[3]
-        powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
-        powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
-        powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
-        powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
-        powercfg -setactive $guid
-
-        # Disable power saving
-        powercfg -change standby-timeout-ac 0
-        powercfg -change standby-timeout-dc 0
-        powercfg -change hibernate-timeout-ac 0
-        powercfg -change hibernate-timeout-dc 0
-        powercfg -change disk-timeout-ac 0
-        powercfg -change disk-timeout-dc 0
-
-        # Configure pagefile using registry method
-        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v PagingFiles /t REG_MULTI_SZ /d "C:\pagefile.sys 4096 8192" /f
-
-        # Disable automatic pagefile management
-        reg add "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" /v AutoManagePagefile /t REG_DWORD /d 0 /f
-
-        # Disable services
-        $services = @("wuauserv", "Spooler", "Fax", "Themes", "TabletInputService", "WSearch")
-        foreach ($service in $services) {
-            try {
-                Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
-                Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
-            } catch {
-                Write-Host "Could not modify service $service"
-            }
-        }
-
-        # Disable Windows Defender
-        try {
-            Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-        } catch {
-            Write-Host "Could not disable Windows Defender"
-        }
-
-        # Set high priority
-        try {
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -ErrorAction SilentlyContinue
-            [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
-        } catch {
-            Write-Host "Could not set process priority"
-        }
-
-    - name: Create CPU Load
-      shell: pwsh
-      run: |
-        $cpuScript = {
-            $result = 0
-            while ($true) {
-                for ($i = 0; $i -lt 1000000; $i++) {
-                    $result += [Math]::Sqrt($i) * [Math]::Sin($i)
-                }
-                Start-Sleep -Milliseconds 10
-            }
-        }
-        
-        $procCount = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
-        for ($i = 0; $i -lt $procCount; $i++) {
-            Start-Job -ScriptBlock $cpuScript -Name "CPULoad_$i"
-        }
-
-    - name: Create Memory Load
-      shell: pwsh
-      run: |
-        $memScript = {
-            $arrays = @()
-            try {
-                while ($true) {
-                    $chunk = New-Object byte[] 25MB
-                    $arrays += $chunk
-                    if ($arrays.Count -gt 10) {
-                        $arrays = $arrays[5..$arrays.Count]
-                        [System.GC]::Collect()
-                    }
-                    Start-Sleep -Seconds 2
-                }
-            } catch {
-                [System.GC]::Collect()
-                Start-Sleep -Seconds 5
-            }
-        }
-        Start-Job -ScriptBlock $memScript -Name "MemoryLoad"
-
-    - name: Create Disk I/O Load
-      shell: pwsh
-      run: |
-        $diskScript = {
-            $tempDir = "$env:TEMP\diskload"
-            New-Item -Path $tempDir -ItemType Directory -Force
-            $counter = 0
-            while ($true) {
-                try {
-                    $file = "$tempDir\temp_$counter.dat"
-                    $data = New-Object byte[] 10MB
-                    [System.IO.File]::WriteAllBytes($file, $data)
-                    $readData = [System.IO.File]::ReadAllBytes($file)
-                    Remove-Item $file -Force
-                    $counter++
-                    if ($counter -gt 20) {
-                        Get-ChildItem $tempDir | Remove-Item -Force
-                        $counter = 0
-                    }
-                    Start-Sleep -Milliseconds 200
-                } catch {
-                    Start-Sleep -Seconds 1
-                }
-            }
-        }
-        Start-Job -ScriptBlock $diskScript -Name "DiskLoad"
-
-    - name: Install Playit Agent
-      shell: pwsh
-      run: |
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        Start-Sleep -Seconds 5
-
-    - name: Configure RDP
-      shell: pwsh
-      run: |
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxInstanceCount" -Value 20
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxConnectionTime" -Value 0
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxIdleTime" -Value 0
-
-    - name: Create RDP User
-      shell: pwsh
-      run: |
-        $password = ConvertTo-SecureString "P@ssword123" -AsPlainText -Force
-        if (-not (Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue)) {
-            New-LocalUser -Name "runneradmin" -Password $password -FullName "GitHub Runner Admin"
-            Add-LocalGroupMember -Group "Administrators" -Member "runneradmin"
-        } else {
-            Set-LocalUser -Name "runneradmin" -Password $password
-        }
-
-    - name: Start Playit Agent
-      env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
-      shell: pwsh
-      run: |
-        $process = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
-        $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-
-    - name: Monitor Resources
-      shell: pwsh
-      run: |
-        while ($true) {
-            $cpu = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
-            $mem = Get-CimInstance Win32_OperatingSystem
-            $usedMem = [math]::Round(($mem.TotalVisibleMemorySize - $mem.FreePhysicalMemory) / 1MB, 2)
-            $totalMem = [math]::Round($mem.TotalVisibleMemorySize / 1MB, 2)
-            
-            Write-Host "=== Resource Usage ==="
-            Write-Host "CPU Usage: $cpu%"
-            Write-Host "Memory Usage: $usedMem/$totalMem GB"
-            Write-Host "Top Processes:"
-            Get-Process | Sort-Object CPU -Descending | Select-Object -First 5 | Format-Table Name, CPU, WorkingSet -AutoSize
-            
-            Start-Sleep -Seconds 30
-        }
