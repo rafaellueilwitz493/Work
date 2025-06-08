@@ -1,884 +1,183 @@
-name: ULTRA PERFORMANCE RDP Tunnel (MAX CPU+RAM+STORAGE)
+name: Playit RDP Tunnel (Maximum Resource Utilization)
+
 on:
   workflow_dispatch:
+
 jobs:
-  ultra-performance-rdp:
+  setup-rdp-tunnel:
     runs-on: windows-latest
+    timeout-minutes: 360  # 6 hour timeout
     steps:
     - name: Check out the repository
       uses: actions/checkout@v2
-    
-    - name: ULTRA SYSTEM OPTIMIZATION - CPU+RAM+STORAGE
+
+    - name: Maximize System Performance
       run: |
-        Write-Host "=== INITIALIZING ULTRA PERFORMANCE MODE ==="
-        
-        # ============= CPU OPTIMIZATION =============
-        Write-Host "Configuring MAXIMUM CPU Performance..."
-        
-        # Set to Ultimate Performance power scheme
-        powercfg -setactive SCHEME_MIN
-        
-        # Force ALL CPU cores active - no parking
-        try {
-            bcdedit /set numproc 0
-            bcdedit /set onecpu no
-        } catch {
-            Write-Host "Boot config modification failed, continuing..."
-        }
-        
-        # ELIMINATE ALL POWER SAVING
+        # Set Ultimate Performance power scheme (Windows Server)
+        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+        powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
+
+        # Disable CPU throttling completely
+        $powerCfg = powercfg -getactivescheme
+        $guid = ($powerCfg -split " ")[3]
+        powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
+        powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
+        powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
+        powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
+        powercfg -setactive $guid
+
+        # Disable all power saving features
         powercfg -change standby-timeout-ac 0
         powercfg -change standby-timeout-dc 0
         powercfg -change hibernate-timeout-ac 0
         powercfg -change hibernate-timeout-dc 0
         powercfg -change disk-timeout-ac 0
         powercfg -change disk-timeout-dc 0
-        powercfg -change monitor-timeout-ac 0
-        powercfg -change monitor-timeout-dc 0
-        
-        # FORCE CPU TO ABSOLUTE MAXIMUM - 100% ALL THE TIME
-        try {
-            $guid = (powercfg -getactivescheme).Split()[3]
-            # CPU throttling to MAXIMUM
-            powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
-            powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
-            powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
-            powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
-            # NO CPU PARKING - ALL CORES ACTIVE
-            powercfg -setacvalueindex $guid SUB_PROCESSOR CPMINCORES 100
-            powercfg -setdcvalueindex $guid SUB_PROCESSOR CPMINCORES 100
-            powercfg -setacvalueindex $guid SUB_PROCESSOR CPMAXCORES 100
-            powercfg -setdcvalueindex $guid SUB_PROCESSOR CPMAXCORES 100
-            # MAXIMUM BOOST MODE
-            powercfg -setacvalueindex $guid SUB_PROCESSOR PERFBOOSTMODE 2
-            powercfg -setdcvalueindex $guid SUB_PROCESSOR PERFBOOSTMODE 2
-            # MAXIMUM FREQUENCY SCALING
-            powercfg -setacvalueindex $guid SUB_PROCESSOR PERFINCPOL 2
-            powercfg -setdcvalueindex $guid SUB_PROCESSOR PERFINCPOL 2
-            powercfg -setactive $guid
-            Write-Host "CPU configured for ABSOLUTE MAXIMUM performance"
-        } catch {
-            Write-Host "Advanced CPU configuration failed, using defaults"
+
+        # Optimize pagefile for performance
+        $pagefile = Get-CimInstance -ClassName Win32_PageFileSetting
+        if ($pagefile) {
+            Remove-CimInstance -InputObject $pagefile
         }
-        
-        # ============= RAM OPTIMIZATION =============
-        Write-Host "Configuring MAXIMUM RAM Performance..."
-        
-        # Configure MAXIMUM pagefile for performance
-        try {
-            # Get total RAM amount
-            $totalRAM = (Get-CimInstance -ClassName Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum / 1GB
-            Write-Host "Detected $totalRAM GB of RAM"
-            
-            # Disable automatic pagefile management
-            $cs = Get-CimInstance -ClassName Win32_ComputerSystem
-            if ($cs.AutomaticManagedPagefile) {
-                Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile=$false}
+        $cs = Get-CimInstance -ClassName Win32_ComputerSystem
+        if ($cs.AutomaticManagedPagefile) {
+            Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile=$false}
+        }
+        New-CimInstance -ClassName Win32_PageFileSetting -Property @{
+            Name = "C:\pagefile.sys"
+            InitialSize = 4096
+            MaximumSize = 8192
+        }
+
+        # Disable unnecessary services
+        $services = @("wuauserv", "Spooler", "Fax", "Themes", "TabletInputService", "WSearch")
+        foreach ($service in $services) {
+            Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+            Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
+        }
+
+        # Disable Windows Defender
+        Set-MpPreference -DisableRealtimeMonitoring $true
+
+        # Set high process priority
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26
+        [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
+
+    - name: Create CPU Load
+      run: |
+        # Start multiple CPU-intensive processes
+        $cpuScript = {
+            $result = 0
+            while ($true) {
+                for ($i = 0; $i -lt 1000000; $i++) {
+                    $result += [Math]::Sqrt($i) * [Math]::Sin($i)
+                }
+                Start-Sleep -Milliseconds 10
             }
-            
-            # Remove existing pagefiles
-            Get-CimInstance -ClassName Win32_PageFileSetting | Remove-CimInstance -ErrorAction SilentlyContinue
-            
-            # Create MASSIVE pagefile for maximum performance
-            $pagefileSize = [Math]::Max(16384, $totalRAM * 2048)  # Minimum 16GB or 2x RAM
-            New-CimInstance -ClassName Win32_PageFileSetting -Property @{
-                Name = "C:\pagefile.sys"
-                InitialSize = $pagefileSize
-                MaximumSize = $pagefileSize * 2
-            } -ErrorAction SilentlyContinue
-            Write-Host "Configured MASSIVE pagefile: $($pagefileSize)MB initial, $($pagefileSize * 2)MB maximum"
-        } catch {
-            Write-Host "Pagefile configuration failed, using system defaults"
         }
         
-        # Optimize memory management for MAXIMUM performance
-        try {
-            # Set system cache to favor system cache (more RAM for caching)
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "LargeSystemCache" -Value 1 -ErrorAction SilentlyContinue
-            # Disable memory compression for raw speed
-            Disable-MMAgent -MemoryCompression -ErrorAction SilentlyContinue
-            # Clear standby memory more aggressively
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "ClearPageFileAtShutdown" -Value 0 -ErrorAction SilentlyContinue
-            Write-Host "RAM management optimized for MAXIMUM performance"
-        } catch {
-            Write-Host "Advanced RAM optimization failed"
+        # Create 2 jobs per logical processor
+        $procCount = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
+        for ($i = 0; $i -lt ($procCount * 2); $i++) {
+            Start-Job -ScriptBlock $cpuScript -Name "CPULoad_$i"
         }
-        
-        # ============= STORAGE OPTIMIZATION =============
-        Write-Host "Configuring MAXIMUM Storage Performance..."
-        
-        # Optimize disk performance settings
-        try {
-            # Disable write-cache buffer flushing for maximum speed
-            $disks = Get-WmiObject -Class Win32_DiskDrive
-            foreach ($disk in $disks) {
-                $diskIndex = $disk.Index
-                # Set disk policy to performance (write caching enabled)
-                diskpart /s <(echo "select disk $diskIndex"; echo "attributes disk clear readonly"; echo "exit") 2>$null
-            }
-            Write-Host "Disk caching optimized for performance"
-        } catch {
-            Write-Host "Disk optimization partially failed"
-        }
-        
-        # Optimize file system for MAXIMUM performance
-        try {
-            # Disable last access time updates (huge performance gain)
-            fsutil behavior set DisableLastAccess 1
-            # Enable large file system cache
-            fsutil behavior set MemoryUsage 2
-            # Optimize NTFS for performance
-            fsutil behavior set DisableDeleteNotify 0
-            Write-Host "File system optimized for MAXIMUM performance"
-        } catch {
-            Write-Host "File system optimization failed"
-        }
-        
-        # Defragment and optimize system drive
-        try {
-            Write-Host "Optimizing system drive..."
-            Optimize-Volume -DriveLetter C -Defrag -Verbose -ErrorAction SilentlyContinue
-            Write-Host "System drive optimization completed"
-        } catch {
-            Write-Host "Drive optimization failed or not needed"
-        }
-        
-        # ============= SYSTEM SERVICE OPTIMIZATION =============
-        Write-Host "Stopping ALL unnecessary services for MAXIMUM resource availability..."
-        
-        $servicesToStop = @(
-            "wuauserv", "Spooler", "Fax", "Themes", "TabletInputService", "WSearch", 
-            "SysMain", "Superfetch", "DiagTrack", "dmwappushservice", "MapsBroker",
-            "lfsvc", "SharedAccess", "RemoteRegistry", "TrkWks", "WbioSrvc",
-            "BITS", "Schedule", "Netlogon", "Messenger", "alerter", "ClipSrv",
-            "Browser", "Dhcp", "TlntSvr", "simptcp", "Fax", "cisvc", "RasMan",
-            "RasAuto", "seclogon", "WZCSVC", "ShellHWDetection", "SCardSvr",
-            "Themes", "FastUserSwitchingCompatibility", "TermService"
-        )
-        
-        foreach ($service in $servicesToStop) {
+
+    - name: Create Memory Load
+      run: |
+        # Allocate and maintain memory usage
+        $memScript = {
+            $arrays = @()
             try {
-                $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
-                if ($svc -and $svc.Status -eq 'Running') {
-                    Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
-                    Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
-                    Write-Host "✓ Stopped: $service"
+                while ($true) {
+                    # Allocate in chunks to avoid immediate OOM
+                    $chunk = New-Object byte[] 50MB
+                    $arrays += $chunk
+                    if ($arrays.Count -gt 15) {
+                        $arrays = $arrays[5..$arrays.Count]
+                        [System.GC]::Collect()
+                    }
+                    Start-Sleep -Seconds 2
                 }
             } catch {
-                # Silently continue if service doesn't exist or can't be stopped
+                [System.GC]::Collect()
+                Start-Sleep -Seconds 5
             }
         }
-        
-        # COMPLETELY DISABLE Windows Defender for MAXIMUM performance
-        try {
-            Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-            Set-MpPreference -DisableBehaviorMonitoring $true -ErrorAction SilentlyContinue
-            Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
-            Set-MpPreference -DisablePrivacyMode $true -ErrorAction SilentlyContinue
-            Set-MpPreference -DisableIntrusionPreventionSystem $true -ErrorAction SilentlyContinue
-            Set-MpPreference -DisableScriptScanning $true -ErrorAction SilentlyContinue
-            Set-MpPreference -DisableArchiveScanning $true -ErrorAction SilentlyContinue
-            Set-MpPreference -DisableEmailScanning $true -ErrorAction SilentlyContinue
-            Write-Host "✓ Windows Defender COMPLETELY disabled"
-        } catch {
-            Write-Host "Windows Defender disabling failed"
-        }
-        
-        # ============= SYSTEM PRIORITY OPTIMIZATION =============
-        Write-Host "Setting system to ULTRA HIGH performance priority..."
-        
-        try {
-            # Set system to maximum performance priority
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -ErrorAction SilentlyContinue
-            # Favor background services for maximum CPU allocation
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "IRQ8Priority" -Value 1 -ErrorAction SilentlyContinue
-            # Optimize for background services
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "ConvertibleSlateMode" -Value 0 -ErrorAction SilentlyContinue
-            Write-Host "✓ System priority set to ULTRA PERFORMANCE"
-        } catch {
-            Write-Host "System priority optimization failed"
-        }
-        
-        # Set current PowerShell process to REALTIME priority
-        try {
-            [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'RealTime'
-            Write-Host "✓ PowerShell process set to REALTIME priority"
-        } catch {
-            try {
-                [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
-                Write-Host "✓ PowerShell process set to HIGH priority"
-            } catch {
-                Write-Host "Process priority setting failed"
+        Start-Job -ScriptBlock $memScript -Name "MemoryLoad"
+
+    - name: Create Disk I/O Load
+      run: |
+        # Generate continuous disk activity
+        $diskScript = {
+            $tempDir = "$env:TEMP\diskload"
+            New-Item -Path $tempDir -ItemType Directory -Force
+            $counter = 0
+            while ($true) {
+                try {
+                    $file = "$tempDir\temp_$counter.dat"
+                    $data = New-Object byte[] 25MB
+                    [System.IO.File]::WriteAllBytes($file, $data)
+                    $readData = [System.IO.File]::ReadAllBytes($file)
+                    Remove-Item $file -Force
+                    $counter++
+                    if ($counter -gt 50) {
+                        Get-ChildItem $tempDir | Remove-Item -Force
+                        $counter = 0
+                    }
+                    Start-Sleep -Milliseconds 200
+                } catch {
+                    Start-Sleep -Seconds 1
+                }
             }
         }
-        
-        # ============= NETWORK OPTIMIZATION =============
-        Write-Host "Optimizing network for MAXIMUM performance..."
-        try {
-            # Optimize TCP settings for maximum throughput
-            netsh int tcp set global autotuninglevel=normal
-            netsh int tcp set global chimney=enabled
-            netsh int tcp set global rss=enabled
-            netsh int tcp set global netdma=enabled
-            # Optimize receive window
-            netsh int tcp set global autotuninglevel=experimental
-            Write-Host "✓ Network optimized for MAXIMUM throughput"
-        } catch {
-            Write-Host "Network optimization failed"
-        }
-        
-        Write-Host "=== ULTRA PERFORMANCE OPTIMIZATION COMPLETED ==="
-    
-    - name: Download and Install Playit Agent
+        Start-Job -ScriptBlock $diskScript -Name "DiskLoad"
+
+    - name: Install Playit Agent
       run: |
-        Write-Host "Downloading Playit Agent with MAXIMUM priority..."
-        try {
-            # Use BITS for faster download
-            Start-BitsTransfer -Source "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -Destination "$env:USERPROFILE\playit.exe" -Priority High -ErrorAction SilentlyContinue
-        } catch {
-            # Fallback to Invoke-WebRequest
-            Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        }
-        Write-Host "✓ Playit Agent downloaded successfully"
-        Start-Sleep -Seconds 2
-    
-    - name: Configure ULTRA PERFORMANCE Remote Desktop
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+
+    - name: Configure RDP
       run: |
-        Write-Host "Configuring Remote Desktop for ULTRA PERFORMANCE..."
-        
-        # Enable Remote Desktop with maximum performance settings
+        # Enable RDP
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         
-        # MAXIMUM RDP performance settings
+        # Configure RDP performance
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxInstanceCount" -Value 50
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxInstanceCount" -Value 20
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxConnectionTime" -Value 0
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxIdleTime" -Value 0
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxDisconnectionTime" -Value 0
-        
-        # Optimize RDP display performance
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "ColorDepth" -Value 4
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableCdm" -Value 0
-        
-        # Enable hardware acceleration for RDP
-        try {
-            Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableHardwareRender" -Value 0 -ErrorAction SilentlyContinue
-        } catch {}
-        
-        Write-Host "✓ Remote Desktop configured for ULTRA PERFORMANCE"
-    
-    - name: Set RDP Password
-      shell: powershell
+
+    - name: Create RDP User
       run: |
-        Write-Host "Setting up ULTRA PERFORMANCE RDP user account..."
         $password = ConvertTo-SecureString "P@ssword123" -AsPlainText -Force
         if (-not (Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue)) {
-          Write-Host "Creating ULTRA user 'runneradmin'..."
-          New-LocalUser -Name "runneradmin" -Password $password -FullName "ULTRA Performance Admin" -Description "ULTRA performance admin account for RDP access"
-          Add-LocalGroupMember -Group "Administrators" -Member "runneradmin"
-          Add-LocalGroupMember -Group "Performance Log Users" -Member "runneradmin"
-          Add-LocalGroupMember -Group "Performance Monitor Users" -Member "runneradmin"
+            New-LocalUser -Name "runneradmin" -Password $password -FullName "GitHub Runner Admin"
+            Add-LocalGroupMember -Group "Administrators" -Member "runneradmin"
+        } else {
+            Set-LocalUser -Name "runneradmin" -Password $password
         }
-        else {
-          Write-Host "User 'runneradmin' exists. Updating for ULTRA performance..."
-          Set-LocalUser -Name "runneradmin" -Password $password
-        }
-        Write-Host "✓ ULTRA PERFORMANCE RDP user configured"
-    
-    - name: Start Playit Agent with MAXIMUM Priority
+
+    - name: Start Playit Agent
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Write-Host "Starting Playit Agent with ABSOLUTE MAXIMUM priority..."
         $process = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
-        try {
-            $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::RealTime
-            $process.ProcessorAffinity = [System.IntPtr]::new([Math]::Pow(2, [Environment]::ProcessorCount) - 1)
-            Write-Host "✓ Playit Agent: REALTIME priority + ALL CPU cores"
-        } catch {
-            try {
-                $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-                Write-Host "✓ Playit Agent: HIGH priority"
-            } catch {
-                Write-Host "Playit Agent started with default priority"
-            }
-        }
-        Start-Sleep -Seconds 3
-        Write-Host "✓ Playit Agent running at MAXIMUM performance"
-    
-    - name: Initialize ULTRA CPU+RAM Utilization System
+        $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+
+    - name: Monitor Resources
       run: |
-        Write-Host "=== INITIALIZING ULTRA CPU+RAM UTILIZATION ==="
-        
-        # Get system specifications
-        $cpu = Get-CimInstance -ClassName Win32_Processor
-        $coreCount = $cpu.NumberOfLogicalProcessors
-        $memory = Get-CimInstance -ClassName Win32_OperatingSystem
-        $totalMemoryGB = [math]::Round($memory.TotalVisibleMemorySize / 1MB, 2)
-        
-        Write-Host "System Specs:"
-        Write-Host "  CPU Cores: $coreCount"
-        Write-Host "  Total RAM: $totalMemoryGB GB"
-        Write-Host "  CPU Speed: $($cpu.MaxClockSpeed) MHz"
-        
-        # Create control files
-        $flagFile = "$env:TEMP\ultra_jobs_active.flag"
-        $statsFile = "$env:TEMP\performance_stats.txt"
-        "ULTRA_ACTIVE" | Out-File -FilePath $flagFile -Force
-        
-        # Create memory allocation for RAM stress (use 70% of available RAM)
-        $targetMemoryMB = [math]::Floor($totalMemoryGB * 0.7 * 1024)
-        Write-Host "Target RAM utilization: $targetMemoryMB MB"
-        
-        Write-Host "Starting ULTRA CPU utilization jobs..."
-        
-        # Start INTENSIVE CPU jobs (2x core count for hyperthreading)
-        for ($i = 1; $i -le ($coreCount * 2); $i++) {
-            Start-Job -ScriptBlock {
-                param($coreId, $flagFilePath)
-                
-                # Set job to MAXIMUM priority
-                try {
-                    [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
-                } catch {}
-                
-                # ULTRA INTENSIVE CPU operations
-                while (Test-Path $flagFilePath) {
-                    # Mathematical computations
-                    $result = 0.0
-                    for ($j = 1; $j -le 200000; $j++) {
-                        $result += [Math]::Sqrt($j) * [Math]::Sin($j * 0.1) * [Math]::Cos($j * 0.1) * [Math]::Tan($j * 0.01)
-                        $result += [Math]::Pow($j % 1000, 1.5) + [Math]::Log($j + 1)
-                    }
-                    
-                    # Quick flag check
-                    if (!(Test-Path $flagFilePath)) { break }
-                    
-                    # Prime number generation (CPU intensive)
-                    for ($k = 10000; $k -le 12000; $k++) {
-                        if (!(Test-Path $flagFilePath)) { break }
-                        $isPrime = $true
-                        $limit = [Math]::Sqrt($k)
-                        for ($l = 2; $l -le $limit; $l++) {
-                            if ($k % $l -eq 0) {
-                                $isPrime = $false
-                                break
-                            }
-                        }
-                    }
-                    
-                    # Matrix operations
-                    if (Test-Path $flagFilePath) {
-                        $matrix1 = 1..100 | ForEach-Object { Get-Random -Maximum 1000 }
-                        $matrix2 = 1..100 | ForEach-Object { Get-Random -Maximum 1000 }
-                        for ($m = 0; $m -lt 100; $m++) {
-                            $matrix1[$m] = $matrix1[$m] * $matrix2[$m] + [Math]::Sin($m)
-                        }
-                    }
-                    
-                    # Brief sleep to prevent total system lockup
-                    Start-Sleep -Milliseconds 5
-                }
-            } -ArgumentList $i, $flagFile -Name "UltraCPU$i" | Out-Null
-        }
-        
-        Write-Host "✓ Started $($coreCount * 2) ULTRA CPU jobs"
-        
-        # Start RAM utilization jobs
-        Write-Host "Starting ULTRA RAM utilization jobs..."
-        $ramJobCount = [Math]::Max(4, [Math]::Min(8, $coreCount))
-        
-        for ($r = 1; $r -le $ramJobCount; $r++) {
-            Start-Job -ScriptBlock {
-                param($jobId, $flagFilePath, $memoryTargetMB)
-                
-                try {
-                    [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
-                } catch {}
-                
-                # Allocate large arrays to consume RAM
-                $memoryChunkMB = [math]::Floor($memoryTargetMB / 8)  # Divide among jobs
-                $arrays = @()
-                
-                Write-Host "RAM Job $jobId: Allocating $memoryChunkMB MB"
-                
-                try {
-                    # Create large byte arrays to consume memory
-                    for ($chunk = 0; $chunk -lt 4; $chunk++) {
-                        if (Test-Path $flagFilePath) {
-                            $arraySize = $memoryChunkMB * 256 * 1024 / 4  # Convert to array size
-                            $array = New-Object byte[] $arraySize
-                            # Fill with random data to prevent optimization
-                            for ($fill = 0; $fill -lt $arraySize; $fill += 1024) {
-                                $array[$fill] = Get-Random -Maximum 255
-                            }
-                            $arrays += $array
-                        }
-                    }
-                } catch {
-                    Write-Host "RAM allocation limited by system"
-                }
-                
-                # Keep arrays alive and do memory operations
-                while (Test-Path $flagFilePath) {
-                    try {
-                        # Memory access patterns
-                        foreach ($array in $arrays) {
-                            if (!(Test-Path $flagFilePath)) { break }
-                            if ($array -and $array.Length -gt 1000) {
-                                for ($i = 0; $i -lt 1000; $i += 100) {
-                                    $array[$i] = ($array[$i] + 1) % 255
-                                }
-                            }
-                        }
-                        
-                        # Create temporary arrays for additional memory pressure
-                        $tempArray = New-Object int[] 10000
-                        for ($t = 0; $t -lt 10000; $t++) {
-                            $tempArray[$t] = Get-Random -Maximum 1000000
-                        }
-                        
-                        Start-Sleep -Milliseconds 100
-                    } catch {
-                        Start-Sleep -Milliseconds 500
-                    }
-                }
-                
-                # Cleanup
-                $arrays = $null
-                [System.GC]::Collect()
-            } -ArgumentList $r, $flagFile, $targetMemoryMB -Name "UltraRAM$r" | Out-Null
-        }
-        
-        Write-Host "✓ Started $ramJobCount ULTRA RAM jobs"
-        
-        # Start additional mixed workload jobs
-        Write-Host "Starting mixed CPU+RAM workload jobs..."
-        for ($m = 1; $m -le $coreCount; $m++) {
-            Start-Job -ScriptBlock {
-                param($jobId, $flagFilePath)
-                
-                try {
-                    [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
-                } catch {}
-                
-                while (Test-Path $flagFilePath) {
-                    # Mixed workload: CPU + Memory operations
-                    $dataArray = New-Object double[] 50000
-                    
-                    # Fill array with CPU-intensive calculations
-                    for ($i = 0; $i -lt 50000; $i++) {
-                        if (!(Test-Path $flagFilePath)) { break }
-                        $dataArray[$i] = [Math]::Sqrt($i * 1.7) * [Math]::Sin($i * 0.05) + [Math]::Log($i + 1)
-                        
-                        # Every 5000 iterations, do additional CPU work
-                        if ($i % 5000 -eq 0) {
-                            $cryptoResult = 0
-                            for ($c = 0; $c -lt 1000; $c++) {
-                                $cryptoResult += [Math]::Pow($c % 100, 2) * [Math]::Cos($c * 0.1)
-                            }
-                        }
-                    }
-                    
-                    # Sort array (CPU + Memory intensive)
-                    if (Test-Path $flagFilePath) {
-                        [Array]::Sort($dataArray)
-                        
-                        # String operations for additional memory pressure
-                        $stringBuilder = New-Object System.Text.StringBuilder
-                        for ($s = 0; $s -lt 1000; $s++) {
-                            $null = $stringBuilder.Append("ULTRA_PERFORMANCE_TEST_STRING_$s")
-                        }
-                        $largeString = $stringBuilder.ToString()
-                        
-                        # String manipulations
-                        $largeString = $largeString.Replace("TEST", "STRESS").Replace("ULTRA", "MAXIMUM")
-                    }
-                    
-                    Start-Sleep -Milliseconds 10
-                }
-            } -ArgumentList $m, $flagFile -Name "UltraMixed$m" | Out-Null
-        }
-        
-        Write-Host "✓ Started $coreCount mixed workload jobs"
-        
-        # Wait for jobs to initialize
-        Start-Sleep -Seconds 3
-        
-        # Show initial job status
-        $runningJobs = (Get-Job | Where-Object {$_.State -eq 'Running'}).Count
-        $totalJobs = (Get-Job).Count
-        Write-Host "=== ULTRA UTILIZATION SYSTEM ACTIVE ==="
-        Write-Host "Running Jobs: $runningJobs / $totalJobs"
-        Write-Host "Expected Total Jobs: $(($coreCount * 2) + $ramJobCount + $coreCount)"
-        
-        if ($runningJobs -gt ($coreCount * 2)) {
-            Write-Host "✅ ULTRA CPU+RAM utilization system SUCCESSFULLY initialized!"
-        } else {
-            Write-Host "⚠️  Some jobs may not have started - system will continue"
-        }
-    
-    - name: Monitor ULTRA Resource Usage
-      run: |
-        Write-Host "=== ULTRA SYSTEM RESOURCE MONITORING ==="
-        
-        # Show comprehensive system information
-        $cpu = Get-CimInstance -ClassName Win32_Processor
-        $memory = Get-CimInstance -ClassName Win32_OperatingSystem
-        $totalMemoryGB = [math]::Round($memory.TotalVisibleMemorySize / 1MB, 2)
-        $freeMemoryGB = [math]::Round($memory.FreePhysicalMemory / 1MB, 2)
-        $usedMemoryGB = $totalMemoryGB - $freeMemoryGB
-        $memoryUsagePercent = ($usedMemoryGB / $totalMemoryGB * 100).ToString('F1')
-        
-        Write-Host "=== SYSTEM SPECIFICATIONS ==="
-        Write-Host "CPU: $($cpu.Name)"
-        Write-Host "CPU Cores: $($cpu.NumberOfCores) | Logical Processors: $($cpu.NumberOfLogicalProcessors)"
-        Write-Host "CPU Max Speed: $($cpu.MaxClockSpeed) MHz"
-        Write-Host "Total RAM: $totalMemoryGB GB"
-        Write-Host "Used RAM: $usedMemoryGB GB ($memoryUsagePercent%)"
-        Write-Host "Free RAM: $freeMemoryGB GB"
-        
-        Write-Host "=== BACKGROUND JOBS STATUS ==="
-        $runningJobs = Get-Job | Where-Object {$_.State -eq 'Running'}
-        $failedJobs = Get-Job | Where-Object {$_.State -eq 'Failed'}
-        $completedJobs = Get-Job | Where-Object {$_.State -eq 'Completed'}
-        
-        Write-Host "Running Jobs: $($runningJobs.Count)"
-        Write-Host "Failed Jobs: $($failedJobs.Count)"
-        Write-Host "Completed Jobs: $($completedJobs.Count)"
-        
-        # Show job details
-        Get-Job | Format-Table Name, State, PSBeginTime -AutoSize
-        
-        # Show disk information
-        try {
-            $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
-            $diskSizeGB = [math]::Round($disk.Size / 1GB, 2)
-            $diskFreeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-            $diskUsedGB = $diskSizeGB - $diskFreeGB
-            $diskUsagePercent = ($diskUsedGB / $diskSizeGB * 100).ToString('F1')
+        while ($true) {
+            # Display resource usage
+            $cpu = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
+            $mem = Get-CimInstance Win32_OperatingSystem
+            $usedMem = [math]::Round(($mem.TotalVisibleMemorySize - $mem.FreePhysicalMemory) / 1MB, 2)
+            $totalMem = [math]::Round($mem.TotalVisibleMemorySize / 1MB, 2)
             
-            Write-Host "=== STORAGE INFORMATION ==="
-            Write-Host "C: Drive Size: $diskSizeGB GB"
-            Write-Host "C: Drive Used: $diskUsedGB GB ($diskUsagePercent%)"
-            Write-Host "C: Drive Free: $diskFreeGB GB"
-        } catch {
-            Write-Host "Storage information unavailable"
-        }
-        
-        Write-Host "=== ULTRA PERFORMANCE STATUS ==="
-        Write-Host "🔥 System configured for MAXIMUM CPU+RAM+STORAGE performance"
-        Write-Host "🚀 All available cores under ULTRA stress"
-        Write-Host "💾 RAM utilization maximized"
-        Write-Host "💽 Storage optimized for peak performance"
-        Write-Host "🌐 RDP tunnel active with ULTRA performance"
-    
-    - name: Keep GitHub Runner Alive with ULTRA PERFORMANCE
-      run: |
-        Write-Host "=========================================="
-        Write-Host "🔥 ULTRA PERFORMANCE RDP TUNNEL ACTIVE 🔥"
-        Write-Host "🚀 Maximum CPU+RAM+Storage utilization!"
-        Write-Host "💻 All system resources at PEAK performance"
-        Write-Host "=========================================="
-        
-        $flagFile = "$env:TEMP\ultra_jobs_active.flag"
-        $statsFile = "$env:TEMP\performance_stats.txt"
-        
-        # Keep the session alive for 6 hours with ULTRA performance monitoring
-        $endTime = (Get-Date).AddHours(6)
-        $checkInterval = 0
-        $performanceLogInterval = 0
-        
-        try {
-            while ((Get-Date) -lt $endTime) {
-                # CONTINUOUS CPU stress in main thread
-                $mainThreadStress = 1..5000 | ForEach-Object { 
-                    [Math]::Pow($_ % 200, 2.5) * [Math]::Sin($_ * 0.1) + [Math]::Sqrt($_ * 1.7) * [Math]::Cos($_ * 0.05)
-                }
-                
-                # Additional matrix operations for CPU+RAM stress
-                $matrix = @()
-                for ($i = 0; $i -lt 100; $i++) {
-                    $row = @()
-                    for ($j = 0; $j -lt 100; $j++) {
-                        $row += [Math]::Sin($i * $j * 0.01) * [Math]::Cos($i + $j)
-                    }
-                    $matrix += ,$row
-                }
-                
-                # String operations for memory pressure
-                $bigString = "ULTRA_PERFORMANCE_" * 1000
-                $bigString = $bigString.Replace("ULTRA", "MAXIMUM").Replace("PERFORMANCE", "SPEED")
-                
-                # Every 10 minutes (20 * 30 seconds), show detailed performance stats
-                $performanceLogInterval++
-                if ($performanceLogInterval -ge 20) {
-                    $performanceLogInterval = 0
-                    Write-Host ""
-                    Write-Host "=== ULTRA PERFORMANCE STATUS at $(Get-Date) ==="
-                    
-                    # Memory status
-                    try {
-                        $memory = Get-CimInstance -ClassName Win32_OperatingSystem
-                        $totalMemoryGB = [math]::Round($memory.TotalVisibleMemorySize / 1MB, 2)
-                        $freeMemoryGB = [math]::Round($memory.FreePhysicalMemory / 1MB, 2)
-                        $usedMemoryGB = $totalMemoryGB - $freeMemoryGB
-                        $memoryUsagePercent = ($usedMemoryGB / $totalMemoryGB * 100).ToString('F1')
-                        Write-Host "🐏 RAM Usage: $usedMemoryGB GB / $totalMemoryGB GB ($memoryUsagePercent%)"
-                    } catch {
-                        Write-Host "🐏 RAM stats temporarily unavailable"
-                    }
-                    
-                    # Job status with detailed breakdown
-                    $runningJobs = Get-Job | Where-Object {$_.State -eq 'Running'}
-                    $failedJobs = Get-Job | Where-Object {$_.State -eq 'Failed'}
-                    $stoppedJobs = Get-Job | Where-Object {$_.State -eq 'Stopped'}
-                    
-                    Write-Host "🔥 Active Jobs: $($runningJobs.Count)"
-                    Write-Host "   - CPU Jobs: $(($runningJobs | Where-Object {$_.Name -like '*CPU*'}).Count)"
-                    Write-Host "   - RAM Jobs: $(($runningJobs | Where-Object {$_.Name -like '*RAM*'}).Count)"
-                    Write-Host "   - Mixed Jobs: $(($runningJobs | Where-Object {$_.Name -like '*Mixed*'}).Count)"
-                    
-                    if ($failedJobs.Count -gt 0) {
-                        Write-Host "⚠️  Failed Jobs: $($failedJobs.Count)"
-                    }
-                    if ($stoppedJobs.Count -gt 0) {
-                        Write-Host "⏹️  Stopped Jobs: $($stoppedJobs.Count)"
-                    }
-                    
-                    # Disk I/O stress test
-                    try {
-                        $testFile = "$env:TEMP\ultra_disk_test.tmp"
-                        $testData = "ULTRA_DISK_PERFORMANCE_TEST" * 10000
-                        $testData | Out-File -FilePath $testFile -Force
-                        $readData = Get-Content $testFile -Raw
-                        Remove-Item $testFile -Force -ErrorAction SilentlyContinue
-                        Write-Host "💽 Disk I/O: Active (Read/Write operations successful)"
-                    } catch {
-                        Write-Host "💽 Disk I/O: Limited"
-                    }
-                    
-                    Write-Host "🌡️  System Temperature: RUNNING HOT (Expected under ULTRA load)"
-                    Write-Host "⚡ Power Usage: MAXIMUM (All resources utilized)"
-                    
-                    # Save performance stats to file
-                    try {
-                        $stats = @"
-$(Get-Date): ULTRA Performance Status
-Memory Usage: $memoryUsagePercent%
-Active Jobs: $($runningJobs.Count)
-Failed Jobs: $($failedJobs.Count)
-System Status: ULTRA PERFORMANCE ACTIVE
-"@
-                        $stats | Out-File -FilePath $statsFile -Append -Force
-                    } catch {}
-                }
-                
-                # Every 20 minutes (40 * 30 seconds), perform maintenance
-                $checkInterval++
-                if ($checkInterval -ge 40) {
-                    $checkInterval = 0
-                    Write-Host ""
-                    Write-Host "=== ULTRA PERFORMANCE MAINTENANCE at $(Get-Date) ==="
-                    
-                    # Restart failed jobs for MAXIMUM performance
-                    $failedJobs = Get-Job | Where-Object {$_.State -eq 'Failed' -or $_.State -eq 'Stopped'}
-                    if ($failedJobs.Count -gt 0) {
-                        Write-Host "🔄 Restarting $($failedJobs.Count) failed jobs for ULTRA performance..."
-                        $failedJobs | Remove-Job -Force -ErrorAction SilentlyContinue
-                        
-                        # Restart with even more intensive jobs
-                        $coreCount = (Get-CimInstance -ClassName Win32_Processor).NumberOfLogicalProcessors
-                        for ($restart = 1; $restart -le [Math]::Min(8, $failedJobs.Count * 2); $restart++) {
-                            Start-Job -ScriptBlock {
-                                param($flagFilePath, $jobId)
-                                try {
-                                    [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
-                                } catch {}
-                                
-                                while (Test-Path $flagFilePath) {
-                                    # ULTRA intensive operations
-                                    $result = 0.0
-                                    for ($j = 1; $j -le 150000; $j++) {
-                                        $result += [Math]::Pow([Math]::Sqrt($j), 1.5) * [Math]::Sin($j * 0.1) * [Math]::Cos($j * 0.1)
-                                        $result += [Math]::Log($j + 1) * [Math]::Tan($j * 0.01)
-                                        
-                                        # Every 25000 iterations, do memory operations
-                                        if ($j % 25000 -eq 0) {
-                                            $tempArray = New-Object double[] 5000
-                                            for ($k = 0; $k -lt 5000; $k++) {
-                                                $tempArray[$k] = [Math]::Sin($k) * [Math]::Cos($k) + $result
-                                            }
-                                            [Array]::Sort($tempArray)
-                                            if (!(Test-Path $flagFilePath)) { break }
-                                        }
-                                    }
-                                    
-                                    # Cryptographic-style operations for maximum CPU usage
-                                    if (Test-Path $flagFilePath) {
-                                        $hash = 0
-                                        for ($h = 0; $h -lt 10000; $h++) {
-                                            $hash = ($hash * 31 + $h) % 2147483647
-                                            $hash = $hash -bxor ($hash -shr 16)
-                                        }
-                                    }
-                                    
-                                    Start-Sleep -Milliseconds 3  # Very brief sleep
-                                }
-                            } -ArgumentList $flagFile, $restart -Name "UltraRestart$restart" | Out-Null
-                        }
-                        Write-Host "✅ Restarted jobs with ULTRA intensity"
-                    }
-                    
-                    # Add MORE jobs if system can handle it
-                    $currentRunningJobs = (Get-Job | Where-Object {$_.State -eq 'Running'}).Count
-                    $targetJobs = $coreCount * 3  # Target 3x CPU cores for maximum utilization
-                    
-                    if ($currentRunningJobs -lt $targetJobs) {
-                        $jobsToAdd = [Math]::Min(6, $targetJobs - $currentRunningJobs)
-                        Write-Host "🚀 Adding $jobsToAdd more ULTRA performance jobs..."
-                        
-                        for ($add = 1; $add -le $jobsToAdd; $add++) {
-                            Start-Job -ScriptBlock {
-                                param($flagFilePath, $addId)
-                                
-                                while (Test-Path $flagFilePath) {
-                                    # Hybrid CPU+RAM operations
-                                    $largeArray = New-Object double[] 20000
-                                    
-                                    # Fill with complex calculations
-                                    for ($i = 0; $i -lt 20000; $i++) {
-                                        if (!(Test-Path $flagFilePath)) { break }
-                                        $largeArray[$i] = [Math]::Sqrt($i * 2.3) * [Math]::Sin($i * 0.05) + [Math]::Pow($i % 100, 1.8)
-                                        
-                                        # Additional CPU work every 2000 elements
-                                        if ($i % 2000 -eq 0) {
-                                            $fib1, $fib2 = 1, 1
-                                            for ($f = 0; $f -lt 100; $f++) {
-                                                $fibNext = $fib1 + $fib2
-                                                $fib1, $fib2 = $fib2, $fibNext
-                                            }
-                                        }
-                                    }
-                                    
-                                    # Sort operations (CPU + Memory intensive)
-                                    if (Test-Path $flagFilePath) {
-                                        [Array]::Sort($largeArray)
-                                        [Array]::Reverse($largeArray)
-                                    }
-                                    
-                                    Start-Sleep -Milliseconds 8
-                                }
-                            } -ArgumentList $flagFile, $add -Name "UltraAdded$add" | Out-Null
-                        }
-                        Write-Host "✅ Added $jobsToAdd ULTRA jobs for maximum performance"
-                    }
-                    
-                    # Memory cleanup to prevent memory leaks while maintaining high usage
-                    try {
-                        [System.GC]::Collect()
-                        [System.GC]::WaitForPendingFinalizers()
-                        Write-Host "🧹 Memory maintenance completed (keeping ULTRA performance)"
-                    } catch {}
-                    
-                    # Network stress test
-                    try {
-                        $ping = Test-Connection -ComputerName "8.8.8.8" -Count 1 -Quiet
-                        if ($ping) {
-                            Write-Host "🌐 Network: ACTIVE (Internet connectivity confirmed)"
-                        } else {
-                            Write-Host "🌐 Network: Limited connectivity"
-                        }
-                    } catch {
-                        Write-Host "🌐 Network: Status unknown"
-                    }
-                    
-                    Write-Host "✅ ULTRA performance maintenance completed"
-                    Write-Host "🔥 System continuing at MAXIMUM performance levels"
-                }
-                
-                # Brief sleep between cycles
-                Start-Sleep -Seconds 30
-            }
-        }
-        catch {
-            Write-Host "⚠️  Session encountered an issue: $($_.Exception.Message)"
-            Write-Host "Attempting to maintain ULTRA performance..."
-        }
-        finally {
-            # Graceful shutdown procedure
-            Write-Host ""
-            Write-Host "=== ULTRA PERFORMANCE SESSION COMPLETING ==="
-            Write-Host "Session Duration: 6 hours of MAXIMUM CPU+RAM+Storage utilization"
+            Write-Host "CPU: $cpu% | Memory: $usedMem/$totalMem GB"
             
-            # Stop all background jobs gracefully
-            Write-Host "🛑 Stopping all ULTRA performance jobs..."
-            if (Test-Path $flagFile) {
-                Remove-Item $flagFile -Force -ErrorAction SilentlyContinue
-                Write-Host "✅ Performance flag removed - jobs will stop gracefully"
-            }
+            # Show top processes
+            Get-Process | Sort-Object CPU -Descending | Select-Object -First 5 | Format-Table Name, CPU, WorkingSet -AutoSize
             
-            # Wait for jobs to complete gracefully
-            Write-Host "⏳ Waiting for jobs to complete gracefully..."
-            Start-Sleep -Seconds 10
-            
-            # Show final statistics
-            try {
-                $finalMemory = Get-CimInstance -ClassName Win32_OperatingSystem
-                $finalMemoryUsage = (($finalMemory.TotalVisibleMemorySize - $finalMemory.FreePhysicalMemory) / $finalMemory.TotalVisibleMemorySize * 100).ToString('F1')
-                Write-Host "📊 Final Memory Usage: $finalMemoryUsage%"
-            } catch {}
-            
-            $finalJobs = Get-Job
-            Write-Host "📈 Total Jobs Created: $($finalJobs.Count)"
-            Write-Host "🏃 Jobs Still Running: $(($finalJobs | Where-Object {$_.State -eq 'Running'}).Count)"
-            Write-Host "✅ Jobs Completed: $(($finalJobs | Where-Object {$_.State -eq 'Completed'}).Count)"
-            Write-Host "❌ Jobs Failed: $(($finalJobs | Where-Object {$_.State -eq 'Failed'}).Count)"
-            
-            # Force cleanup all jobs
-            Write-Host "🧹 Cleaning up all background jobs..."
-            try {
-                Get-Job | Stop-Job -ErrorAction SilentlyContinue
-                Start-Sleep -Seconds 3
-                Get-Job | Remove-Job -Force -ErrorAction SilentlyContinue
-                Write-Host "✅ All jobs cleaned up successfully"
-            } catch {
-                Write-Host "⚠️  Job cleanup completed with minor issues"
-            }
-            
-            # Clean up temporary files
-            Write-Host "🗑️  Cleaning up temporary files..."
-            try {
-                $tempFiles = @(
-                    "$env:TEMP\ultra_jobs_active.flag",
-                    "$env:TEMP\performance_stats.txt",
-                    "$env:TEMP\ultra_disk_test.tmp",
-                    "$env:TEMP\maxcpuload"
-                )
-                foreach ($file in $tempFiles) {
-                    if (Test-Path $file) {
-                        Remove-Item $file -Recurse -Force -ErrorAction SilentlyContinue
-                    }
-                }
-                Write-Host "✅ Temporary files cleaned up"
-            } catch {
-                Write-Host "⚠️  Temporary file cleanup completed"
-            }
-            
-            # Final system status
-            Write-Host ""
-            Write-Host "=========================================="
-            Write-Host "🎯 ULTRA PERFORMANCE SESSION COMPLETED"
-            Write-Host "⏱️  Duration: 6 Hours"
-            Write-Host "🔥 CPU Utilization: MAXIMUM (All cores stressed)"
-            Write-Host "🐏 RAM Utilization: ULTRA HIGH"
-            Write-Host "💽 Storage Performance: OPTIMIZED"
-            Write-Host "🌐 RDP Tunnel: Successfully maintained"
-            Write-Host "✅ All resources utilized to their fullest potential"
-            Write-Host "=========================================="
-            Write-Host ""
-            Write-Host "Thank you for using ULTRA PERFORMANCE RDP Tunnel!"
-            Write-Host "System has been running at MAXIMUM capacity for 6 hours."
-            Write-Host "All performance optimizations have been applied successfully."
+            Start-Sleep -Seconds 30
         }
