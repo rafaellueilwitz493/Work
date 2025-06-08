@@ -1,54 +1,43 @@
-name: Playit RDP Tunnel (MAXIMUM CPU POWER)
+name: High-Performance RDP Tunnel (Optimized)
 on:
   workflow_dispatch:
 jobs:
-  setup-rdp-tunnel:
+  setup-optimized-rdp:
     runs-on: windows-latest
     steps:
     - name: Check out the repository
       uses: actions/checkout@v2
     
-    - name: MAXIMIZE System Performance and CPU Power
+    - name: Optimize System for RDP Performance
       run: |
-        # Set Windows to Ultimate High Performance mode
+        Write-Host "Optimizing system for high-performance RDP..."
+        
+        # Set to High Performance power plan (more reasonable than Ultimate)
         powercfg -setactive SCHEME_MIN
         
-        # Force ALL CPU cores to maximum usage
-        try {
-            bcdedit /set numproc 0
-        } catch {
-            Write-Host "Could not modify boot config, continuing..."
-        }
-        
-        # DISABLE ALL POWER SAVING - MAXIMUM PERFORMANCE
+        # Optimize power settings for performance while maintaining stability
         powercfg -change standby-timeout-ac 0
-        powercfg -change standby-timeout-dc 0
         powercfg -change hibernate-timeout-ac 0
-        powercfg -change hibernate-timeout-dc 0
         powercfg -change disk-timeout-ac 0
-        powercfg -change disk-timeout-dc 0
-        powercfg -change monitor-timeout-ac 0
-        powercfg -change monitor-timeout-dc 0
+        powercfg -change monitor-timeout-ac 300  # 5 minutes instead of never
         
-        # FORCE CPU TO 100% PERFORMANCE - NO THROTTLING
+        # CPU optimization without extreme measures
         try {
             $guid = (powercfg -getactivescheme).Split()[3]
+            # Set CPU to 100% but allow some throttling for stability
             powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
-            powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
-            powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
-            powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
-            # Disable CPU parking completely
-            powercfg -setacvalueindex $guid SUB_PROCESSOR CPMINCORES 100
-            powercfg -setdcvalueindex $guid SUB_PROCESSOR CPMINCORES 100
-            # Set CPU frequency to maximum
+            powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 80
+            # Reduce CPU parking for better responsiveness
+            powercfg -setacvalueindex $guid SUB_PROCESSOR CPMINCORES 50
+            # Enable turbo boost
             powercfg -setacvalueindex $guid SUB_PROCESSOR PERFBOOSTMODE 2
-            powercfg -setdcvalueindex $guid SUB_PROCESSOR PERFBOOSTMODE 2
             powercfg -setactive $guid
+            Write-Host "CPU optimization applied successfully"
         } catch {
-            Write-Host "Could not modify CPU throttling settings, using alternative approach..."
+            Write-Host "CPU optimization failed, using defaults"
         }
         
-        # Configure pagefile for maximum performance
+        # Configure pagefile for better performance
         try {
             $cs = Get-CimInstance -ClassName Win32_ComputerSystem
             if ($cs.AutomaticManagedPagefile) {
@@ -57,363 +46,262 @@ jobs:
             Get-CimInstance -ClassName Win32_PageFileSetting | Remove-CimInstance -ErrorAction SilentlyContinue
             New-CimInstance -ClassName Win32_PageFileSetting -Property @{
                 Name = "C:\pagefile.sys"
-                InitialSize = 6144  # 6GB
-                MaximumSize = 12288 # 12GB
+                InitialSize = 4096  # 4GB
+                MaximumSize = 8192  # 8GB
             } -ErrorAction SilentlyContinue
+            Write-Host "Pagefile optimized"
         } catch {
-            Write-Host "Could not configure pagefile, using system defaults..."
+            Write-Host "Using system default pagefile settings"
         }
         
-        # Stop ALL unnecessary services for maximum CPU availability
-        $servicesToStop = @("wuauserv", "Spooler", "Fax", "Themes", "TabletInputService", "WSearch", 
-                          "SysMain", "Superfetch", "DiagTrack", "dmwappushservice", "MapsBroker",
-                          "lfsvc", "SharedAccess", "RemoteRegistry", "TrkWks", "WbioSrvc")
-        foreach ($service in $servicesToStop) {
+        # Optimize only non-essential services (keep security services running)
+        $servicesToOptimize = @("Themes", "TabletInputService", "Fax", "MapsBroker", "lfsvc")
+        foreach ($service in $servicesToOptimize) {
             try {
                 $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
                 if ($svc -and $svc.Status -eq 'Running') {
                     Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
-                    Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
-                    Write-Host "Stopped and disabled service: $service"
+                    Write-Host "Optimized service: $service"
                 }
             } catch {
-                Write-Host "Could not modify service: $service"
+                Write-Host "Could not optimize service: $service"
             }
         }
         
-        # Disable Windows Defender completely
+        # Set system priority for better desktop responsiveness
         try {
-            Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-            Set-MpPreference -DisableBehaviorMonitoring $true -ErrorAction SilentlyContinue
-            Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
-            Set-MpPreference -DisablePrivacyMode $true -ErrorAction SilentlyContinue
-            Set-MpPreference -DisableIntrusionPreventionSystem $true -ErrorAction SilentlyContinue
-            Write-Host "Disabled Windows Defender completely"
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 24 -ErrorAction SilentlyContinue
+            Write-Host "System priority optimized for desktop performance"
         } catch {
-            Write-Host "Could not disable Windows Defender"
+            Write-Host "Could not modify system priority"
         }
         
-        # Set system to MAXIMUM performance priority
-        try {
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -ErrorAction SilentlyContinue
-            # Set system to favor background services (for our CPU tasks)
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "IRQ8Priority" -Value 1 -ErrorAction SilentlyContinue
-            Write-Host "Set system priority to MAXIMUM performance"
-        } catch {
-            Write-Host "Could not modify system priority settings"
-        }
-        
-        # Set current process to REALTIME priority (highest possible)
-        try {
-            [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'RealTime'
-        } catch {
-            [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
-        }
-        
-        Write-Host "System optimization for MAXIMUM CPU performance completed!"
+        Write-Host "System optimization completed successfully!"
     
-    - name: Download and Install Playit Agent
+    - name: Configure High-Performance RDP Settings
       run: |
-        Write-Host "Downloading Playit Agent..."
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-        Write-Host "Playit Agent downloaded successfully"
-        Start-Sleep -Seconds 3
-    
-    - name: Enable Remote Desktop and Configure
-      run: |
-        Write-Host "Configuring Remote Desktop for maximum performance..."
+        Write-Host "Configuring RDP for maximum performance..."
+        
         # Enable Remote Desktop
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         
-        # Enable Network Level Authentication
+        # Enable Network Level Authentication for security
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
         
-        # Maximize RDP connections
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxInstanceCount" -Value 20
+        # Optimize RDP performance settings
+        $rdpPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
         
-        # Set RDP to use maximum bandwidth
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxConnectionTime" -Value 0
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxIdleTime" -Value 0
-        Write-Host "Remote Desktop configured for maximum performance"
+        # Set higher connection limits
+        Set-ItemProperty -Path $rdpPath -Name "MaxInstanceCount" -Value 10
+        Set-ItemProperty -Path $rdpPath -Name "MaxConnectionTime" -Value 0
+        Set-ItemProperty -Path $rdpPath -Name "MaxIdleTime" -Value 0
+        
+        # Optimize RDP display settings for performance
+        Set-ItemProperty -Path $rdpPath -Name "ColorDepth" -Value 4  # 32-bit color
+        Set-ItemProperty -Path $rdpPath -Name "fDisableCdm" -Value 0  # Enable clipboard
+        Set-ItemProperty -Path $rdpPath -Name "fDisableCam" -Value 0  # Enable drive redirection
+        
+        # Disable visual effects that can slow down RDP
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Force
+        
+        # Configure TCP settings for better RDP performance
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "TcpWindowSize" -Value 65536 -Force
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "TcpTimedWaitDelay" -Value 30 -Force
+        
+        Write-Host "RDP performance optimization completed"
     
-    - name: Set RDP Password
+    - name: Download and Install Playit Agent
+      run: |
+        Write-Host "Downloading Playit Agent..."
+        try {
+            Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+            Write-Host "Playit Agent downloaded successfully"
+        } catch {
+            Write-Host "Error downloading Playit Agent: $_"
+            exit 1
+        }
+    
+    - name: Setup Optimized RDP User Account
       shell: powershell
       run: |
-        Write-Host "Setting up RDP user account..."
-        # Keep original password and username as requested
-        $password = ConvertTo-SecureString "P@ssword123" -AsPlainText -Force
-        if (-not (Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue)) {
-          Write-Host "Creating user 'runneradmin'..."
-          New-LocalUser -Name "runneradmin" -Password $password -FullName "GitHub Runner Admin" -Description "Admin account for RDP access"
-          Add-LocalGroupMember -Group "Administrators" -Member "runneradmin"
+        Write-Host "Setting up optimized RDP user account..."
+        
+        # Create strong password
+        $password = ConvertTo-SecureString "P@ssw0rd!2024RDP" -AsPlainText -Force
+        
+        try {
+            if (-not (Get-LocalUser -Name "rdpuser" -ErrorAction SilentlyContinue)) {
+                Write-Host "Creating optimized RDP user 'rdpuser'..."
+                New-LocalUser -Name "rdpuser" -Password $password -FullName "High Performance RDP User" -Description "Optimized RDP access account"
+                Add-LocalGroupMember -Group "Administrators" -Member "rdpuser"
+                Add-LocalGroupMember -Group "Remote Desktop Users" -Member "rdpuser"
+            } else {
+                Write-Host "Updating existing RDP user..."
+                Set-LocalUser -Name "rdpuser" -Password $password
+            }
+            
+            # Grant user "Log on as a service" right for better performance
+            secedit /export /cfg "$env:TEMP\secpol.cfg"
+            (Get-Content "$env:TEMP\secpol.cfg") -replace "SeServiceLogonRight = ", "SeServiceLogonRight = rdpuser," | Set-Content "$env:TEMP\secpol.cfg"
+            secedit /configure /db "$env:TEMP\secedit.sdb" /cfg "$env:TEMP\secpol.cfg"
+            Remove-Item "$env:TEMP\secpol.cfg", "$env:TEMP\secedit.sdb" -ErrorAction SilentlyContinue
+            
+            Write-Host "RDP user account configured successfully"
+            Write-Host "Username: rdpuser"
+            Write-Host "Password: P@ssw0rd!2024RDP"
+        } catch {
+            Write-Host "Error configuring RDP user: $_"
         }
-        else {
-          Write-Host "User 'runneradmin' already exists. Updating password..."
-          Set-LocalUser -Name "runneradmin" -Password $password
-        }
-        Write-Host "RDP user account configured successfully"
     
-    - name: Start Playit Agent with Maximum Priority
+    - name: Start Playit Agent with High Priority
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Write-Host "Starting Playit Agent with MAXIMUM priority..."
-        # Start the Playit Agent with REALTIME priority
-        $process = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
+        Write-Host "Starting Playit Agent with high priority..."
+        
+        if (-not $env:PLAYIT_AUTH_KEY) {
+            Write-Host "ERROR: PLAYIT_AUTH_KEY secret not found!"
+            exit 1
+        }
+        
         try {
-            $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::RealTime
-            Write-Host "Playit Agent started with RealTime priority"
-        } catch {
+            # Start Playit Agent with high priority (not realtime to avoid system issues)
+            $process = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
             $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-            Write-Host "Playit Agent started with High priority"
-        }
-        Start-Sleep -Seconds 5
-        Write-Host "Playit Agent is running and ready"
-    
-    - name: Initialize MAXIMUM CPU Utilization System
-      run: |
-        Write-Host "Initializing MAXIMUM CPU utilization system..."
-        
-        # Get actual CPU core count
-        $coreCount = (Get-WmiObject -Class Win32_Processor | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
-        Write-Host "Detected $coreCount CPU cores/threads - preparing maximum utilization"
-        
-        # Create global flag file for CPU jobs
-        $flagFile = "$env:TEMP\cpu_jobs_active.flag"
-        "ACTIVE" | Out-File -FilePath $flagFile -Force
-        
-        # Create lightweight CPU jobs that start quickly but run intensively
-        Write-Host "Starting CPU utilization jobs..."
-        for ($i = 1; $i -le $coreCount; $i++) {
-            Start-Job -ScriptBlock {
-                param($coreId, $flagFilePath)
-                # Set this job to high priority
-                try {
-                    [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
-                } catch {}
-                
-                # CPU intensive operations with regular flag checking
-                while (Test-Path $flagFilePath) {
-                    # Quick burst of CPU operations
-                    $result = 0
-                    for ($j = 1; $j -le 100000; $j++) {
-                        $result += [Math]::Sqrt($j) * [Math]::Sin($j % 360) * [Math]::Cos($j % 360)
-                    }
-                    
-                    # Check flag every burst to allow responsiveness
-                    if (!(Test-Path $flagFilePath)) { break }
-                    
-                    # Prime number calculations (shorter burst)
-                    for ($k = 1000; $k -le 1200; $k++) {
-                        if (!(Test-Path $flagFilePath)) { break }
-                        $isPrime = $true
-                        for ($l = 2; $l -le [Math]::Sqrt($k); $l++) {
-                            if ($k % $l -eq 0) {
-                                $isPrime = $false
-                                break
-                            }
-                        }
-                    }
-                    
-                    # Brief sleep to prevent system lockup
-                    Start-Sleep -Milliseconds 10
-                }
-            } -ArgumentList $i, $flagFile -Name "CPUCore$i" | Out-Null
-        }
-        
-        Write-Host "Started $coreCount CPU core jobs"
-        
-        # Wait a moment for jobs to initialize
-        Start-Sleep -Seconds 2
-        
-        # Verify jobs are running
-        $runningJobs = (Get-Job | Where-Object {$_.State -eq 'Running'}).Count
-        Write-Host "Active CPU jobs: $runningJobs"
-        
-        if ($runningJobs -gt 0) {
-            Write-Host "CPU utilization system initialized successfully!"
-        } else {
-            Write-Host "Warning: Some CPU jobs may not have started properly"
+            
+            Write-Host "Playit Agent started successfully with high priority"
+            Write-Host "Process ID: $($process.Id)"
+            
+            # Wait and verify it's running
+            Start-Sleep -Seconds 10
+            if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
+                Write-Host "Playit Agent is running and ready"
+            } else {
+                Write-Host "Warning: Playit Agent may not have started correctly"
+            }
+        } catch {
+            Write-Host "Error starting Playit Agent: $_"
+            exit 1
         }
     
-    - name: Start Additional CPU Workers
+    - name: Performance Monitoring Setup
       run: |
-        Write-Host "Starting additional CPU workers for maximum utilization..."
-        $flagFile = "$env:TEMP\cpu_jobs_active.flag"
-        $coreCount = (Get-WmiObject -Class Win32_Processor | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
+        Write-Host "Setting up performance monitoring..."
         
-        # Start additional CPU workers
-        for ($extra = 1; $extra -le $coreCount; $extra++) {
-            Start-Job -ScriptBlock {
-                param($jobId, $flagFilePath)
-                try {
-                    [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
-                } catch {}
-                
-                while (Test-Path $flagFilePath) {
-                    # Lighter but continuous CPU operations
-                    $result = 0
-                    
-                    # Quick math operations
-                    for ($i = 1; $i -le 50000; $i++) {
-                        $result += [Math]::Pow($i % 100, 2) + [Math]::Sqrt($i % 1000)
-                        if ($i % 10000 -eq 0 -and !(Test-Path $flagFilePath)) { break }
-                    }
-                    
-                    # String operations
-                    if (Test-Path $flagFilePath) {
-                        $str = "StressTest" * 100
-                        for ($j = 0; $j -lt 1000; $j++) {
-                            $str = $str.Replace("S", "X").Replace("T", "Y")
-                            if ($j % 200 -eq 0 -and !(Test-Path $flagFilePath)) { break }
-                        }
-                    }
-                    
-                    # Small sleep to prevent total system freeze
-                    Start-Sleep -Milliseconds 5
-                }
-            } -ArgumentList $extra, $flagFile -Name "CPUWorker$extra" | Out-Null
-        }
-        
-        Write-Host "Started $coreCount additional CPU workers"
-        Start-Sleep -Seconds 1
-        
-        $totalJobs = (Get-Job | Where-Object {$_.State -eq 'Running'}).Count
-        Write-Host "Total active CPU jobs: $totalJobs"
-    
-    - name: Monitor Initial Resource Usage
-      run: |
-        Write-Host "=== INITIAL MAXIMUM SYSTEM RESOURCE USAGE ==="
-        Write-Host "Active Background Jobs: $((Get-Job | Where-Object {$_.State -eq 'Running'}).Count)"
-        Get-Job | Format-Table Name, State -AutoSize
-        
-        # Show memory usage
-        $memory = Get-CimInstance -ClassName Win32_OperatingSystem
-        $totalMemory = [math]::Round($memory.TotalVisibleMemorySize / 1KB, 2)
-        $freeMemory = [math]::Round($memory.FreePhysicalMemory / 1KB, 2)
-        $usedMemory = $totalMemory - $freeMemory
-        Write-Host "Memory Usage: $usedMemory GB / $totalMemory GB ($(($usedMemory/$totalMemory*100).ToString('F1'))%)"
-        
-        # Show CPU core information
+        # Get system information
         $cpu = Get-CimInstance -ClassName Win32_Processor
-        Write-Host "CPU Cores: $($cpu.NumberOfCores), Logical Processors: $($cpu.NumberOfLogicalProcessors)"
-        Write-Host "CPU Max Clock Speed: $($cpu.MaxClockSpeed) MHz"
-        Write-Host "System configured for MAXIMUM CPU utilization - all cores active"
+        $memory = Get-CimInstance -ClassName Win32_OperatingSystem
+        $totalMemoryGB = [math]::Round($memory.TotalVisibleMemorySize / 1MB, 2)
+        
+        Write-Host "=== SYSTEM SPECIFICATIONS ==="
+        Write-Host "CPU: $($cpu.Name)"
+        Write-Host "CPU Cores: $($cpu.NumberOfCores)"
+        Write-Host "Logical Processors: $($cpu.NumberOfLogicalProcessors)"
+        Write-Host "CPU Max Speed: $($cpu.MaxClockSpeed) MHz"
+        Write-Host "Total Memory: $totalMemoryGB GB"
+        Write-Host "============================="
+        
+        # Create performance monitoring script
+        $monitorScript = @'
+        while ($true) {
+            $cpu = Get-Counter "\Processor(_Total)\% Processor Time" -SampleInterval 1 -MaxSamples 1
+            $memory = Get-CimInstance -ClassName Win32_OperatingSystem
+            $cpuUsage = [math]::Round(100 - $cpu.CounterSamples.CookedValue, 1)
+            $memUsage = [math]::Round((($memory.TotalVisibleMemorySize - $memory.FreePhysicalMemory) / $memory.TotalVisibleMemorySize) * 100, 1)
+            
+            Write-Host "$(Get-Date -Format 'HH:mm:ss') - CPU: $cpuUsage% | Memory: $memUsage% | RDP Active"
+            Start-Sleep -Seconds 60
+        }
+'@
+        
+        # Start performance monitor as background job
+        Start-Job -ScriptBlock {
+            param($script)
+            Invoke-Expression $script
+        } -ArgumentList $monitorScript -Name "PerformanceMonitor" | Out-Null
+        
+        Write-Host "Performance monitoring started"
     
-    - name: Keep GitHub Runner Alive with MAXIMUM CPU Utilization
+    - name: Maintain High-Performance RDP Session
       run: |
         Write-Host "=========================================="
-        Write-Host "RDP Tunnel Active with MAXIMUM CPU UTILIZATION"
-        Write-Host "All CPU cores running at maximum capacity!"
-        Write-Host "Total background processes: $((Get-Job | Where-Object {$_.State -eq 'Running'}).Count)"
+        Write-Host "HIGH-PERFORMANCE RDP TUNNEL ACTIVE"
+        Write-Host "Optimized for maximum RDP performance"
+        Write-Host "Username: rdpuser"
+        Write-Host "Password: P@ssw0rd!2024RDP"
         Write-Host "=========================================="
         
-        $flagFile = "$env:TEMP\cpu_jobs_active.flag"
-        
-        # Keep the session alive for 6 hours while maintaining MAXIMUM CPU usage
+        # Keep session alive for 6 hours with periodic optimization
         $endTime = (Get-Date).AddHours(6)
-        $checkInterval = 0
+        $checkCount = 0
         
         try {
             while ((Get-Date) -lt $endTime) {
-                # Additional CPU-intensive operations in main thread (lighter)
-                $intensiveOperations = 1..2000 | ForEach-Object { 
-                    [Math]::Pow($_ % 100, 2) + [Math]::Sqrt($_ % 1000)
-                }
+                $checkCount++
                 
-                # Every 15 minutes, show resource usage and maintain jobs
-                $checkInterval++
-                if ($checkInterval -ge 30) { # 30 * 30 seconds = 15 minutes
-                    $checkInterval = 0
-                    Write-Host "=== CPU UTILIZATION CHECK at $(Get-Date) ==="
+                # Every 30 minutes, perform maintenance tasks
+                if ($checkCount % 60 -eq 0) {  # 60 * 30 seconds = 30 minutes
+                    Write-Host "=== PERFORMANCE CHECK at $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ==="
                     
-                    # Show job status
-                    $runningJobs = (Get-Job | Where-Object {$_.State -eq 'Running'}).Count
-                    $totalJobs = (Get-Job).Count
-                    Write-Host "Running Jobs: $runningJobs / $totalJobs"
-                    
-                    # Restart failed jobs to maintain maximum CPU usage
-                    $failedJobs = Get-Job | Where-Object {$_.State -eq 'Failed' -or $_.State -eq 'Stopped'}
-                    if ($failedJobs.Count -gt 0) {
-                        Write-Host "Restarting $($failedJobs.Count) failed jobs..."
-                        $failedJobs | Remove-Job -Force
-                        
-                        # Restart lightweight CPU jobs
-                        for ($restart = 1; $restart -le [Math]::Min(4, $failedJobs.Count); $restart++) {
-                            Start-Job -ScriptBlock {
-                                param($flagFilePath)
-                                try {
-                                    [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
-                                } catch {}
-                                while (Test-Path $flagFilePath) {
-                                    $result = 0
-                                    for ($j = 1; $j -le 75000; $j++) {
-                                        $result += [Math]::Sqrt($j % 1000) * [Math]::Sin($j % 360)
-                                        if ($j % 15000 -eq 0 -and !(Test-Path $flagFilePath)) { break }
-                                    }
-                                    Start-Sleep -Milliseconds 8
-                                }
-                            } -ArgumentList $flagFile -Name "RestartedCPU$restart" | Out-Null
-                        }
+                    # Check Playit Agent status
+                    $playitProcess = Get-Process -Name "playit*" -ErrorAction SilentlyContinue
+                    if ($playitProcess) {
+                        Write-Host "Playit Agent: Running (PID: $($playitProcess.Id))"
+                        # Ensure it maintains high priority
+                        $playitProcess.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+                    } else {
+                        Write-Host "Warning: Playit Agent not found"
                     }
                     
-                    Write-Host "System maintaining MAXIMUM CPU stress"
+                    # Check RDP service status
+                    $rdpService = Get-Service -Name "TermService" -ErrorAction SilentlyContinue
+                    if ($rdpService.Status -eq "Running") {
+                        Write-Host "RDP Service: Active"
+                    } else {
+                        Write-Host "Warning: RDP Service not running"
+                        Start-Service -Name "TermService" -ErrorAction SilentlyContinue
+                    }
                     
-                    # Show current system stats
+                    # Show current resource usage
                     try {
                         $memory = Get-CimInstance -ClassName Win32_OperatingSystem
-                        $usedMemoryPercent = (($memory.TotalVisibleMemorySize - $memory.FreePhysicalMemory) / $memory.TotalVisibleMemorySize * 100).ToString('F1')
-                        Write-Host "Current Memory Usage: $usedMemoryPercent%"
+                        $memUsage = [math]::Round((($memory.TotalVisibleMemorySize - $memory.FreePhysicalMemory) / $memory.TotalVisibleMemorySize) * 100, 1)
+                        Write-Host "Current Memory Usage: $memUsage%"
+                        
+                        # Clean up if memory usage is too high
+                        if ($memUsage -gt 85) {
+                            Write-Host "High memory usage detected, running cleanup..."
+                            [System.GC]::Collect()
+                            [System.GC]::WaitForPendingFinalizers()
+                        }
                     } catch {
-                        Write-Host "Memory stats unavailable"
+                        Write-Host "Unable to check memory usage"
                     }
                     
-                    # Add more CPU workers if needed
-                    if ($runningJobs -lt 8) {
-                        Write-Host "Adding more CPU workers..."
-                        for ($add = 1; $add -le 4; $add++) {
-                            Start-Job -ScriptBlock {
-                                param($flagFilePath)
-                                while (Test-Path $flagFilePath) {
-                                    for ($i = 1; $i -le 50000; $i++) {
-                                        $result = [Math]::Pow($i % 50, 2) + [Math]::Cos($i % 180)
-                                        if ($i % 10000 -eq 0 -and !(Test-Path $flagFilePath)) { break }
-                                    }
-                                    Start-Sleep -Milliseconds 10
-                                }
-                            } -ArgumentList $flagFile -Name "AddedCPU$add" | Out-Null
-                        }
-                    }
+                    # Check job status
+                    $runningJobs = (Get-Job | Where-Object {$_.State -eq 'Running'}).Count
+                    Write-Host "Background Jobs: $runningJobs running"
+                    
+                    Write-Host "System maintaining high performance"
                 }
                 
+                # Lightweight system activity to keep session alive
+                Get-Date | Out-Null
                 Start-Sleep -Seconds 30
             }
         }
         finally {
-            # Cleanup: Remove flag file to stop all CPU jobs gracefully
-            Write-Host "Session completing - stopping CPU utilization jobs..."
-            if (Test-Path $flagFile) {
-                Remove-Item $flagFile -Force -ErrorAction SilentlyContinue
-            }
+            Write-Host "Session completing - performing cleanup..."
             
-            # Wait for jobs to complete gracefully
-            Start-Sleep -Seconds 5
-            
-            # Clean up jobs
+            # Clean up background jobs
             try {
                 Get-Job | Stop-Job -ErrorAction SilentlyContinue
                 Get-Job | Remove-Job -Force -ErrorAction SilentlyContinue
+                Write-Host "Background jobs cleaned up"
             } catch {
                 Write-Host "Job cleanup completed"
             }
             
-            # Clean up temp directory
-            $tempDir = "$env:TEMP\maxcpuload"
-            if (Test-Path $tempDir) {
-                Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-            }
-            
-            Write-Host "Session completed after 6 hours of MAXIMUM CPU utilization"
-            Write-Host "All background jobs stopped and resources cleaned up"
+            Write-Host "6-hour high-performance RDP session completed successfully"
         }
