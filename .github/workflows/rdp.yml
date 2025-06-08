@@ -307,47 +307,30 @@ jobs:
            Start-Service -Name "UxSms" -ErrorAction SilentlyContinue
            Set-Service -Name "UxSms" -StartupType Automatic -ErrorAction SilentlyContinue
            
-           # Create a visual animation script
-           $animationScript = @'
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-
-$form = New-Object Windows.Forms.Form
-$form.Text = "RDP Performance Monitor"
-$form.Size = New-Object Drawing.Size(400, 300)
-$form.StartPosition = "CenterScreen"
-$form.BackColor = [System.Drawing.Color]::Black
-$form.ForeColor = [System.Drawing.Color]::Lime
-
-$label = New-Object Windows.Forms.Label
-$label.Text = "Maximum CPU Performance Active"
-$label.Size = New-Object Drawing.Size(380, 50)
-$label.Location = New-Object Drawing.Point(10, 10)
-$label.Font = New-Object Drawing.Font("Arial", 12, [Drawing.FontStyle]::Bold)
-$label.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
-
-$progressBar = New-Object Windows.Forms.ProgressBar
-$progressBar.Size = New-Object Drawing.Size(380, 30)
-$progressBar.Location = New-Object Drawing.Point(10, 80)
-$progressBar.Style = [Windows.Forms.ProgressBarStyle]::Marquee
-$progressBar.MarqueeAnimationSpeed = 50
-
-$form.Controls.Add($label)
-$form.Controls.Add($progressBar)
-
-$timer = New-Object Windows.Forms.Timer
-$timer.Interval = 1000
-$timer.Add_Tick({
-    $cpu = Get-WmiObject -Class Win32_Processor | Measure-Object -Property LoadPercentage -Average
-    $label.Text = "CPU Usage: $([math]::Round($cpu.Average, 1))% - Visual Effects Active"
-})
-$timer.Start()
-
-$form.ShowDialog()
-'@
-           
-           # Start the animation in background
-           Start-Job -ScriptBlock ([scriptblock]::Create($animationScript)) -Name "VisualEffects"
+           # Start background visual effects job
+           Start-Job -ScriptBlock {
+               try {
+                   Add-Type -AssemblyName System.Windows.Forms
+                   Add-Type -AssemblyName System.Drawing
+                   
+                   # Create animated cursor effects simulation
+                   while ($true) {
+                       $random = New-Object Random
+                       $x = $random.Next(0, 1920)
+                       $y = $random.Next(0, 1080)
+                       
+                       # Simulate mouse activity for visual effects
+                       [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point($x, $y)
+                       Start-Sleep -Milliseconds 100
+                   }
+               } catch {
+                   # Fallback animation simulation
+                   while ($true) {
+                       Write-Host "Visual Effects Active - $(Get-Date)"
+                       Start-Sleep -Seconds 30
+                   }
+               }
+           } -Name "VisualEffects"
            
            Write-Host "Started visual effects and animation services"
        } catch {
