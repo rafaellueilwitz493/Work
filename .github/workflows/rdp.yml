@@ -209,8 +209,8 @@ jobs:
            while ($true) {
                try {
                    # Multiple file operations simultaneously
-                   1..5 | ForEach-Object -Parallel {
-                       $fileName = "$using:tempDir\temp_file_$using:counter`_$_.tmp"
+                   for ($i = 1; $i -le 5; $i++) {
+                       $fileName = "$tempDir\temp_file_$counter`_$i.tmp"
                        $data = [byte[]]::new(40MB)
                        # Fill with random data for more realistic I/O
                        (New-Object Random).NextBytes($data)
