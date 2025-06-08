@@ -1,4 +1,4 @@
-name: Playit RDP Tunnel (Maximum Resource Utilization)
+name: Playit RDP Tunnel (Maximum Performance)
 
 on:
   workflow_dispatch:
@@ -6,27 +6,27 @@ on:
 jobs:
   setup-rdp-tunnel:
     runs-on: windows-latest
-    timeout-minutes: 360  # 6 hour timeout
+    timeout-minutes: 360
     steps:
-    - name: Check out the repository
+    - name: Check out repository
       uses: actions/checkout@v2
 
     - name: Maximize System Performance
+      shell: pwsh
       run: |
-        # Set Ultimate Performance power scheme (Windows Server)
-        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
-        powercfg -setactive e9a42b02-d5df-448d-aa00-03f14749eb61
-
-        # Disable CPU throttling completely
-        $powerCfg = powercfg -getactivescheme
-        $guid = ($powerCfg -split " ")[3]
+        # Set High Performance power scheme
+        powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
+        
+        # Disable CPU throttling
+        $scheme = powercfg -getactivescheme
+        $guid = ($scheme -split " ")[3]
         powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
         powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
         powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
         powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
         powercfg -setactive $guid
 
-        # Disable all power saving features
+        # Disable power saving
         powercfg -change standby-timeout-ac 0
         powercfg -change standby-timeout-dc 0
         powercfg -change hibernate-timeout-ac 0
@@ -34,22 +34,23 @@ jobs:
         powercfg -change disk-timeout-ac 0
         powercfg -change disk-timeout-dc 0
 
-        # Optimize pagefile for performance
-        $pagefile = Get-CimInstance -ClassName Win32_PageFileSetting
-        if ($pagefile) {
-            Remove-CimInstance -InputObject $pagefile
-        }
-        $cs = Get-CimInstance -ClassName Win32_ComputerSystem
-        if ($cs.AutomaticManagedPagefile) {
-            Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile=$false}
-        }
-        New-CimInstance -ClassName Win32_PageFileSetting -Property @{
-            Name = "C:\pagefile.sys"
-            InitialSize = 4096
-            MaximumSize = 8192
+        # Configure pagefile using alternative method
+        $computersys = Get-WmiObject Win32_ComputerSystem -EnableAllPrivileges
+        $computersys.AutomaticManagedPagefile = $false
+        $computersys.Put()
+
+        $currentPageFile = Get-WmiObject -Query "Select * From Win32_PageFileSetting Where Name='c:\\pagefile.sys'"
+        if ($currentPageFile) {
+            $currentPageFile.Delete()
         }
 
-        # Disable unnecessary services
+        $pageFile = ([wmiclass]"Win32_PageFileSetting").CreateInstance()
+        $pageFile.Name = "C:\pagefile.sys"
+        $pageFile.InitialSize = 4096
+        $pageFile.MaximumSize = 8192
+        $pageFile.Put()
+
+        # Disable services
         $services = @("wuauserv", "Spooler", "Fax", "Themes", "TabletInputService", "WSearch")
         foreach ($service in $services) {
             Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
@@ -57,15 +58,15 @@ jobs:
         }
 
         # Disable Windows Defender
-        Set-MpPreference -DisableRealtimeMonitoring $true
+        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
 
-        # Set high process priority
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26
+        # Set high priority
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -ErrorAction SilentlyContinue
         [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'High'
 
     - name: Create CPU Load
+      shell: pwsh
       run: |
-        # Start multiple CPU-intensive processes
         $cpuScript = {
             $result = 0
             while ($true) {
@@ -76,23 +77,21 @@ jobs:
             }
         }
         
-        # Create 2 jobs per logical processor
         $procCount = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
-        for ($i = 0; $i -lt ($procCount * 2); $i++) {
+        for ($i = 0; $i -lt $procCount; $i++) {
             Start-Job -ScriptBlock $cpuScript -Name "CPULoad_$i"
         }
 
     - name: Create Memory Load
+      shell: pwsh
       run: |
-        # Allocate and maintain memory usage
         $memScript = {
             $arrays = @()
             try {
                 while ($true) {
-                    # Allocate in chunks to avoid immediate OOM
                     $chunk = New-Object byte[] 50MB
                     $arrays += $chunk
-                    if ($arrays.Count -gt 15) {
+                    if ($arrays.Count -gt 10) {
                         $arrays = $arrays[5..$arrays.Count]
                         [System.GC]::Collect()
                     }
@@ -106,8 +105,8 @@ jobs:
         Start-Job -ScriptBlock $memScript -Name "MemoryLoad"
 
     - name: Create Disk I/O Load
+      shell: pwsh
       run: |
-        # Generate continuous disk activity
         $diskScript = {
             $tempDir = "$env:TEMP\diskload"
             New-Item -Path $tempDir -ItemType Directory -Force
@@ -120,7 +119,7 @@ jobs:
                     $readData = [System.IO.File]::ReadAllBytes($file)
                     Remove-Item $file -Force
                     $counter++
-                    if ($counter -gt 50) {
+                    if ($counter -gt 20) {
                         Get-ChildItem $tempDir | Remove-Item -Force
                         $counter = 0
                     }
@@ -133,22 +132,23 @@ jobs:
         Start-Job -ScriptBlock $diskScript -Name "DiskLoad"
 
     - name: Install Playit Agent
+      shell: pwsh
       run: |
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
 
     - name: Configure RDP
+      shell: pwsh
       run: |
-        # Enable RDP
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         
-        # Configure RDP performance
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxInstanceCount" -Value 20
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxConnectionTime" -Value 0
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxIdleTime" -Value 0
 
     - name: Create RDP User
+      shell: pwsh
       run: |
         $password = ConvertTo-SecureString "P@ssword123" -AsPlainText -Force
         if (-not (Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue)) {
@@ -161,22 +161,21 @@ jobs:
     - name: Start Playit Agent
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+      shell: pwsh
       run: |
         $process = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
         $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
 
     - name: Monitor Resources
+      shell: pwsh
       run: |
         while ($true) {
-            # Display resource usage
             $cpu = (Get-Counter '\Processor(_Total)\% Processor Time').CounterSamples.CookedValue
             $mem = Get-CimInstance Win32_OperatingSystem
             $usedMem = [math]::Round(($mem.TotalVisibleMemorySize - $mem.FreePhysicalMemory) / 1MB, 2)
             $totalMem = [math]::Round($mem.TotalVisibleMemorySize / 1MB, 2)
             
             Write-Host "CPU: $cpu% | Memory: $usedMem/$totalMem GB"
-            
-            # Show top processes
             Get-Process | Sort-Object CPU -Descending | Select-Object -First 5 | Format-Table Name, CPU, WorkingSet -AutoSize
             
             Start-Sleep -Seconds 30
