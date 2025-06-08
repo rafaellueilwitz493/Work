@@ -1,6 +1,30 @@
 name: High-Performance RDP Tunnel (Optimized)
+
 on:
   workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Session duration in hours (1-6)'
+        required: false
+        default: '6'
+        type: choice
+        options:
+          - '1'
+          - '2'
+          - '3'
+          - '4'
+          - '5'
+          - '6'
+      performance_mode:
+        description: 'Performance optimization level'
+        required: false
+        default: 'high'
+        type: choice
+        options:
+          - 'balanced'
+          - 'high'
+          - 'maximum'
+
 jobs:
   setup-optimized-rdp:
     runs-on: windows-latest
@@ -10,7 +34,10 @@ jobs:
     
     - name: Optimize System for RDP Performance
       run: |
-        Write-Host "Optimizing system for high-performance RDP..."
+        $perfMode = "${{ github.event.inputs.performance_mode }}"
+        if ([string]::IsNullOrEmpty($perfMode)) { $perfMode = "high" }
+        
+        Write-Host "Optimizing system for high-performance RDP (Mode: $perfMode)..."
         
         # Set to High Performance power plan (more reasonable than Ultimate)
         powercfg -setactive SCHEME_MIN
@@ -232,9 +259,13 @@ jobs:
         Write-Host "Password: P@ssw0rd!2024RDP"
         Write-Host "=========================================="
         
-        # Keep session alive for 6 hours with periodic optimization
-        $endTime = (Get-Date).AddHours(6)
+        # Keep session alive for specified duration with periodic optimization
+        $duration = "${{ github.event.inputs.duration }}"
+        if ([string]::IsNullOrEmpty($duration)) { $duration = "6" }
+        $endTime = (Get-Date).AddHours([int]$duration)
         $checkCount = 0
+        
+        Write-Host "Session will run for $duration hours until $($endTime.ToString('yyyy-MM-dd HH:mm:ss'))"
         
         try {
             while ((Get-Date) -lt $endTime) {
@@ -303,5 +334,5 @@ jobs:
                 Write-Host "Job cleanup completed"
             }
             
-            Write-Host "6-hour high-performance RDP session completed successfully"
+            Write-Host "$duration-hour high-performance RDP session completed successfully"
         }
