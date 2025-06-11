@@ -1,422 +1,314 @@
-name: Playit RDP Tunnel (Maximum CPU Performance + Visual Animations)
+name: Optimized High-Performance RDP Tunnel
 on:
- workflow_dispatch:
+  workflow_dispatch:
 jobs:
- setup-rdp-tunnel:
-   runs-on: windows-latest
-   steps:
-   - name: Check out the repository
-     uses: actions/checkout@v2
-  
-   - name: Maximize CPU Performance and System Resources
-     run: |
-       # Set Windows to Ultimate Performance mode
-       powercfg -setactive SCHEME_MIN
-       
-       # Force all CPU cores to maximum performance
-       try {
-           bcdedit /set numproc 0
-           bcdedit /set {current} numproc 0
-       } catch {
-           Write-Host "Could not modify boot config, continuing..."
-       }
-       
-       # Disable all power management and throttling
-       powercfg -change standby-timeout-ac 0
-       powercfg -change standby-timeout-dc 0
-       powercfg -change hibernate-timeout-ac 0
-       powercfg -change hibernate-timeout-dc 0
-       powercfg -change disk-timeout-ac 0
-       powercfg -change disk-timeout-dc 0
-       powercfg -change monitor-timeout-ac 0
-       powercfg -change monitor-timeout-dc 0
-       
-       # Force CPU to maximum performance - Enhanced method
-       try {
-           $guid = (powercfg -getactivescheme).Split()[3]
-           # Set CPU to never throttle (100% minimum and maximum)
-           powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
-           powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
-           powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
-           powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
-           
-           # Disable CPU parking and core parking
-           powercfg -setacvalueindex $guid SUB_PROCESSOR CPMINCORES 100
-           powercfg -setdcvalueindex $guid SUB_PROCESSOR CPMINCORES 100
-           powercfg -setacvalueindex $guid SUB_PROCESSOR CPMAXCORES 100
-           powercfg -setdcvalueindex $guid SUB_PROCESSOR CPMAXCORES 100
-           
-           # Disable frequency scaling
-           powercfg -setacvalueindex $guid SUB_PROCESSOR PERFINCTHRESHOLD 100
-           powercfg -setacvalueindex $guid SUB_PROCESSOR PERFDECTHRESHOLD 100
-           
-           powercfg -setactive $guid
-           Write-Host "CPU set to maximum performance mode"
-       } catch {
-           Write-Host "Could not modify CPU settings, using alternative approach..."
-       }
-       
-       # Enhanced pagefile for maximum performance
-       try {
-           $cs = Get-CimInstance -ClassName Win32_ComputerSystem
-           if ($cs.AutomaticManagedPagefile) {
-               Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile=$false}
-           }
-           
-           Get-CimInstance -ClassName Win32_PageFileSetting | Remove-CimInstance -ErrorAction SilentlyContinue
-           
-           # Larger pagefile for better performance
-           New-CimInstance -ClassName Win32_PageFileSetting -Property @{
-               Name = "C:\pagefile.sys"
-               InitialSize = 8192  # 8GB
-               MaximumSize = 16384  # 16GB
-           } -ErrorAction SilentlyContinue
-           Write-Host "Configured large pagefile for maximum performance"
-       } catch {
-           Write-Host "Could not configure pagefile, using system defaults..."
-       }
-       
-       # Optimize system for maximum performance
-       try {
-           # Set visual effects to maximum performance
-           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 3
-           
-           # Maximize system responsiveness
-           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 38
-           
-           # Disable CPU throttling in registry
-           Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerSettings\54533251-82be-4824-96c1-47b60b740d00\bc5038f7-23e0-4960-96da-33abaf5935ec" -Name "ValueMax" -Value 0
-           
-           Write-Host "Applied maximum performance registry settings"
-       } catch {
-           Write-Host "Could not modify some registry settings"
-       }
-       
-       # Set current process to highest priority
-       [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass = 'RealTime'
-  
-   - name: Enable Advanced Visual Effects and Animations
-     run: |
-       # Enable all visual effects and animations for better RDP experience
-       try {
-           # Enable visual effects (opposite of performance mode for better user experience)
-           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 1
-           
-           # Enable specific visual effects
-           $visualEffectsPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-           Set-ItemProperty -Path $visualEffectsPath -Name "ListviewAlphaSelect" -Value 1 -ErrorAction SilentlyContinue
-           Set-ItemProperty -Path $visualEffectsPath -Name "TaskbarAnimations" -Value 1 -ErrorAction SilentlyContinue
-           Set-ItemProperty -Path $visualEffectsPath -Name "ListviewShadow" -Value 1 -ErrorAction SilentlyContinue
-           
-           # Enable mouse animations and effects
-           Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name "MouseTrails" -Value 5 -ErrorAction SilentlyContinue
-           Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name "MouseSensitivity" -Value 10 -ErrorAction SilentlyContinue
-           
-           # Enable window animations
-           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop\WindowMetrics" -Name "MinAnimate" -Value 1 -ErrorAction SilentlyContinue
-           
-           # Enable drag and drop animations
-           Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "DragFullWindows" -Value 1 -ErrorAction SilentlyContinue
-           
-           # Enable smooth scrolling
-           Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "SmoothScroll" -Value 1 -ErrorAction SilentlyContinue
-           
-           Write-Host "Enabled advanced visual effects and animations"
-       } catch {
-           Write-Host "Could not enable all visual effects"
-       }
-  
-   - name: Create Maximum CPU Utilization Tasks
-     run: |
-       # Create more aggressive CPU-intensive background processes
-       $cpuCores = (Get-WmiObject -Class Win32_ComputerSystem).NumberOfLogicalProcessors
-       $maxJobs = $cpuCores * 2  # Double the number of cores for maximum utilization
-       
-       for ($i = 1; $i -le $maxJobs; $i++) {
-           Start-Job -ScriptBlock {
-               # More intensive CPU operations
-               while ($true) {
-                   $result = 0
-                   # Increased iterations for more CPU load
-                   for ($j = 1; $j -le 5000000; $j++) {
-                       $result += [Math]::Sqrt($j) * [Math]::Sin($j) * [Math]::Cos($j) * [Math]::Tan($j)
-                       # Add more complex calculations
-                       $result += [Math]::Pow($j % 100, 2) + [Math]::Log($j + 1)
-                   }
-                   # Minimal sleep to maintain maximum CPU usage
-                   Start-Sleep -Milliseconds 1
-               }
-           } -Name "MaxCPULoad$i"
-       }
-       
-       # Additional prime number calculation for maximum CPU stress
-       Start-Job -ScriptBlock {
-           while ($true) {
-               $primes = @()
-               for ($n = 2; $n -le 100000; $n++) {
-                   $isPrime = $true
-                   for ($i = 2; $i -le [Math]::Sqrt($n); $i++) {
-                       if ($n % $i -eq 0) {
-                           $isPrime = $false
-                           break
-                       }
-                   }
-                   if ($isPrime) { $primes += $n }
-               }
-               Start-Sleep -Milliseconds 10
-           }
-       } -Name "PrimeCalculation"
-       
-       Write-Host "Started $maxJobs CPU-intensive jobs plus prime calculation"
-  
-   - name: Create Aggressive Memory and Disk Usage
-     run: |
-       # Enhanced memory usage
-       Start-Job -ScriptBlock {
-           $arrays = @()
-           $maxArrays = 25  # Increased array count
-           while ($true) {
-               try {
-                   # Larger arrays for maximum memory usage
-                   $array = New-Object byte[] (75MB)
-                   $arrays += $array
-                   
-                   # Fill array with data to ensure actual memory usage
-                   for ($i = 0; $i -lt $array.Length; $i += 1000) {
-                       $array[$i] = [byte]($i % 256)
-                   }
-                   
-                   if ($arrays.Count -gt $maxArrays) {
-                       $arrays = $arrays[10..$($maxArrays-1)]
-                       [System.GC]::Collect()
-                       [System.GC]::WaitForPendingFinalizers()
-                       [System.GC]::Collect()
-                   }
-                   Start-Sleep -Seconds 1
-               } catch {
-                   [System.GC]::Collect()
-                   Start-Sleep -Seconds 5
-               }
-           }
-       } -Name "MaxMemoryLoad"
-       
-       # Enhanced disk I/O
-       Start-Job -ScriptBlock {
-           $counter = 0
-           $tempDir = "$env:TEMP\maxdiskload"
-           New-Item -Path $tempDir -ItemType Directory -Force -ErrorAction SilentlyContinue
-           
-           while ($true) {
-               try {
-                   # Multiple file operations simultaneously
-                   for ($i = 1; $i -le 5; $i++) {
-                       $fileName = "$tempDir\temp_file_$counter`_$i.tmp"
-                       $data = [byte[]]::new(40MB)
-                       # Fill with random data for more realistic I/O
-                       (New-Object Random).NextBytes($data)
-                       [System.IO.File]::WriteAllBytes($fileName, $data)
-                       
-                       # Read and verify
-                       $readData = [System.IO.File]::ReadAllBytes($fileName)
-                       Remove-Item $fileName -Force -ErrorAction SilentlyContinue
-                   }
-                   
-                   $counter++
-                   if ($counter -gt 100) {
-                       $counter = 0
-                       Get-ChildItem $tempDir -File | Remove-Item -Force -ErrorAction SilentlyContinue
-                   }
-                   Start-Sleep -Milliseconds 100
-               } catch {
-                   Start-Sleep -Seconds 2
-               }
-           }
-       } -Name "MaxDiskIOLoad"
-       
-       Write-Host "Started maximum memory and disk I/O intensive jobs"
-  
-   - name: Download and Install Playit Agent
-     run: |
-       Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-       Start-Sleep -Seconds 5
-  
-   - name: Configure High-Performance RDP with Visual Enhancements
-     run: |
-       # Enable Remote Desktop with maximum performance settings
-       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-       Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-       
-       # Enable Network Level Authentication
-       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
-       
-       # Maximize RDP performance and connections
-       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxInstanceCount" -Value 50
-       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxConnectionTime" -Value 0
-       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxIdleTime" -Value 0
-       
-       # Enable high-quality RDP experience
-       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "ColorDepth" -Value 4  # 32-bit color
-       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableWallpaper" -Value 0  # Enable wallpaper
-       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableFullWindowDrag" -Value 0  # Enable full window drag
-       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableMenuAnims" -Value 0  # Enable menu animations
-       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableTheming" -Value 0  # Enable themes
-       
-       # Enable font smoothing
-       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableFontSmoothing" -Value 0
-       
-       # Enable desktop composition
-       Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableComposition" -Value 0
-       
-       Write-Host "Configured high-performance RDP with visual enhancements"
-  
-   - name: Set RDP Password and Configure User
-     shell: powershell
-     run: |
-       $password = ConvertTo-SecureString "P@ssword123" -AsPlainText -Force
-       if (-not (Get-LocalUser -Name "runneradmin" -ErrorAction SilentlyContinue)) {
-         Write-Host "Creating user 'runneradmin'..."
-         New-LocalUser -Name "runneradmin" -Password $password -FullName "GitHub Runner Admin" -Description "Admin account for RDP access"
-         Add-LocalGroupMember -Group "Administrators" -Member "runneradmin"
-         Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin"
-       }
-       else {
-         Write-Host "User 'runneradmin' already exists. Updating password..."
-         Set-LocalUser -Name "runneradmin" -Password $password
-       }
-  
-   - name: Start Playit Agent with Maximum Priority
-     env:
-       PLAYIT_AUTH_KEY: ${{ secrets.PL }}
-     run: |
-       # Start the Playit Agent with maximum priority
-       $process = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret $env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
-       # Set highest priority to Playit process
-       $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::RealTime
-       $process.ProcessorAffinity = [IntPtr]::new([Math]::Pow(2, [Environment]::ProcessorCount) - 1)  # Use all CPU cores
-       Start-Sleep -Seconds 5
-  
-   - name: Enable Animation Services and Effects
-     run: |
-       # Start animation and visual effect services
-       try {
-           # Enable Windows Animation services
-           Start-Service -Name "Themes" -ErrorAction SilentlyContinue
-           Set-Service -Name "Themes" -StartupType Automatic -ErrorAction SilentlyContinue
-           
-           # Enable Desktop Window Manager for animations
-           Start-Service -Name "UxSms" -ErrorAction SilentlyContinue
-           Set-Service -Name "UxSms" -StartupType Automatic -ErrorAction SilentlyContinue
-           
-           # Start background visual effects job
-           Start-Job -ScriptBlock {
-               try {
-                   Add-Type -AssemblyName System.Windows.Forms
-                   Add-Type -AssemblyName System.Drawing
-                   
-                   # Create animated cursor effects simulation
-                   while ($true) {
-                       $random = New-Object Random
-                       $x = $random.Next(0, 1920)
-                       $y = $random.Next(0, 1080)
-                       
-                       # Simulate mouse activity for visual effects
-                       [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point($x, $y)
-                       Start-Sleep -Milliseconds 100
-                   }
-               } catch {
-                   # Fallback animation simulation
-                   while ($true) {
-                       Write-Host "Visual Effects Active - $(Get-Date)"
-                       Start-Sleep -Seconds 30
-                   }
-               }
-           } -Name "VisualEffects"
-           
-           Write-Host "Started visual effects and animation services"
-       } catch {
-           Write-Host "Could not start all animation services"
-       }
-  
-   - name: Monitor Maximum Resource Usage
-     run: |
-       Write-Host "=== Maximum System Resource Usage ==="
-       
-       # Display top CPU consuming processes
-       Get-Process | Sort-Object CPU -Descending | Select-Object -First 15 | Format-Table Name, CPU, WorkingSet, PagedMemorySize, PriorityClass -AutoSize
-       
-       # Enhanced memory usage display
-       $memory = Get-WmiObject -Class Win32_OperatingSystem
-       $totalMemory = [math]::Round($memory.TotalVisibleMemorySize / 1KB, 2)
-       $freeMemory = [math]::Round($memory.FreePhysicalMemory / 1KB, 2)
-       $usedMemory = $totalMemory - $freeMemory
-       $memoryPercent = [math]::Round(($usedMemory / $totalMemory) * 100, 1)
-       Write-Host "Memory Usage: $usedMemory GB / $totalMemory GB ($memoryPercent%)"
-       
-       # Enhanced CPU usage display
-       $cpuInfo = Get-WmiObject -Class Win32_Processor
-       $avgCpu = ($cpuInfo | Measure-Object -Property LoadPercentage -Average).Average
-       Write-Host "Average CPU Usage: $avgCpu%"
-       Write-Host "CPU Cores: $($cpuInfo.NumberOfLogicalProcessors)"
-       Write-Host "CPU Max Clock Speed: $($cpuInfo.MaxClockSpeed) MHz"
-       
-       # Enhanced disk usage display
-       Get-WmiObject -Class Win32_LogicalDisk | Where-Object {$_.DriveType -eq 3} | ForEach-Object {
-           $size = [math]::Round($_.Size / 1GB, 2)
-           $free = [math]::Round($_.FreeSpace / 1GB, 2)
-           $used = $size - $free
-           $diskPercent = [math]::Round(($used / $size) * 100, 1)
-           Write-Host "Disk $($_.DeviceID) Usage: $used GB / $size GB ($diskPercent%)"
-       }
-       
-       # Show active background jobs
-       Write-Host "Active Background Jobs:"
-       Get-Job | Format-Table Name, State, HasMoreData -AutoSize
-  
-   - name: Keep Runner Alive with Maximum Performance and Visual Effects
-     run: |
-       Write-Host "Maximum Performance RDP Tunnel Active with Visual Animations..."
-       Write-Host "All CPU cores at maximum utilization"
-       Write-Host "Visual effects and animations enabled"
-       Write-Host "Background processes running at maximum intensity"
-       
-       # Keep session alive for 6 hours with continuous maximum performance
-       $endTime = (Get-Date).AddHours(6)
-       $lastResourceCheck = Get-Date
-       
-       while ((Get-Date) -lt $endTime) {
-           # Continuous CPU-intensive operations in main thread
-           $intensiveOps = 1..10000 | ForEach-Object {
-               [Math]::Pow($_, 3) + [Math]::Sqrt($_) * [Math]::Sin($_) * [Math]::Cos($_)
-           }
-           
-           # Periodic resource monitoring
-           $currentTime = Get-Date
-           if (($currentTime - $lastResourceCheck).TotalMinutes -ge 15) {
-               Write-Host "=== Resource Check at $currentTime ==="
-               
-               # CPU usage
-               $cpu = Get-WmiObject -Class Win32_Processor | Measure-Object -Property LoadPercentage -Average
-               Write-Host "Current CPU Usage: $($cpu.Average)%"
-               
-               # Memory usage
-               $memory = Get-WmiObject -Class Win32_OperatingSystem
-               $usedMemoryGB = [math]::Round(($memory.TotalVisibleMemorySize - $memory.FreePhysicalMemory) / 1KB, 2)
-               Write-Host "Current Memory Usage: $usedMemoryGB GB"
-               
-               # Job status
-               $runningJobs = (Get-Job | Where-Object {$_.State -eq 'Running'}).Count
-               Write-Host "Running Background Jobs: $runningJobs"
-               
-               # Restart any failed jobs
-               Get-Job | Where-Object {$_.State -eq 'Failed'} | ForEach-Object {
-                   Write-Host "Restarting failed job: $($_.Name)"
-                   Remove-Job $_ -Force
-               }
-               
-               $lastResourceCheck = $currentTime
-           }
-           
-           Start-Sleep -Seconds 10
-       }
-       
-       Write-Host "Session completed after 6 hours of maximum performance utilization"
+  setup-optimized-rdp:
+    runs-on: windows-latest
+    steps:
+    - name: Check out the repository
+      uses: actions/checkout@v4
+    
+    - name: Optimize System Performance (Smart Approach)
+      run: |
+        Write-Host "Applying intelligent performance optimizations..."
+        
+        # Set to High Performance power scheme (not Ultimate which can cause instability)
+        powercfg -setactive SCHEME_MIN
+        
+        # Optimize power settings without breaking the system
+        powercfg -change standby-timeout-ac 0
+        powercfg -change hibernate-timeout-ac 0
+        powercfg -change disk-timeout-ac 0
+        powercfg -change monitor-timeout-ac 60  # Keep monitor active but allow timeout
+        
+        # Smart CPU optimization - maintain stability
+        try {
+            $guid = (powercfg -getactivescheme).Split()[3]
+            # Set reasonable CPU performance (95% min, 100% max for stability)
+            powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
+            powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 95
+            powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
+            powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 95
+            
+            # Optimize CPU parking (allow some cores to park for better thermal management)
+            powercfg -setacvalueindex $guid SUB_PROCESSOR CPMINCORES 50
+            powercfg -setdcvalueindex $guid SUB_PROCESSOR CPMINCORES 50
+            powercfg -setacvalueindex $guid SUB_PROCESSOR CPMAXCORES 100
+            powercfg -setdcvalueindex $guid SUB_PROCESSOR CPMAXCORES 100
+            
+            powercfg -setactive $guid
+            Write-Host "CPU optimized for high performance with stability"
+        } catch {
+            Write-Host "Using default CPU settings"
+        }
+        
+        # Optimize pagefile intelligently
+        try {
+            $cs = Get-CimInstance -ClassName Win32_ComputerSystem
+            $totalRAM = [math]::Round((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property capacity -Sum).sum / 1GB)
+            
+            if ($cs.AutomaticManagedPagefile) {
+                Set-CimInstance -InputObject $cs -Property @{AutomaticManagedPagefile=$false}
+            }
+            
+            Get-CimInstance -ClassName Win32_PageFileSetting | Remove-CimInstance -ErrorAction SilentlyContinue
+            
+            # Set pagefile to 1.5x RAM (optimal for most scenarios)
+            $pagefileSize = [math]::Max(2048, $totalRAM * 1024 * 1.5)
+            New-CimInstance -ClassName Win32_PageFileSetting -Property @{
+                Name = "C:\pagefile.sys"
+                InitialSize = $pagefileSize
+                MaximumSize = $pagefileSize
+            } -ErrorAction SilentlyContinue
+            Write-Host "Configured optimal pagefile: $([math]::Round($pagefileSize/1024, 1))GB"
+        } catch {
+            Write-Host "Using system default pagefile"
+        }
+    
+    - name: Optimize Visual Performance for RDP
+      run: |
+        Write-Host "Optimizing visual performance for remote desktop..."
+        
+        try {
+            # Optimize for performance while keeping essential visual elements
+            Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -ErrorAction SilentlyContinue
+            
+            # Disable resource-intensive visual effects
+            $visualPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+            Set-ItemProperty -Path $visualPath -Name "ListviewAlphaSelect" -Value 0 -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $visualPath -Name "TaskbarAnimations" -Value 0 -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $visualPath -Name "ListviewShadow" -Value 0 -ErrorAction SilentlyContinue
+            
+            # Optimize desktop for performance
+            Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "DragFullWindows" -Value 0 -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value 0 -ErrorAction SilentlyContinue
+            
+            # Optimize system responsiveness
+            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -ErrorAction SilentlyContinue
+            
+            Write-Host "Visual performance optimized for RDP"
+        } catch {
+            Write-Host "Some visual optimizations could not be applied"
+        }
+    
+    - name: Clean Up System Resources
+      run: |
+        Write-Host "Cleaning up system to free resources..."
+        
+        # Stop unnecessary services that consume resources
+        $servicesToStop = @(
+            "DiagTrack",      # Diagnostics Tracking Service
+            "dmwappushservice", # Device Management Wireless Application Protocol
+            "MapsBroker",     # Downloaded Maps Manager
+            "lfsvc",          # Geolocation Service
+            "SharedAccess"    # Internet Connection Sharing (if not needed)
+        )
+        
+        foreach ($service in $servicesToStop) {
+            try {
+                $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
+                if ($svc -and $svc.Status -eq "Running") {
+                    Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+                    Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
+                    Write-Host "Stopped and disabled service: $service"
+                }
+            } catch {
+                # Service might not exist or be protected
+            }
+        }
+        
+        # Clean temporary files
+        try {
+            Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item "$env:WINDIR\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "Cleaned temporary files"
+        } catch {
+            Write-Host "Could not clean all temporary files"
+        }
+        
+        # Force garbage collection
+        [System.GC]::Collect()
+        [System.GC]::WaitForPendingFinalizers()
+        [System.GC]::Collect()
+    
+    - name: Download and Install Playit Agent
+      run: |
+        Write-Host "Downloading Playit Agent..."
+        try {
+            Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe" -UseBasicParsing
+            Write-Host "Playit Agent downloaded successfully"
+        } catch {
+            Write-Host "Error downloading Playit Agent: $($_.Exception.Message)"
+            exit 1
+        }
+    
+    - name: Configure Optimized RDP Settings
+      run: |
+        Write-Host "Configuring optimized RDP settings..."
+        
+        # Enable Remote Desktop
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        
+        # Enable Network Level Authentication for security
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
+        
+        # Optimize RDP performance settings
+        $rdpPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
+        
+        # Set reasonable connection limits
+        Set-ItemProperty -Path $rdpPath -Name "MaxInstanceCount" -Value 10 -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $rdpPath -Name "MaxConnectionTime" -Value 0 -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $rdpPath -Name "MaxIdleTime" -Value 0 -ErrorAction SilentlyContinue
+        
+        # Optimize RDP visual settings for performance
+        Set-ItemProperty -Path $rdpPath -Name "ColorDepth" -Value 3 -ErrorAction SilentlyContinue  # 24-bit color (good balance)
+        Set-ItemProperty -Path $rdpPath -Name "fDisableWallpaper" -Value 1 -ErrorAction SilentlyContinue  # Disable wallpaper
+        Set-ItemProperty -Path $rdpPath -Name "fDisableFullWindowDrag" -Value 1 -ErrorAction SilentlyContinue  # Disable full window drag
+        Set-ItemProperty -Path $rdpPath -Name "fDisableMenuAnims" -Value 1 -ErrorAction SilentlyContinue  # Disable menu animations
+        Set-ItemProperty -Path $rdpPath -Name "fDisableTheming" -Value 0 -ErrorAction SilentlyContinue  # Keep themes (minimal impact)
+        Set-ItemProperty -Path $rdpPath -Name "fDisableFontSmoothing" -Value 1 -ErrorAction SilentlyContinue  # Disable font smoothing
+        Set-ItemProperty -Path $rdpPath -Name "fDisableComposition" -Value 1 -ErrorAction SilentlyContinue  # Disable desktop composition
+        
+        # Enable bitmap caching for better performance
+        Set-ItemProperty -Path $rdpPath -Name "fEnableBitmapCache" -Value 1 -ErrorAction SilentlyContinue
+        
+        Write-Host "RDP configured for optimal performance"
+    
+    - name: Set RDP User Account
+      run: |
+        Write-Host "Configuring RDP user account..."
+        $password = ConvertTo-SecureString "P@ssword123!" -AsPlainText -Force
+        
+        try {
+            if (-not (Get-LocalUser -Name "rdpuser" -ErrorAction SilentlyContinue)) {
+                Write-Host "Creating optimized RDP user..."
+                New-LocalUser -Name "rdpuser" -Password $password -FullName "RDP User" -Description "Optimized RDP access account" -PasswordNeverExpires
+                Add-LocalGroupMember -Group "Remote Desktop Users" -Member "rdpuser"
+                Write-Host "RDP user created successfully"
+            } else {
+                Write-Host "RDP user already exists, updating password..."
+                Set-LocalUser -Name "rdpuser" -Password $password
+            }
+        } catch {
+            Write-Host "Error creating RDP user: $($_.Exception.Message)"
+        }
+    
+    - name: Start Playit Agent
+      env:
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+      run: |
+        Write-Host "Starting Playit Agent..."
+        
+        if (-not $env:PLAYIT_AUTH_KEY) {
+            Write-Host "Error: PLAYIT_AUTH_KEY secret not set"
+            exit 1
+        }
+        
+        try {
+            # Start Playit Agent with normal priority (RealTime can cause system instability)
+            $process = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "$env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
+            $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+            
+            Write-Host "Playit Agent started successfully (PID: $($process.Id))"
+            
+            # Wait a moment for the agent to initialize
+            Start-Sleep -Seconds 10
+            
+            # Check if process is still running
+            if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
+                Write-Host "Playit Agent is running and stable"
+            } else {
+                Write-Host "Warning: Playit Agent may have crashed"
+            }
+        } catch {
+            Write-Host "Error starting Playit Agent: $($_.Exception.Message)"
+            exit 1
+        }
+    
+    - name: System Performance Monitor
+      run: |
+        Write-Host "=== Optimized System Performance Status ==="
+        
+        # CPU Information
+        $cpu = Get-WmiObject -Class Win32_Processor
+        Write-Host "CPU: $($cpu.Name)"
+        Write-Host "CPU Cores: $($cpu.NumberOfLogicalProcessors)"
+        Write-Host "CPU Speed: $($cpu.MaxClockSpeed) MHz"
+        
+        # Memory Information
+        $memory = Get-WmiObject -Class Win32_OperatingSystem
+        $totalMemoryGB = [math]::Round($memory.TotalVisibleMemorySize / 1MB, 2)
+        $freeMemoryGB = [math]::Round($memory.FreePhysicalMemory / 1MB, 2)
+        $usedMemoryGB = $totalMemoryGB - $freeMemoryGB
+        $memoryPercent = [math]::Round(($usedMemoryGB / $totalMemoryGB) * 100, 1)
+        Write-Host "Memory: $usedMemoryGB GB / $totalMemoryGB GB ($memoryPercent% used)"
+        
+        # Disk Information
+        $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
+        $diskSizeGB = [math]::Round($disk.Size / 1GB, 2)
+        $diskFreeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+        $diskUsedGB = $diskSizeGB - $diskFreeGB
+        $diskPercent = [math]::Round(($diskUsedGB / $diskSizeGB) * 100, 1)
+        Write-Host "Disk C: $diskUsedGB GB / $diskSizeGB GB ($diskPercent% used)"
+        
+        # Network adapters
+        $adapters = Get-WmiObject -Class Win32_NetworkAdapter | Where-Object {$_.NetEnabled -eq $true}
+        Write-Host "Active Network Adapters: $($adapters.Count)"
+        
+        # Current power scheme
+        $powerScheme = powercfg -getactivescheme
+        Write-Host "Power Scheme: $($powerScheme.Split()[3,4,5] -join ' ')"
+        
+        Write-Host "=== System Optimization Complete ==="
+    
+    - name: Keep Optimized Session Alive
+      run: |
+        Write-Host "Optimized RDP tunnel is now active!"
+        Write-Host "Connection Details:"
+        Write-Host "- Username: rdpuser"
+        Write-Host "- Password: P@ssword123!"
+        Write-Host "- Session optimized for maximum performance"
+        Write-Host "- Resource usage minimized for better responsiveness"
+        Write-Host ""
+        Write-Host "The session will remain active for 6 hours..."
+        
+        $endTime = (Get-Date).AddHours(6)
+        $checkInterval = 300  # 5 minutes
+        $lastCheck = Get-Date
+        
+        while ((Get-Date) -lt $endTime) {
+            $currentTime = Get-Date
+            $remainingTime = $endTime - $currentTime
+            
+            # Periodic system health check
+            if (($currentTime - $lastCheck).TotalSeconds -ge $checkInterval) {
+                Write-Host "=== Health Check at $($currentTime.ToString('HH:mm:ss')) ==="
+                Write-Host "Time remaining: $($remainingTime.Hours)h $($remainingTime.Minutes)m"
+                
+                # Check Playit process
+                $playitProcess = Get-Process -Name "playit*" -ErrorAction SilentlyContinue
+                if ($playitProcess) {
+                    Write-Host "✓ Playit Agent running (PID: $($playitProcess.Id))"
+                } else {
+                    Write-Host "⚠ Playit Agent not found - attempting restart..."
+                    try {
+                        Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "$env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
+                    } catch {
+                        Write-Host "Failed to restart Playit Agent"
+                    }
+                }
+                
+                # Quick resource check
+                $mem = Get-WmiObject -Class Win32_OperatingSystem
+                $memUsedPercent = [math]::Round((($mem.TotalVisibleMemorySize - $mem.FreePhysicalMemory) / $mem.TotalVisibleMemorySize) * 100, 1)
+                Write-Host "✓ Memory usage: $memUsedPercent%"
+                
+                $lastCheck = $currentTime
+            }
+            
+            # Light system activity to prevent sleep (without excessive CPU usage)
+            Start-Sleep -Seconds 30
+        }
+        
+        Write-Host "Session completed successfully after 6 hours"
