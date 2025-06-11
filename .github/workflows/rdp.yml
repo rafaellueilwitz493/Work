@@ -141,13 +141,12 @@ jobs:
       run: |
         Write-Host "Performing AGGRESSIVE resource cleanup..."
         
-        # Stop and disable ALL non-essential services
+        # Stop and disable non-essential services (safe list only)
         $servicesToDisable = @(
             "DiagTrack",           # Diagnostics Tracking Service
             "dmwappushservice",    # Device Management WAP
             "MapsBroker",          # Downloaded Maps Manager
             "lfsvc",               # Geolocation Service
-            "SharedAccess",        # Internet Connection Sharing
             "TrkWks",              # Distributed Link Tracking Client
             "WbioSrvc",            # Windows Biometric Service
             "WMPNetworkSvc",       # Windows Media Player Network Service
@@ -157,7 +156,6 @@ jobs:
             "XboxNetApiSvc",       # Xbox Live Networking
             "Fax",                 # Fax Service
             "WSearch",             # Windows Search
-            "Spooler",             # Print Spooler (if no printing needed)
             "Themes",              # Themes service
             "TabletInputService",  # Tablet PC Input Service
             "SensrSvc",            # Sensor Monitoring Service
@@ -169,20 +167,23 @@ jobs:
             "WiaRpc"               # Still Image Service
         )
         
+        $servicesDisabled = 0
         foreach ($service in $servicesToDisable) {
             try {
                 $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
-                if ($svc) {
+                if ($svc -and $svc.CanStop) {
                     if ($svc.Status -eq "Running") {
                         Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
                     }
                     Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
-                    Write-Host "Disabled service: $service"
+                    $servicesDisabled++
+                    Write-Host "✓ Disabled service: $service"
                 }
             } catch {
-                # Service might not exist or be protected
+                Write-Host "⚠ Could not disable service: $service (protected)"
             }
         }
+        Write-Host "Services optimization: $servicesDisabled services disabled"
         
         # Aggressive temporary file cleanup
         try {
@@ -195,27 +196,42 @@ jobs:
                 "$env:LOCALAPPDATA\Temp\*"
             )
             
+            $cleanedPaths = 0
             foreach ($path in $paths) {
-                Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue
+                try {
+                    $itemsRemoved = (Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue -PassThru).Count
+                    if ($itemsRemoved -gt 0) { $cleanedPaths++ }
+                } catch {
+                    # Skip protected files
+                }
             }
-            Write-Host "Aggressive cleanup completed"
+            Write-Host "✓ Cleanup completed: $cleanedPaths locations cleaned"
         } catch {
-            Write-Host "Some cleanup operations could not be completed"
+            Write-Host "⚠ Some cleanup operations could not be completed"
         }
         
-        # Clear event logs to free memory
+        # Clear safe event logs only
         try {
-            Get-WinEvent -ListLog * | ForEach-Object { wevtutil cl $_.LogName }
-            Write-Host "Event logs cleared"
+            $clearedLogs = 0
+            $safeLogs = @("Application", "System", "Setup")
+            foreach ($logName in $safeLogs) {
+                try {
+                    wevtutil cl $logName 2>$null
+                    $clearedLogs++
+                } catch {
+                    # Skip protected logs
+                }
+            }
+            Write-Host "✓ Event logs cleared: $clearedLogs logs processed"
         } catch {
-            Write-Host "Could not clear all event logs"
+            Write-Host "⚠ Could not clear some event logs"
         }
         
         # Force aggressive garbage collection
         [System.GC]::Collect()
         [System.GC]::WaitForPendingFinalizers()
         [System.GC]::Collect()
-        [System.GC]::WaitForFullGCComplete()
+        Write-Host "✓ Memory garbage collection completed"
     
     - name: Download and Install Playit Agent
       run: |
@@ -390,37 +406,73 @@ jobs:
       run: |
         Write-Host "=== MAXIMUM PERFORMANCE SYSTEM STATUS ==="
         
-        # CPU Information
-        $cpu = Get-WmiObject -Class Win32_Processor
-        Write-Host "🔥 CPU: $($cpu.Name)"
-        Write-Host "🔥 CPU Cores: $($cpu.NumberOfLogicalProcessors) (ALL ACTIVE - NO PARKING)"
-        Write-Host "🔥 CPU Speed: $($cpu.MaxClockSpeed) MHz (MAXIMUM)"
-        Write-Host "🔥 CPU Load: $($cpu.LoadPercentage)%"
+        try {
+            # CPU Information
+            $cpu = Get-CimInstance -ClassName Win32_Processor -ErrorAction SilentlyContinue
+            if ($cpu) {
+                Write-Host "🔥 CPU: $($cpu.Name)"
+                Write-Host "🔥 CPU Cores: $($cpu.NumberOfLogicalProcessors) (ALL ACTIVE - NO PARKING)"
+                Write-Host "🔥 CPU Speed: $($cpu.MaxClockSpeed) MHz (MAXIMUM)"
+            } else {
+                Write-Host "🔥 CPU: Information unavailable"
+            }
+        } catch {
+            Write-Host "🔥 CPU: Status check failed"
+        }
         
-        # Memory Information
-        $memory = Get-WmiObject -Class Win32_OperatingSystem
-        $totalMemoryGB = [math]::Round($memory.TotalVisibleMemorySize / 1MB, 2)
-        $freeMemoryGB = [math]::Round($memory.FreePhysicalMemory / 1MB, 2)
-        $usedMemoryGB = $totalMemoryGB - $freeMemoryGB
-        $memoryPercent = [math]::Round(($usedMemoryGB / $totalMemoryGB) * 100, 1)
-        Write-Host "🔥 Memory: $usedMemoryGB GB / $totalMemoryGB GB ($memoryPercent% used) - OPTIMIZED"
+        try {
+            # Memory Information
+            $memory = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction SilentlyContinue
+            if ($memory) {
+                $totalMemoryGB = [math]::Round($memory.TotalVisibleMemorySize / 1MB, 2)
+                $freeMemoryGB = [math]::Round($memory.FreePhysicalMemory / 1MB, 2)
+                $usedMemoryGB = $totalMemoryGB - $freeMemoryGB
+                $memoryPercent = [math]::Round(($usedMemoryGB / $totalMemoryGB) * 100, 1)
+                Write-Host "🔥 Memory: $usedMemoryGB GB / $totalMemoryGB GB ($memoryPercent% used) - OPTIMIZED"
+            } else {
+                Write-Host "🔥 Memory: Information unavailable"
+            }
+        } catch {
+            Write-Host "🔥 Memory: Status check failed"
+        }
         
-        # Disk Information
-        $disk = Get-WmiObject -Class Win32_LogicalDisk -Filter "DeviceID='C:'"
-        $diskSizeGB = [math]::Round($disk.Size / 1GB, 2)
-        $diskFreeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-        $diskUsedGB = $diskSizeGB - $diskFreeGB
-        $diskPercent = [math]::Round(($diskUsedGB / $diskSizeGB) * 100, 1)
-        Write-Host "🔥 Disk C: $diskUsedGB GB / $diskSizeGB GB ($diskPercent% used) - NO INDEXING"
+        try {
+            # Disk Information
+            $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction SilentlyContinue
+            if ($disk) {
+                $diskSizeGB = [math]::Round($disk.Size / 1GB, 2)
+                $diskFreeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+                $diskUsedGB = $diskSizeGB - $diskFreeGB
+                $diskPercent = [math]::Round(($diskUsedGB / $diskSizeGB) * 100, 1)
+                Write-Host "🔥 Disk C: $diskUsedGB GB / $diskSizeGB GB ($diskPercent% used) - NO INDEXING"
+            } else {
+                Write-Host "🔥 Disk: Information unavailable"
+            }
+        } catch {
+            Write-Host "🔥 Disk: Status check failed"
+        }
         
-        # Power scheme
-        $powerScheme = powercfg -getactivescheme
-        Write-Host "🔥 Power Scheme: MAXIMUM PERFORMANCE (No throttling, no parking)"
+        try {
+            # Power scheme
+            $powerScheme = powercfg -getactivescheme 2>$null
+            Write-Host "🔥 Power Scheme: MAXIMUM PERFORMANCE (No throttling, no parking)"
+        } catch {
+            Write-Host "🔥 Power Scheme: Status check failed"
+        }
         
-        # Services status
-        $runningServices = (Get-Service | Where-Object {$_.Status -eq "Running"}).Count
-        $stoppedServices = (Get-Service | Where-Object {$_.Status -eq "Stopped"}).Count
-        Write-Host "🔥 Services: $runningServices running, $stoppedServices stopped (OPTIMIZED)"
+        try {
+            # Services status (safe check)
+            $services = Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike "*Mcp*" }
+            if ($services) {
+                $runningServices = ($services | Where-Object {$_.Status -eq "Running"}).Count
+                $stoppedServices = ($services | Where-Object {$_.Status -eq "Stopped"}).Count
+                Write-Host "🔥 Services: $runningServices running, $stoppedServices stopped (OPTIMIZED)"
+            } else {
+                Write-Host "🔥 Services: Status check completed"
+            }
+        } catch {
+            Write-Host "🔥 Services: Status check failed"
+        }
         
         Write-Host ""
         Write-Host "🚀 SYSTEM OPTIMIZATION STATUS: MAXIMUM PERFORMANCE ACHIEVED!"
