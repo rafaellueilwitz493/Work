@@ -266,7 +266,7 @@ jobs:
       run: |
         Write-Host "Optimized RDP tunnel is now active!"
         Write-Host "Connection Details:"
-        Write-Host "- Username: rdpuser"
+        Write-Host "- Username: runneradmin"
         Write-Host "- Password: P@ssword123!"
         Write-Host "- Session optimized for maximum performance"
         Write-Host "- Resource usage minimized for better responsiveness"
