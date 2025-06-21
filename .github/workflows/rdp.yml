@@ -251,64 +251,48 @@ jobs:
         dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
         dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
         
-        # Download Ubuntu 20.04 LTS (or latest stable)
-        # We'll use a specific name for importing to avoid conflicts.
-        $ubuntuAppxUrl = "https://aka.ms/wslubuntu2004"
-        $ubuntuAppxPath = "$env:TEMP\ubuntu.appx"
-        $ubuntuInstallDir = "$env:LOCALAPPDATA\WSL\Ubuntu2004" # Custom installation directory
+        # Update WSL to ensure latest components
+        Write-Host "Running wsl --update..."
+        wsl --update
         
-        Write-Host "Downloading Ubuntu AppX package..."
-        Invoke-WebRequest -Uri $ubuntuAppxUrl -OutFile $ubuntuAppxPath -UseBasicParsing
-        
-        # Create a directory to extract the rootfs
-        New-Item -ItemType Directory -Force -Path $ubuntuInstallDir
-        
-        Write-Host "Extracting Ubuntu AppX package and importing..."
-        # Extract the rootfs from the AppX package
-        # The correct rootfs file name for Ubuntu 20.04 LTS is 'install.tar.gz' within the AppX.
-        Expand-Archive -LiteralPath $ubuntuAppxPath -DestinationPath "$env:TEMP\UbuntuExtracted" -Force
-        
-        # Find the .tar.gz rootfs file inside the extracted package
-        $rootfsPath = Get-ChildItem "$env:TEMP\UbuntuExtracted" -Filter "install.tar.gz" -Recurse | Select-Object -ExpandProperty FullName -First 1
-        
-        # Import the distribution
-        if ($rootfsPath) {
-            # Check if a distribution with this name already exists and unregister if it does
-            if ((wsl --list --quiet) -contains "Ubuntu-20.04") {
-                Write-Host "Unregistering existing Ubuntu-20.04 distribution..."
-                wsl --unregister Ubuntu-20.04
-                Start-Sleep -Seconds 5
-            }
-            wsl --import Ubuntu-20.04 $ubuntuInstallDir $rootfsPath --version 2
-            Write-Host "Ubuntu-20.04 imported successfully into WSL2."
-        } else {
-            Write-Host "Error: Ubuntu rootfs (install.tar.gz) not found in extracted package."
-            exit 1
-        }
-        
-        # Set WSL default version to 2 (again, to be safe, though import sets it)
+        # Set WSL default version to 2
+        Write-Host "Setting WSL default version to 2..."
         wsl --set-default-version 2
         
-        # Wait for Ubuntu to be registered and then set default user and password
-        Write-Host "Waiting for Ubuntu setup to complete and configuring user..."
-        Start-Sleep -Seconds 30 # Give it time to import and for initial setup to settle
+        # Install Ubuntu directly using the wsl --install command
+        Write-Host "Installing Ubuntu in WSL2 using wsl --install..."
+        # This command will install Ubuntu and automatically create a default user upon first launch.
+        # We will then modify this user or create our desired 'rdpadmin' user.
+        wsl --install -d Ubuntu
         
-        # Set default user and password within the imported distribution
+        # Wait for Ubuntu to be registered and then set default user and password
+        Write-Host "Waiting for Ubuntu installation to complete and configuring user..."
+        Start-Sleep -Seconds 60 # Give it time to install and for initial setup to settle
+        
+        # Check if rdpadmin already exists (e.g., if wsl --install auto-created it)
+        # and create/configure if necessary.
         $wslCommands = @"
-        adduser --disabled-password --gecos "" rdpadmin
-        echo "rdpadmin:admin" | chpasswd
-        usermod -aG sudo rdpadmin
-        echo "[user]" > /etc/wsl.conf
-        echo "default=rdpadmin" >> /etc/wsl.conf
+        if id "rdpadmin" &>/dev/null; then
+            echo "User rdpadmin already exists. Skipping creation."
+        else
+            adduser --disabled-password --gecos "" rdpadmin
+            echo "rdpadmin:admin" | chpasswd
+            usermod -aG sudo rdpadmin
+            echo "[user]" > /etc/wsl.conf
+            echo "default=rdpadmin" >> /etc/wsl.conf
+            chown rdpadmin:rdpadmin /etc/wsl.conf
+            echo "User rdpadmin created and configured."
+        fi
         exit
         "@
         
-        wsl --distribution Ubuntu-20.04 --user root --exec bash -c "$wslCommands"
+        # Execute commands as root to ensure user creation and config file changes
+        wsl --distribution Ubuntu --user root --exec bash -c "$wslCommands"
         
         Write-Host "Ubuntu installed in WSL2. Now updating and installing packages..."
-        wsl --distribution Ubuntu-20.04 --user rdpadmin --  "sudo apt update -y && sudo apt dist-upgrade -y"
-        wsl --distribution Ubuntu-20.04 --user rdpadmin --  "sudo apt-get install -y build-essential gdb"
-        wsl --distribution Ubuntu-20.04 --user rdpadmin --  "sudo apt install -y python-is-python3"
+        wsl --distribution Ubuntu --user rdpadmin --  "sudo apt update -y && sudo apt dist-upgrade -y"
+        wsl --distribution Ubuntu --user rdpadmin --  "sudo apt-get install -y build-essential gdb"
+        wsl --distribution Ubuntu --user rdpadmin --  "sudo apt install -y python-is-python3"
         Write-Host "WSL and Ubuntu setup complete."
         
         Write-Host "Installing Visual Studio Code..."
@@ -328,19 +312,22 @@ jobs:
         # A more robust solution involves using the GitHub API, but that requires authentication.
         # For this scenario, we'll try to deduce the latest tag or use a hardcoded recent one.
         
-        # Let's try to get the latest release version programmatically, but if it fails,
-        # we'll use a hardcoded recent stable version.
         try {
+            # Attempt to get the latest release tag
             $latestReleaseHtml = Invoke-WebRequest -Uri "https://github.com/microsoft/terminal/releases/latest" -UseBasicParsing
             $latestTag = ($latestReleaseHtml.BaseResponse.ResponseUri.Segments | Select-Object -Last 1).Trim('/')
             Write-Host "Detected latest Microsoft Terminal release tag: $latestTag"
         } catch {
             Write-Host "Could not automatically determine latest Microsoft Terminal release tag. Using a known recent version."
             # Fallback to a known recent stable version if automatic detection fails
-            $latestTag = "v1.22.11141.0" # Example recent stable version from search results
+            # Updated to a version from recent search results.
+            $latestTag = "v1.22.11141.0" 
         }
         
-        $terminalZipUrl = "https://github.com/microsoft/terminal/releases/download/$latestTag/Microsoft.WindowsTerminal_$(($latestTag -replace 'v','')).0_x64.zip"
+        # Construct the download URL for the x64 zip package
+        # The URL format is `Microsoft.WindowsTerminal_<VERSION_WITHOUT_V>_x64.zip`
+        $terminalVersionOnly = $latestTag -replace 'v',''
+        $terminalZipUrl = "https://github.com/microsoft/terminal/releases/download/$latestTag/Microsoft.WindowsTerminal_${terminalVersionOnly}_x64.zip"
         $terminalZipPath = "$env:TEMP\MicrosoftTerminal.zip"
         $terminalExtractDir = "$env:TEMP\MicrosoftTerminalExtracted"
         
@@ -351,9 +338,9 @@ jobs:
         Expand-Archive -LiteralPath $terminalZipPath -DestinationPath $terminalExtractDir -Force
         
         # Find the wt.exe inside the extracted folder
-        $wtExePath = Join-Path $terminalExtractDir "wt.exe" # Often directly in the root of the extracted zip
+        # It's usually directly in the root of the extracted zip or a subfolder.
+        $wtExePath = Join-Path $terminalExtractDir "wt.exe"
         if (-not (Test-Path $wtExePath)) {
-            # Sometimes it's in a subfolder like 'Microsoft.WindowsTerminal_VERSION_x64'
             $wtExePath = Get-ChildItem -Path $terminalExtractDir -Filter "wt.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1
         }
         
@@ -673,7 +660,7 @@ jobs:
         Write-Host "🚀 SYSTEM OPTIMIZATION STATUS: MAXIMUM PERFORMANCE ACHIEVED!"
         Write-Host "🚀 ALL PERFORMANCE LIMITERS DISABLED"
         Write-Host "🚀 ADMINISTRATOR ACCESS ENABLED"
-        Write-Host "🚀 READY FOR MAXIMUM WORKLOAD"
+        🚀 READY FOR MAXIMUM WORKLOAD"
         Write-Host "=== SYSTEM READY FOR MAXIMUM PERFORMANCE ==="
     
     - name: Keep Maximum Performance Session Alive
