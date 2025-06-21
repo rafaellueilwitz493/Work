@@ -233,67 +233,6 @@ jobs:
         [System.GC]::Collect()
         Write-Host "✓ Memory garbage collection completed"
     
-    - name: Enable WSL Features
-      run: |
-        Write-Host "Enabling WSL and Virtual Machine Platform features..."
-        dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
-        dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
-        Write-Host "WSL features enabled."
-
-    - name: Update WSL and Set Default Version 2
-      run: |
-        Write-Host "Running wsl --update..."
-        wsl --update
-        Write-Host "Setting WSL default version to 2..."
-        wsl --set-default-version 2
-        Write-Host "WSL platform updated and configured for Version 2."
-
-    - name: Install and Configure Ubuntu in WSL2
-      run: |
-        Write-Host "Installing and configuring Ubuntu in WSL2..."
-        
-        # Unregister existing Ubuntu distribution if it exists to ensure a clean install
-        if ((wsl --list --quiet) -contains "Ubuntu") {
-            Write-Host "Unregistering existing Ubuntu distribution..."
-            wsl --unregister Ubuntu
-            Start-Sleep -Seconds 5 # Give it a moment to unregister
-        }
-        
-        # Install Ubuntu directly using the wsl --install command
-        Write-Host "Installing Ubuntu in WSL2 using wsl --install -d Ubuntu..."
-        # This command will install Ubuntu and automatically trigger initial setup.
-        wsl --install -d Ubuntu
-        
-        # Wait for Ubuntu to be registered and then set default user and password
-        Write-Host "Waiting for Ubuntu installation to complete and configuring user 'rdpadmin' with password 'admin'..."
-        Start-Sleep -Seconds 90 # Give it more time for initial installation and provisioning
-        
-        # Set default user and password within the newly installed distribution
-        # This will run even if wsl --install created a temporary user.
-        $wslCommands = @"
-        if id "rdpadmin" &>/dev/null; then
-            echo "User rdpadmin already exists."
-        else
-            adduser --disabled-password --gecos "" rdpadmin
-            echo "rdpadmin:admin" | chpasswd
-        fi
-        usermod -aG sudo rdpadmin
-        echo "[user]" > /etc/wsl.conf
-        echo "default=rdpadmin" >> /etc/wsl.conf
-        chown rdpadmin:rdpadmin /etc/wsl.conf
-        echo "User rdpadmin configured as default."
-        exit
-        "@
-        
-        # Execute commands as root to ensure user creation and config file changes
-        wsl --distribution Ubuntu --user root --exec bash -c "$wslCommands"
-        
-        Write-Host "Ubuntu installed in WSL2. Now updating and installing packages..."
-        wsl --distribution Ubuntu --user rdpadmin --  "sudo apt update -y && sudo apt dist-upgrade -y"
-        wsl --distribution Ubuntu --user rdpadmin --  "sudo apt-get install -y build-essential gdb"
-        wsl --distribution Ubuntu --user rdpadmin --  "sudo apt install -y python-is-python3"
-        Write-Host "WSL and Ubuntu setup complete."
-
     - name: Install Google Chrome, VS Code, and Microsoft Terminal
       run: |
         Write-Host "Configuring Google Chrome as default browser..."
@@ -670,8 +609,95 @@ jobs:
         Write-Host "🚀 SYSTEM OPTIMIZATION STATUS: MAXIMUM PERFORMANCE ACHIEVED!"
         Write-Host "🚀 ALL PERFORMANCE LIMITERS DISABLED"
         Write-Host "🚀 ADMINISTRATOR ACCESS ENABLED"
-        🚀 READY FOR MAXIMUM WORKLOAD"
+        Write-Host "🚀 READY FOR MAXIMUM WORKLOAD"
         Write-Host "=== SYSTEM READY FOR MAXIMUM PERFORMANCE ==="
+    
+    - name: WSL Ubuntu Installation and Configuration
+      run: |
+        Write-Host "Starting WSL Ubuntu Installation and Configuration..."
+        
+        # Enable WSL and Virtual Machine Platform features
+        Write-Host "Enabling WSL and Virtual Machine Platform features..."
+        dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+        dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+        Write-Host "WSL features enabled."
+        
+        # Update WSL to ensure latest components
+        Write-Host "Running wsl --update..."
+        wsl --update
+        Write-Host "Setting WSL default version to 2..."
+        wsl --set-default-version 2
+        Write-Host "WSL platform updated and configured for Version 2."
+
+        $ubuntuDistroName = "Ubuntu-RDP" # Use a specific name for clarity
+        $ubuntuInstallDir = "$env:LOCALAPPDATA\WSL\$ubuntuDistroName"
+        # Using a more direct and stable link for Ubuntu 20.04 base rootfs
+        $ubuntuRootfsUrl = "https://cloud-images.ubuntu.com/releases/20.04/release/ubuntu-20.04-server-cloudimg-amd64-wsl.rootfs.tar.gz"
+        $ubuntuRootfsPath = "$env:TEMP\ubuntu-20.04-server-cloudimg-amd64-wsl.rootfs.tar.gz"
+
+        # Unregister existing distribution if it exists to ensure a clean install
+        Write-Host "Checking for existing Ubuntu installations to unregister..."
+        if ((wsl --list --quiet) -contains $ubuntuDistroName) {
+            Write-Host "Unregistering existing $($ubuntuDistroName) distribution..."
+            wsl --unregister $ubuntuDistroName
+            Start-Sleep -Seconds 5 # Give it a moment to unregister
+        }
+        # Also unregister the default "Ubuntu" if it exists, to avoid conflicts with new import.
+        if ((wsl --list --quiet) -contains "Ubuntu") {
+            Write-Host "Unregistering default Ubuntu distribution..."
+            wsl --unregister Ubuntu
+            Start-Sleep -Seconds 5
+        }
+        
+        # Create installation directory
+        New-Item -ItemType Directory -Force -Path $ubuntuInstallDir
+        
+        Write-Host "Downloading Ubuntu rootfs from: $ubuntuRootfsUrl"
+        Invoke-WebRequest -Uri $ubuntuRootfsUrl -OutFile $ubuntuRootfsPath -UseBasicParsing
+        
+        Write-Host "Importing Ubuntu into WSL2 using wsl --import..."
+        # Import the distribution using the downloaded rootfs
+        wsl --import $ubuntuDistroName $ubuntuInstallDir $ubuntuRootfsPath --version 2
+        
+        # Set default user and password within the newly imported distribution
+        Write-Host "Waiting for Ubuntu to be fully imported and ready for configuration..."
+        Start-Sleep -Seconds 60 # Shorter sleep after import, but longer overall process.
+        
+        Write-Host "Configuring rdpadmin user in Ubuntu-RDP..."
+        $wslCommands = @"
+        # Check if rdpadmin exists, create if not
+        if ! id "rdpadmin" &>/dev/null; then
+            echo "Creating user rdpadmin..."
+            adduser --disabled-password --gecos "" rdpadmin
+            echo "rdpadmin:admin" | chpasswd
+        else
+            echo "User rdpadmin already exists."
+        fi
+        
+        # Add rdpadmin to sudo group
+        usermod -aG sudo rdpadmin
+        
+        # Configure default user in /etc/wsl.conf
+        echo "[user]" > /etc/wsl.conf
+        echo "default=rdpadmin" >> /etc/wsl.conf
+        chown rdpadmin:rdpadmin /etc/wsl.conf
+        
+        echo "User rdpadmin configured as default with sudo."
+        
+        # Update and install packages
+        echo "Updating and upgrading Ubuntu packages..."
+        apt update -y && apt dist-upgrade -y
+        apt-get install -y build-essential gdb
+        apt install -y python-is-python3
+        
+        echo "Ubuntu package setup complete."
+        exit
+        "@
+        
+        # Execute commands as root to ensure user creation and config file changes, and package installations
+        wsl --distribution $ubuntuDistroName --user root --exec bash -c "$wslCommands"
+        
+        Write-Host "WSL Ubuntu installation and setup complete."
     
     - name: Keep Maximum Performance Session Alive
       run: |
