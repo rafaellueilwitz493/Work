@@ -251,21 +251,17 @@ jobs:
         dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
         dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
         
+        # Install Ubuntu via WSL command
+        # This is more reliable in GitHub Actions environments.
+        Write-Host "Running wsl --install Ubuntu..."
+        wsl --install -d Ubuntu
+        
         # Set WSL default version to 2
         wsl --set-default-version 2
         
-        # Download Ubuntu 20.04 LTS (or latest stable)
-        Invoke-WebRequest -Uri "https://aka.ms/wslubuntu2004" -OutFile "$env:TEMP\ubuntu.appx" -UseBasicParsing
-        
-        # Install Ubuntu and configure user/password
-        # Note: This is an approximation as direct scripting of the user/password prompt can be tricky.
-        # For CI/CD environments, pre-provisioned WSL images or unattended installation scripts are usually used.
-        # This attempts to install silently and then configure.
-        Add-AppxPackage "$env:TEMP\ubuntu.appx"
-        
         # Wait for Ubuntu to be registered and then set default user and password
-        Write-Host "Waiting for Ubuntu installation to complete..."
-        Start-Sleep -Seconds 60 # Give it time to install
+        Write-Host "Waiting for Ubuntu installation to complete and setting up user..."
+        Start-Sleep -Seconds 60 # Give it time to install and for initial setup to settle
         
         # Launch Ubuntu once to trigger initial setup, then run commands
         # Using PowerShell here-string to pass multi-line commands to wsl
