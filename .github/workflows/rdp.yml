@@ -268,17 +268,17 @@ jobs:
         Start-Sleep -Seconds 60 # Give it time to install
         
         # Launch Ubuntu once to trigger initial setup, then run commands
-        # This is a common workaround for non-interactive WSL installs.
-        # We define the default user 'rdpadmin' and password 'admin' within the WSL environment.
-        # Note: The 'admin' password here is for the WSL Ubuntu user, not the Windows RDP user.
-        wsl --distribution Ubuntu --user root <<EOF
+        # Using PowerShell here-string to pass multi-line commands to wsl
+        $wslCommands = @"
         adduser --disabled-password --gecos "" rdpadmin
         echo "rdpadmin:admin" | chpasswd
         usermod -aG sudo rdpadmin
         echo "[user]" > /etc/wsl.conf
         echo "default=rdpadmin" >> /etc/wsl.conf
         exit
-        EOF
+        "@
+        
+        wsl --distribution Ubuntu --user root --exec bash -c "$wslCommands"
         
         Write-Host "Ubuntu installed in WSL2. Now updating and installing packages..."
         wsl --distribution Ubuntu --user rdpadmin --  "sudo apt update -y && sudo apt dist-upgrade -y"
