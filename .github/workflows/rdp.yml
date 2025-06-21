@@ -251,20 +251,49 @@ jobs:
         dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
         dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
         
-        # Install Ubuntu via WSL command
-        # This is more reliable in GitHub Actions environments.
-        Write-Host "Running wsl --install Ubuntu..."
-        wsl --install -d Ubuntu
+        # Download Ubuntu 20.04 LTS (or latest stable)
+        # We'll use a specific name for importing to avoid conflicts.
+        $ubuntuAppxUrl = "https://aka.ms/wslubuntu2004"
+        $ubuntuAppxPath = "$env:TEMP\ubuntu.appx"
+        $ubuntuInstallDir = "$env:LOCALAPPDATA\WSL\Ubuntu2004" # Custom installation directory
         
-        # Set WSL default version to 2
+        Write-Host "Downloading Ubuntu AppX package..."
+        Invoke-WebRequest -Uri $ubuntuAppxUrl -OutFile $ubuntuAppxPath -UseBasicParsing
+        
+        # Create a directory to extract the rootfs
+        New-Item -ItemType Directory -Force -Path $ubuntuInstallDir
+        
+        Write-Host "Extracting Ubuntu AppX package and importing..."
+        # Extract the rootfs from the AppX package
+        # The correct rootfs file name for Ubuntu 20.04 LTS is 'install.tar.gz' within the AppX.
+        Expand-Archive -LiteralPath $ubuntuAppxPath -DestinationPath "$env:TEMP\UbuntuExtracted" -Force
+        
+        # Find the .tar.gz rootfs file inside the extracted package
+        $rootfsPath = Get-ChildItem "$env:TEMP\UbuntuExtracted" -Filter "install.tar.gz" -Recurse | Select-Object -ExpandProperty FullName -First 1
+        
+        # Import the distribution
+        if ($rootfsPath) {
+            # Check if a distribution with this name already exists and unregister if it does
+            if ((wsl --list --quiet) -contains "Ubuntu-20.04") {
+                Write-Host "Unregistering existing Ubuntu-20.04 distribution..."
+                wsl --unregister Ubuntu-20.04
+                Start-Sleep -Seconds 5
+            }
+            wsl --import Ubuntu-20.04 $ubuntuInstallDir $rootfsPath --version 2
+            Write-Host "Ubuntu-20.04 imported successfully into WSL2."
+        } else {
+            Write-Host "Error: Ubuntu rootfs (install.tar.gz) not found in extracted package."
+            exit 1
+        }
+        
+        # Set WSL default version to 2 (again, to be safe, though import sets it)
         wsl --set-default-version 2
         
         # Wait for Ubuntu to be registered and then set default user and password
-        Write-Host "Waiting for Ubuntu installation to complete and setting up user..."
-        Start-Sleep -Seconds 60 # Give it time to install and for initial setup to settle
+        Write-Host "Waiting for Ubuntu setup to complete and configuring user..."
+        Start-Sleep -Seconds 30 # Give it time to import and for initial setup to settle
         
-        # Launch Ubuntu once to trigger initial setup, then run commands
-        # Using PowerShell here-string to pass multi-line commands to wsl
+        # Set default user and password within the imported distribution
         $wslCommands = @"
         adduser --disabled-password --gecos "" rdpadmin
         echo "rdpadmin:admin" | chpasswd
@@ -274,12 +303,12 @@ jobs:
         exit
         "@
         
-        wsl --distribution Ubuntu --user root --exec bash -c "$wslCommands"
+        wsl --distribution Ubuntu-20.04 --user root --exec bash -c "$wslCommands"
         
         Write-Host "Ubuntu installed in WSL2. Now updating and installing packages..."
-        wsl --distribution Ubuntu --user rdpadmin --  "sudo apt update -y && sudo apt dist-upgrade -y"
-        wsl --distribution Ubuntu --user rdpadmin --  "sudo apt-get install -y build-essential gdb"
-        wsl --distribution Ubuntu --user rdpadmin --  "sudo apt install -y python-is-python3"
+        wsl --distribution Ubuntu-20.04 --user rdpadmin --  "sudo apt update -y && sudo apt dist-upgrade -y"
+        wsl --distribution Ubuntu-20.04 --user rdpadmin --  "sudo apt-get install -y build-essential gdb"
+        wsl --distribution Ubuntu-20.04 --user rdpadmin --  "sudo apt install -y python-is-python3"
         Write-Host "WSL and Ubuntu setup complete."
         
         Write-Host "Installing Visual Studio Code..."
@@ -293,14 +322,46 @@ jobs:
         Write-Host "Visual Studio Code installed."
         
         Write-Host "Installing Microsoft Terminal..."
-        # Microsoft Terminal is usually installed via the Microsoft Store.
-        # Using winget for unattended installation is the best approach for scripting.
-        # Ensure winget is available, install it if not.
-        Invoke-Expression "& { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri https://github.com/microsoft/winget-cli/releases/download/v1.7.10661/Microsoft.Winget.Client_1.7.10661.msixbundle -OutFile $env:TEMP\Microsoft.Winget.Client_1.7.10661.msixbundle -UseBasicParsing; Add-AppxPackage $env:TEMP\Microsoft.Winget.Client_1.7.10661.msixbundle }"
-        Start-Sleep -Seconds 10 # Give winget time to register
+        # Determine the latest release tag for Microsoft Terminal
+        # Parsing the GitHub releases page for the latest stable release link.
+        # This is prone to breaking if GitHub changes their page structure.
+        # A more robust solution involves using the GitHub API, but that requires authentication.
+        # For this scenario, we'll try to deduce the latest tag or use a hardcoded recent one.
         
-        winget install --id Microsoft.WindowsTerminal -e --source winget
-        Write-Host "Microsoft Terminal installed."
+        # Let's try to get the latest release version programmatically, but if it fails,
+        # we'll use a hardcoded recent stable version.
+        try {
+            $latestReleaseHtml = Invoke-WebRequest -Uri "https://github.com/microsoft/terminal/releases/latest" -UseBasicParsing
+            $latestTag = ($latestReleaseHtml.BaseResponse.ResponseUri.Segments | Select-Object -Last 1).Trim('/')
+            Write-Host "Detected latest Microsoft Terminal release tag: $latestTag"
+        } catch {
+            Write-Host "Could not automatically determine latest Microsoft Terminal release tag. Using a known recent version."
+            # Fallback to a known recent stable version if automatic detection fails
+            $latestTag = "v1.22.11141.0" # Example recent stable version from search results
+        }
+        
+        $terminalZipUrl = "https://github.com/microsoft/terminal/releases/download/$latestTag/Microsoft.WindowsTerminal_$(($latestTag -replace 'v','')).0_x64.zip"
+        $terminalZipPath = "$env:TEMP\MicrosoftTerminal.zip"
+        $terminalExtractDir = "$env:TEMP\MicrosoftTerminalExtracted"
+        
+        Write-Host "Downloading Microsoft Terminal from: $terminalZipUrl"
+        Invoke-WebRequest -Uri $terminalZipUrl -OutFile $terminalZipPath -UseBasicParsing
+        
+        Write-Host "Extracting Microsoft Terminal..."
+        Expand-Archive -LiteralPath $terminalZipPath -DestinationPath $terminalExtractDir -Force
+        
+        # Find the wt.exe inside the extracted folder
+        $wtExePath = Join-Path $terminalExtractDir "wt.exe" # Often directly in the root of the extracted zip
+        if (-not (Test-Path $wtExePath)) {
+            # Sometimes it's in a subfolder like 'Microsoft.WindowsTerminal_VERSION_x64'
+            $wtExePath = Get-ChildItem -Path $terminalExtractDir -Filter "wt.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1
+        }
+        
+        if (-not (Test-Path $wtExePath)) {
+            Write-Host "Error: wt.exe not found after extracting Microsoft Terminal."
+            exit 1
+        }
+        Write-Host "Microsoft Terminal installed and located at: $wtExePath"
         
         Write-Host "Pinning VS Code and Microsoft Terminal to Taskbar..."
         # Pinning to Taskbar is tricky via script, often relying on shell verbs which aren't always consistent.
@@ -325,9 +386,10 @@ jobs:
         End If
         
         ' Pin Microsoft Terminal
-        filePath = "%LOCALAPPDATA%\Microsoft\WindowsApps\Microsoft.WindowsTerminal_8wekyb3d8bbwe!App\wt.exe"
-        If fso.FileExists(shell.ExpandEnvironmentStrings(filePath)) Then
-            Set link = shell.Namespace(shell.ExpandEnvironmentStrings(filePath)).ParseName(fso.GetFileName(shell.ExpandEnvironmentStrings(filePath)))
+        ' Using the dynamically determined path for wt.exe
+        terminalPath = "$wtExePath"
+        If fso.FileExists(terminalPath) Then
+            Set link = shell.Namespace(terminalPath).ParseName(fso.GetFileName(terminalPath))
             On Error Resume Next
             link.Verbs() | For Each verb In link.Verbs()
                 If InStr(verb.name, "Pin to Tas&kbar") > 0 Then verb.DoIt
