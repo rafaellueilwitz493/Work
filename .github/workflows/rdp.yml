@@ -295,12 +295,21 @@ jobs:
     - name: Pin VS Code and Microsoft Terminal to Taskbar
       run: |
         Write-Host "Pinning VS Code and Microsoft Terminal to Taskbar..."
-        # This uses the $wtExePath variable from the previous step.
-        $wtExePath = "$env:TEMP\MicrosoftTerminalExtracted\wt.exe" # Re-declare for scope or pass as env if needed. For simplicity within run block, assuming consistent temp path.
+        
+        # Ensure wtExePath is correctly retrieved from the previous step's output or re-derived.
+        # For simplicity and robustness within a single 'run' block, let's derive it again or assume the common path.
+        # It's better to ensure the path is definitely available.
+        # Assuming the previous step successfully extracted it to this path:
+        $wtExePath = Join-Path "$env:TEMP\MicrosoftTerminalExtracted" "wt.exe"
         if (-not (Test-Path $wtExePath)) {
+             # Fallback if it's in a subfolder within the extracted directory
              $wtExePath = (Get-ChildItem -Path "$env:TEMP\MicrosoftTerminalExtracted" -Filter "wt.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1)
         }
+        
+        # Escape backslashes in the path for VBScript to interpret them literally
+        $escapedWtExePath = $wtExePath -replace "\\", "\\"
 
+        # Embed the PowerShell variable's value directly into the VBScript here-string
         $VBScript_Pin = @"
         Set shell = CreateObject("Shell.Application")
         Set fso = CreateObject("Scripting.FileSystemObject")
@@ -321,7 +330,7 @@ jobs:
         
         ' Pin Microsoft Terminal
         ' Using the dynamically determined path for wt.exe
-        terminalPath = "$wtExePath"
+        terminalPath = "$escapedWtExePath" ' VALUE is interpolated here, not the variable name
         If fso.FileExists(terminalPath) Then
             Set link = shell.Namespace(terminalPath).ParseName(fso.GetFileName(terminalPath))
             On Error Resume Next
@@ -629,41 +638,24 @@ jobs:
         wsl --set-default-version 2
         Write-Host "WSL platform updated and configured for Version 2."
 
-        $ubuntuDistroName = "Ubuntu-RDP" # Use a specific name for clarity
-        $ubuntuInstallDir = "$env:LOCALAPPDATA\WSL\$ubuntuDistroName"
-        # Using a more direct and stable link for Ubuntu 20.04 base rootfs
-        $ubuntuRootfsUrl = "https://cloud-images.ubuntu.com/releases/20.04/release/ubuntu-20.04-server-cloudimg-amd64-wsl.rootfs.tar.gz"
-        $ubuntuRootfsPath = "$env:TEMP\ubuntu-20.04-server-cloudimg-amd64-wsl.rootfs.tar.gz"
-
         # Unregister existing distribution if it exists to ensure a clean install
         Write-Host "Checking for existing Ubuntu installations to unregister..."
-        if ((wsl --list --quiet) -contains $ubuntuDistroName) {
-            Write-Host "Unregistering existing $($ubuntuDistroName) distribution..."
-            wsl --unregister $ubuntuDistroName
+        if ((wsl --list --quiet) -contains "Ubuntu") {
+            Write-Host "Unregistering existing Ubuntu distribution..."
+            wsl --unregister Ubuntu
             Start-Sleep -Seconds 5 # Give it a moment to unregister
         }
-        # Also unregister the default "Ubuntu" if it exists, to avoid conflicts with new import.
-        if ((wsl --list --quiet) -contains "Ubuntu") {
-            Write-Host "Unregistering default Ubuntu distribution..."
-            wsl --unregister Ubuntu
-            Start-Sleep -Seconds 5
-        }
         
-        # Create installation directory
-        New-Item -ItemType Directory -Force -Path $ubuntuInstallDir
+        # Install Ubuntu directly using the wsl --install command
+        Write-Host "Installing Ubuntu in WSL2 using wsl --install -d Ubuntu..."
+        # This command will install Ubuntu and automatically trigger initial setup.
+        wsl --install -d Ubuntu
         
-        Write-Host "Downloading Ubuntu rootfs from: $ubuntuRootfsUrl"
-        Invoke-WebRequest -Uri $ubuntuRootfsUrl -OutFile $ubuntuRootfsPath -UseBasicParsing
+        # Wait for Ubuntu to be registered and then set default user and password
+        Write-Host "Waiting for Ubuntu installation to complete and configuring user 'rdpadmin' with password 'admin'..."
+        Start-Sleep -Seconds 90 # Increased sleep time for robust provisioning
         
-        Write-Host "Importing Ubuntu into WSL2 using wsl --import..."
-        # Import the distribution using the downloaded rootfs
-        wsl --import $ubuntuDistroName $ubuntuInstallDir $ubuntuRootfsPath --version 2
-        
-        # Set default user and password within the newly imported distribution
-        Write-Host "Waiting for Ubuntu to be fully imported and ready for configuration..."
-        Start-Sleep -Seconds 60 # Shorter sleep after import, but longer overall process.
-        
-        Write-Host "Configuring rdpadmin user in Ubuntu-RDP..."
+        # Set default user and password within the newly installed distribution
         $wslCommands = @"
         # Check if rdpadmin exists, create if not
         if ! id "rdpadmin" &>/dev/null; then
@@ -695,7 +687,7 @@ jobs:
         "@
         
         # Execute commands as root to ensure user creation and config file changes, and package installations
-        wsl --distribution $ubuntuDistroName --user root --exec bash -c "$wslCommands"
+        wsl --distribution Ubuntu --user root --exec bash -c "$wslCommands"
         
         Write-Host "WSL Ubuntu installation and setup complete."
     
