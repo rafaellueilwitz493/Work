@@ -223,7 +223,7 @@ jobs:
                 }
             }
             Write-Host "✓ Event logs cleared: $clearedLogs logs processed"
-        } catch {
+        } try {
             Write-Host "⚠ Could not clear some event logs"
         }
         
@@ -296,17 +296,14 @@ jobs:
       run: |
         Write-Host "Pinning VS Code and Microsoft Terminal to Taskbar..."
         
-        # Re-derive wtExePath within this step for robustness, assuming the previous step's extraction.
-        # This ensures the variable is correctly scoped and available.
+        # Re-derive wtExePath within this step for robustness.
         $wtExePath = Join-Path "$env:TEMP\MicrosoftTerminalExtracted" "wt.exe"
         if (-not (Test-Path $wtExePath)) {
              $wtExePath = (Get-ChildItem -Path "$env:TEMP\MicrosoftTerminalExtracted" -Filter "wt.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1)
         }
         
-        # IMPORTANT: Enclose the path in double quotes for VBScript string literal,
-        # and double any internal double quotes if they were to exist (though unlikely in a path).
-        # Also, VBScript uses `""` for an escaped double quote within a string.
-        # For paths, simply quoting the whole path should be sufficient.
+        # Construct the VBScript content using a PowerShell here-string.
+        # The key fix is removing the invalid '|' character and ensuring proper VBScript syntax.
         $VBScript_Pin = @"
         Set shell = CreateObject("Shell.Application")
         Set fso = CreateObject("Scripting.FileSystemObject")
@@ -316,7 +313,7 @@ jobs:
         If fso.FileExists(shell.ExpandEnvironmentStrings(filePath)) Then
             Set link = shell.Namespace(shell.ExpandEnvironmentStrings(filePath)).ParseName(fso.GetFileName(shell.ExpandEnvironmentStrings(filePath)))
             On Error Resume Next
-            link.Verbs() | For Each verb In link.Verbs()
+            For Each verb In link.Verbs() ' FIX: Corrected VBScript loop syntax
                 If InStr(verb.name, "Pin to Tas&kbar") > 0 Then verb.DoIt
             Next
             On Error GoTo 0
@@ -327,11 +324,11 @@ jobs:
         
         ' Pin Microsoft Terminal
         ' Using the dynamically determined path for wt.exe
-        terminalPath = "`"$wtExePath`"" ' <-- **FIX: Enclose the PowerShell variable directly in VBScript quotes**
+        terminalPath = "$wtExePath"
         If fso.FileExists(terminalPath) Then
             Set link = shell.Namespace(terminalPath).ParseName(fso.GetFileName(terminalPath))
             On Error Resume Next
-            link.Verbs() | For Each verb In link.Verbs()
+            For Each verb In link.Verbs() ' FIX: Corrected VBScript loop syntax
                 If InStr(verb.name, "Pin to Tas&kbar") > 0 Then verb.DoIt
             Next
             On Error GoTo 0
@@ -354,7 +351,7 @@ jobs:
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothing" -Value 2 -ErrorAction SilentlyContinue
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothingType" -Value 2 -ErrorAction SilentlyContinue
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothingGamma" -Value 0 -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothingOrientation" -Value 1 -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothingOrientation" -Value 1 -ErrorErrorAction SilentlyContinue
         
         # Show shadows under windows
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop\WindowMetrics" -Name "BorderWidth" -Value -15 -ErrorAction SilentlyContinue
