@@ -296,20 +296,17 @@ jobs:
       run: |
         Write-Host "Pinning VS Code and Microsoft Terminal to Taskbar..."
         
-        # Ensure wtExePath is correctly retrieved from the previous step's output or re-derived.
-        # For simplicity and robustness within a single 'run' block, let's derive it again or assume the common path.
-        # It's better to ensure the path is definitely available.
-        # Assuming the previous step successfully extracted it to this path:
+        # Re-derive wtExePath within this step for robustness, assuming the previous step's extraction.
+        # This ensures the variable is correctly scoped and available.
         $wtExePath = Join-Path "$env:TEMP\MicrosoftTerminalExtracted" "wt.exe"
         if (-not (Test-Path $wtExePath)) {
-             # Fallback if it's in a subfolder within the extracted directory
              $wtExePath = (Get-ChildItem -Path "$env:TEMP\MicrosoftTerminalExtracted" -Filter "wt.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1)
         }
         
-        # Escape backslashes in the path for VBScript to interpret them literally
-        $escapedWtExePath = $wtExePath -replace "\\", "\\"
-
-        # Embed the PowerShell variable's value directly into the VBScript here-string
+        # IMPORTANT: Enclose the path in double quotes for VBScript string literal,
+        # and double any internal double quotes if they were to exist (though unlikely in a path).
+        # Also, VBScript uses `""` for an escaped double quote within a string.
+        # For paths, simply quoting the whole path should be sufficient.
         $VBScript_Pin = @"
         Set shell = CreateObject("Shell.Application")
         Set fso = CreateObject("Scripting.FileSystemObject")
@@ -330,7 +327,7 @@ jobs:
         
         ' Pin Microsoft Terminal
         ' Using the dynamically determined path for wt.exe
-        terminalPath = "$escapedWtExePath" ' VALUE is interpolated here, not the variable name
+        terminalPath = "`"$wtExePath`"" ' <-- **FIX: Enclose the PowerShell variable directly in VBScript quotes**
         If fso.FileExists(terminalPath) Then
             Set link = shell.Namespace(terminalPath).ParseName(fso.GetFileName(terminalPath))
             On Error Resume Next
@@ -504,7 +501,7 @@ jobs:
             $drive.IndexingEnabled = $false
             $drive.Put()
             Write-Host "Indexing disabled on C: drive for maximum performance"
-        } catch {
+        } catch { {
             Write-Host "Could not disable indexing"
         }
     
