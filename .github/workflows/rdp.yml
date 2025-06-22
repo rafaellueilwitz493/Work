@@ -80,7 +80,7 @@ jobs:
                     [DllImport("ntdll.dll", SetLastError=true)]
                     public static extern int NtSetTimerResolution(uint DesiredResolution, bool SetResolution, out uint CurrentResolution);
                 }
-"@
+        "@
             $currentRes = 0
             [NtTimer]::NtSetTimerResolution(5000, $true, [ref]$currentRes)  # 0.5ms resolution
             Write-Host "✅ Timer resolution set to MAXIMUM (0.5ms)"
