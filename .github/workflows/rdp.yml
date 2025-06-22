@@ -161,21 +161,72 @@ jobs:
             Set-ItemProperty -Path $rdpPath -Name $_.Key -Value $_.Value -ErrorAction SilentlyContinue
         }
         
-        # Create ultra-privileged admin user
-        $password = ConvertTo-SecureString "SuperAdmin2024!" -AsPlainText -Force
-        if (Get-LocalUser "rdpadmin" -ErrorAction SilentlyContinue) {
-            Remove-LocalUser "rdpadmin" -ErrorAction SilentlyContinue
+        # Create ultra-privileged admin user with enhanced error handling
+        Write-Host "Creating admin user account..."
+        
+        # Remove existing user if present
+        try {
+            $existingUser = Get-LocalUser "rdpadmin" -ErrorAction SilentlyContinue
+            if ($existingUser) {
+                Write-Host "Removing existing rdpadmin user..."
+                Remove-LocalUser "rdpadmin" -ErrorAction Stop
+                Write-Host "✅ Existing user removed successfully"
+            }
+        } catch {
+            Write-Host "⚠️ Warning: Could not remove existing user: $($_.Exception.Message)"
         }
         
-        # Fixed: Added -Password parameter to New-LocalUser command
-        New-LocalUser -Name "rdpadmin" -Password $password -FullName "Ultra Performance Admin" -Description "Maximum CPU Performance Administrator" -PasswordNeverExpires -UserMayNotChangePassword
-        
-        # Maximum privilege assignment
-        @("Administrators","Remote Desktop Users","Power Users","Performance Monitor Users","Performance Log Users") | ForEach-Object {
-            Add-LocalGroupMember -Group $_ -Member "rdpadmin" -ErrorAction SilentlyContinue
+        # Create secure password
+        try {
+            Write-Host "Creating secure password..."
+            $securePassword = ConvertTo-SecureString "SuperAdmin2024!" -AsPlainText -Force
+            Write-Host "✅ Password created successfully"
+            
+            # Create new user with all required parameters
+            Write-Host "Creating new user account..."
+            New-LocalUser -Name "rdpadmin" `
+                         -Password $securePassword `
+                         -FullName "Ultra Performance Admin" `
+                         -Description "Maximum CPU Performance Administrator" `
+                         -PasswordNeverExpires `
+                         -UserMayNotChangePassword `
+                         -ErrorAction Stop
+            
+            Write-Host "✅ User 'rdpadmin' created successfully"
+            
+            # Add to groups
+            Write-Host "Adding user to administrative groups..."
+            $groups = @("Administrators","Remote Desktop Users","Power Users","Performance Monitor Users","Performance Log Users")
+            foreach ($group in $groups) {
+                try {
+                    Add-LocalGroupMember -Group $group -Member "rdpadmin" -ErrorAction SilentlyContinue
+                    Write-Host "✅ Added to group: $group"
+                } catch {
+                    Write-Host "⚠️ Could not add to group $group`: $($_.Exception.Message)"
+                }
+            }
+            
+        } catch {
+            Write-Host "❌ Error creating user: $($_.Exception.Message)"
+            Write-Host "Attempting alternative user creation method..."
+            
+            # Alternative method using net user command
+            try {
+                $result = cmd /c "net user rdpadmin SuperAdmin2024! /add /fullname:`"Ultra Performance Admin`" /comment:`"Maximum CPU Performance Administrator`" /passwordchg:no /expires:never /active:yes 2>&1"
+                Write-Host "Net user result: $result"
+                
+                # Add to administrators group
+                cmd /c "net localgroup administrators rdpadmin /add 2>&1"
+                cmd /c "net localgroup `"Remote Desktop Users`" rdpadmin /add 2>&1"
+                
+                Write-Host "✅ User created using alternative method"
+            } catch {
+                Write-Host "❌ Alternative method also failed: $($_.Exception.Message)"
+                Write-Host "❌ Unable to create RDP user account"
+            }
         }
         
-        Write-Host "✅ Ultra-performance RDP configured with maximum privileges"
+        Write-Host "✅ Ultra-performance RDP configuration completed"
 
     - name: Download Latest Playit Agent
       run: |
