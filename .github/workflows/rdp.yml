@@ -24,7 +24,7 @@ jobs:
                 throw "Ultimate scheme not available"
             }
         } catch {
-            # Fallback to High Performance
+            Write-Host "FallBacking to High Performance"
             powercfg -setactive SCHEME_MIN
             Write-Host "High Performance scheme activated"
         }
@@ -211,7 +211,7 @@ jobs:
         }
         
         # Clear safe event logs only
-        try {
+        try { # This was the problematic try block start
             $clearedLogs = 0
             $safeLogs = @("Application", "System", "Setup")
             foreach ($logName in $safeLogs) {
@@ -223,7 +223,7 @@ jobs:
                 }
             }
             Write-Host "✓ Event logs cleared: $clearedLogs logs processed"
-        } try {
+        } catch { # Added this catch block
             Write-Host "⚠ Could not clear some event logs"
         }
         
@@ -351,7 +351,7 @@ jobs:
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothing" -Value 2 -ErrorAction SilentlyContinue
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothingType" -Value 2 -ErrorAction SilentlyContinue
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothingGamma" -Value 0 -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothingOrientation" -Value 1 -ErrorErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothingOrientation" -Value 1 -ErrorAction SilentlyContinue
         
         # Show shadows under windows
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop\WindowMetrics" -Name "BorderWidth" -Value -15 -ErrorAction SilentlyContinue
@@ -493,12 +493,12 @@ jobs:
         }
         
         # Disable indexing on C: drive for maximum disk performance
-        try {
+        try { # This was also a problematic try block start
             $drive = Get-WmiObject -Class Win32_Volume -Filter "DriveLetter='C:'"
             $drive.IndexingEnabled = $false
             $drive.Put()
             Write-Host "Indexing disabled on C: drive for maximum performance"
-        } catch { {
+        } catch { # Added this catch block
             Write-Host "Could not disable indexing"
         }
     
