@@ -24,7 +24,7 @@ jobs:
                 throw "Ultimate scheme not available"
             }
         } catch {
-            Write-Host "FallBacking to High Performance"
+            # Fallback to High Performance
             powercfg -setactive SCHEME_MIN
             Write-Host "High Performance scheme activated"
         }
@@ -232,139 +232,6 @@ jobs:
         [System.GC]::WaitForPendingFinalizers()
         [System.GC]::Collect()
         Write-Host "✓ Memory garbage collection completed"
-    
-    - name: Install Google Chrome, VS Code, and Microsoft Terminal
-      run: |
-        Write-Host "Configuring Google Chrome as default browser..."
-        # Download and install Google Chrome
-        Invoke-WebRequest -Uri "https://dl.google.com/chrome/install/latest/chrome_installer.exe" -OutFile "$env:TEMP\ChromeInstaller.exe" -UseBasicParsing
-        Start-Process -FilePath "$env:TEMP\ChromeInstaller.exe" -ArgumentList "/silent /install" -Wait
-        
-        # Set Chrome as default browser (using SIDs requires knowing the exact SID, this is a common workaround)
-        # This part is notoriously difficult to do reliably via script without user interaction or specific registry settings.
-        # A more robust solution might involve a custom default app associations XML, but that's beyond a simple run script.
-        # This will at least install it and make it available.
-        Write-Host "Google Chrome installed. Manual step might be required to set as default."
-        
-        Write-Host "Installing Visual Studio Code..."
-        $vsCodeInstallerUrl = "https://update.code.visualstudio.com/latest/win32-x64-user/stable"
-        $vsCodeInstallerPath = "$env:TEMP\VSCodeUserSetup.exe"
-        Invoke-WebRequest -Uri $vsCodeInstallerUrl -OutFile $vsCodeInstallerPath -UseBasicParsing
-        
-        # Silent installation of VS Code with common options (add to path, desktop icon, context menu entries)
-        # The /MERGETASKS="!runcode" is used to not launch VS Code after installation.
-        Start-Process -FilePath $vsCodeInstallerPath -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /NOCANCEL /DIR=`"$env:ProgramFiles\Microsoft VS Code`" /TASKS=`"addcontextmenufiles,addcontextmenudirectories,addtodesktop,addtopath`"" -Wait
-        Write-Host "Visual Studio Code installed."
-        
-        Write-Host "Installing Microsoft Terminal..."
-        # Determine the latest release tag for Microsoft Terminal
-        try {
-            $latestReleaseHtml = Invoke-WebRequest -Uri "https://github.com/microsoft/terminal/releases/latest" -UseBasicParsing
-            $latestTag = ($latestReleaseHtml.BaseResponse.ResponseUri.Segments | Select-Object -Last 1).Trim('/')
-            Write-Host "Detected latest Microsoft Terminal release tag: $latestTag"
-        } catch {
-            Write-Host "Could not automatically determine latest Microsoft Terminal release tag. Using a known recent version."
-            # Fallback to a known recent stable version if automatic detection fails
-            $latestTag = "v1.22.11141.0" # Example recent stable version
-        }
-        
-        # Construct the download URL for the x64 zip package
-        $terminalVersionOnly = $latestTag -replace 'v',''
-        $terminalZipUrl = "https://github.com/microsoft/terminal/releases/download/$latestTag/Microsoft.WindowsTerminal_${terminalVersionOnly}_x64.zip"
-        $terminalZipPath = "$env:TEMP\MicrosoftTerminal.zip"
-        $terminalExtractDir = "$env:TEMP\MicrosoftTerminalExtracted"
-        
-        Write-Host "Downloading Microsoft Terminal from: $terminalZipUrl"
-        Invoke-WebRequest -Uri $terminalZipUrl -OutFile $terminalZipPath -UseBasicParsing
-        
-        Write-Host "Extracting Microsoft Terminal..."
-        Expand-Archive -LiteralPath $terminalZipPath -DestinationPath $terminalExtractDir -Force
-        
-        # Find the wt.exe inside the extracted folder
-        $wtExePath = Join-Path $terminalExtractDir "wt.exe"
-        if (-not (Test-Path $wtExePath)) {
-            $wtExePath = Get-ChildItem -Path $terminalExtractDir -Filter "wt.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1
-        }
-        
-        if (-not (Test-Path $wtExePath)) {
-            Write-Host "Error: wt.exe not found after extracting Microsoft Terminal."
-            exit 1
-        }
-        Write-Host "Microsoft Terminal installed and located at: $wtExePath"
-        
-    - name: Pin VS Code and Microsoft Terminal to Taskbar
-      run: |
-        Write-Host "Pinning VS Code and Microsoft Terminal to Taskbar..."
-        
-        # Re-derive wtExePath within this step for robustness.
-        $wtExePath = Join-Path "$env:TEMP\MicrosoftTerminalExtracted" "wt.exe"
-        if (-not (Test-Path $wtExePath)) {
-             $wtExePath = (Get-ChildItem -Path "$env:TEMP\MicrosoftTerminalExtracted" -Filter "wt.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1)
-        }
-        
-        # Construct the VBScript content using a PowerShell here-string.
-        $VBScript_Pin = @"
-        Set shell = CreateObject("Shell.Application")
-        Set fso = CreateObject("Scripting.FileSystemObject")
-        
-        ' Pin VS Code
-        filePath = "%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe"
-        If fso.FileExists(shell.ExpandEnvironmentStrings(filePath)) Then
-            Set link = shell.Namespace(shell.ExpandEnvironmentStrings(filePath)).ParseName(fso.GetFileName(shell.ExpandEnvironmentStrings(filePath)))
-            On Error Resume Next
-            For Each verb In link.Verbs()
-                If InStr(verb.name, "Pin to Tas&kbar") > 0 Then verb.DoIt
-            Next
-            On Error GoTo 0
-            WScript.Echo "VS Code pinned."
-        Else
-            WScript.Echo "VS Code executable not found."
-        End If
-        
-        ' Pin Microsoft Terminal
-        ' Using the dynamically determined path for wt.exe
-        terminalPath = "$wtExePath"
-        If fso.FileExists(terminalPath) Then
-            Set link = shell.Namespace(terminalPath).ParseName(fso.GetFileName(terminalPath))
-            On Error Resume Next
-            For Each verb In link.Verbs()
-                If InStr(verb.name, "Pin to Tas&kbar") > 0 Then verb.DoIt
-            Next
-            On Error GoTo 0
-            WScript.Echo "Microsoft Terminal pinned."
-        Else
-            WScript.Echo "Microsoft Terminal executable not found."
-        End If
-        "@
-        
-        $VBScriptPath = "$env:TEMP\PinToTaskbar.vbs"
-        Set-Content -Path $VBScriptPath -Value $VBScript_Pin
-        cscript.exe //NoLogo $VBScriptPath
-        
-        Write-Host "Attempted to pin VS Code and Microsoft Terminal to Taskbar. Verification recommended."
-        
-    - name: Adjust Specific Visual Effects
-      run: |
-        Write-Host "Adjusting specific visual effects for performance..."
-        # Smooth edges of screen fonts (FontSmoothing)
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothing" -Value 2 -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothingType" -Value 2 -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothingGamma" -Value 0 -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothingOrientation" -Value 1 -ErrorAction SilentlyContinue
-        
-        # Show shadows under windows
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop\WindowMetrics" -Name "BorderWidth" -Value -15 -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop\WindowMetrics" -Name "PaddedBorderWidth" -Value -60 -ErrorAction SilentlyContinue
-        
-        # Show thumbnails instead of icons
-        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "IconsOnly" -Value 0 -ErrorAction SilentlyContinue
-        
-        # Apply changes without restart where possible, for some visual effects, a logoff/login is ideal.
-        # We will attempt to refresh Explorer.
-        Stop-Process -Name "explorer" -Force -ErrorAction SilentlyContinue
-        Start-Process "explorer"
-        
-        Write-Host "Specific visual effects adjusted."
     
     - name: Download and Install Playit Agent
       run: |
@@ -692,3 +559,4 @@ jobs:
         
         Write-Host "🏁 MAXIMUM PERFORMANCE SESSION COMPLETED SUCCESSFULLY AFTER 6 HOURS!"
         Write-Host "📊 Final system state: All performance optimizations maintained"
+
