@@ -120,6 +120,13 @@ jobs:
     
     - name: Ultra RDP Configuration
       run: |
+        # Disable password complexity requirements first
+        secedit /export /cfg $env:TEMP\secpol.cfg
+        (Get-Content $env:TEMP\secpol.cfg) -replace "PasswordComplexity = 1", "PasswordComplexity = 0" | Out-File $env:TEMP\secpol.cfg
+        (Get-Content $env:TEMP\secpol.cfg) -replace "MinimumPasswordLength = \d+", "MinimumPasswordLength = 0" | Out-File $env:TEMP\secpol.cfg
+        secedit /configure /db $env:TEMP\secedit.sdb /cfg $env:TEMP\secpol.cfg /areas SECURITYPOLICY
+        gpupdate /force
+        
         # Enable RDP with Maximum Performance
         Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
@@ -134,14 +141,26 @@ jobs:
         Set-ItemProperty $rdp -Name "fDisableTheming" -Value 1 -EA 0
         Set-ItemProperty $rdp -Name "BitmapCacheSize" -Value 65536 -EA 0  # Max cache
         
-        # Create Ultra Admin User
-        $pass = ConvertTo-SecureString "UltraAdmin2024!" -AsPlainText -Force
-        if (Get-LocalUser "ultraadmin" -EA 0) { Remove-LocalUser "ultraadmin" -EA 0 }
-        New-LocalUser -Name "ultraadmin" -Password $pass -FullName "Ultra Administrator" -PasswordNeverExpires -UserMayNotChangePassword
-        Add-LocalGroupMember -Group "Administrators" -Member "ultraadmin"
-        Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ultraadmin"
+        # Wait for policy to take effect
+        Start-Sleep 5
         
-        Write-Host "✅ RDP ULTRA ADMIN READY | User: ultraadmin | Pass: UltraAdmin2024!"
+        # Create Ultra Admin User with stronger password
+        $strongPass = ConvertTo-SecureString "UltraP@ssw0rd2024#!" -AsPlainText -Force
+        if (Get-LocalUser "ultraadmin" -EA 0) { Remove-LocalUser "ultraadmin" -EA 0 }
+        
+        try {
+            New-LocalUser -Name "ultraadmin" -Password $strongPass -FullName "Ultra Administrator" -PasswordNeverExpires -UserMayNotChangePassword -Description "Ultra Performance RDP User"
+            Add-LocalGroupMember -Group "Administrators" -Member "ultraadmin"
+            Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ultraadmin"
+            Write-Host "✅ RDP ULTRA ADMIN READY | User: ultraadmin | Pass: UltraP@ssw0rd2024#!"
+        } catch {
+            # Fallback: Use net user command if New-LocalUser fails
+            Write-Host "⚠ Trying alternative user creation method..."
+            net user ultraadmin "UltraP@ssw0rd2024#!" /add /fullname:"Ultra Administrator" /passwordchg:no /expires:never /active:yes
+            net localgroup administrators ultraadmin /add
+            net localgroup "Remote Desktop Users" ultraadmin /add
+            Write-Host "✅ RDP ULTRA ADMIN READY (via net) | User: ultraadmin | Pass: UltraP@ssw0rd2024#!"
+        }
     
     - name: Download Playit Agent
       run: |
@@ -197,7 +216,7 @@ jobs:
     - name: Ultra Performance Status & Keep-Alive
       run: |
         Write-Host "🔥🔥🔥 ULTRA PERFORMANCE RDP TUNNEL ACTIVE! 🔥🔥🔥"
-        Write-Host "👤 Username: ultraadmin | 🔑 Password: UltraAdmin2024!"
+        Write-Host "👤 Username: ultraadmin | 🔑 Password: UltraP@ssw0rd2024#!"
         Write-Host "⚡ CPU: REALTIME PRIORITY | 💻 ALL CORES ACTIVE | 🚀 ZERO THROTTLING"
         
         $end = (Get-Date).AddHours(6)
