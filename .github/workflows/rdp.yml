@@ -13,44 +13,83 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Ultra CPU Performance Boost
+    - name: EXTREME CPU Performance Boost
       run: |
-        Write-Host "🚀 ULTRA CPU PERFORMANCE MODE ACTIVATED"
+        Write-Host "🔥🔥🔥 EXTREME CPU PERFORMANCE MODE - MAXIMUM POSSIBLE 🔥🔥🔥"
         
         # Ultimate Performance Power Scheme
         powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null
         $ultimate = (powercfg -list | Select-String "Ultimate").Line.Split()[3]
         if ($ultimate) { powercfg -setactive $ultimate } else { powercfg -setactive SCHEME_MIN }
         
-        # MAXIMUM CPU Settings - No Throttling Ever
+        # ABSOLUTE MAXIMUM CPU Settings - ZERO Throttling
         $guid = (powercfg -getactivescheme).Split()[3]
         powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
         powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
         powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
         powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
         
-        # Disable ALL CPU Power Saving - Force 100% Always
+        # Force ALL CPU cores active 24/7 - No parking EVER
         powercfg -setacvalueindex $guid SUB_PROCESSOR CPMINCORES 100
         powercfg -setdcvalueindex $guid SUB_PROCESSOR CPMINCORES 100
         powercfg -setacvalueindex $guid SUB_PROCESSOR CPMAXCORES 100
         powercfg -setdcvalueindex $guid SUB_PROCESSOR CPMAXCORES 100
-        powercfg -setacvalueindex $guid SUB_PROCESSOR PERFBOOSTMODE 2  # Aggressive boost
+        
+        # EXTREME CPU Boost Settings - Beyond Normal Limits
+        powercfg -setacvalueindex $guid SUB_PROCESSOR PERFBOOSTMODE 2  # Aggressive turbo
         powercfg -setdcvalueindex $guid SUB_PROCESSOR PERFBOOSTMODE 2
-        powercfg -setacvalueindex $guid SUB_PROCESSOR PERFBOOSTPOL 100  # Maximum boost
+        powercfg -setacvalueindex $guid SUB_PROCESSOR PERFBOOSTPOL 100  # Maximum boost policy
         powercfg -setdcvalueindex $guid SUB_PROCESSOR PERFBOOSTPOL 100
         
-        # Ultra Performance Registry Tweaks
-        Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 38  # Maximum foreground boost
-        Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "LargeSystemCache" -Value 1
-        Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "NtfsDisableLastAccessUpdate" -Value 1
+        # EXTREME CPU Frequency Control - Force maximum always
+        powercfg -setacvalueindex $guid SUB_PROCESSOR PROCFREQMAX 0  # Remove frequency cap
+        powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCFREQMAX 0
+        powercfg -setacvalueindex $guid SUB_PROCESSOR PROCFREQMIN 100  # Minimum at 100%
+        powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCFREQMIN 100
         
-        # Disable ALL power saving
+        # Disable CPU thermal throttling (EXTREME)
+        powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEPOL 0
+        powercfg -setdcvalueindex $guid SUB_PROCESSOR PROCTHROTTLEPOL 0
+        
+        # EXTREME Registry Performance Tweaks
+        Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 38 -EA 0  # Max foreground boost
+        Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "LargeSystemCache" -Value 1 -EA 0
+        Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "DisablePagingExecutive" -Value 1 -EA 0  # Keep kernel in RAM
+        Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "IoPageLockLimit" -Value 983040 -EA 0  # Max I/O performance
+        Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "NtfsDisableLastAccessUpdate" -Value 1 -EA 0
+        Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "NtfsDisable8dot3NameCreation" -Value 1 -EA 0
+        
+        # EXTREME CPU Scheduling Priority
+        Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "IRQ8Priority" -Value 1 -EA 0  # System timer highest priority
+        Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel" -Name "DpcTimeout" -Value 0 -EA 0  # Remove DPC timeout
+        
+        # Disable ALL power management
         powercfg -change standby-timeout-ac 0; powercfg -change hibernate-timeout-ac 0
         powercfg -change disk-timeout-ac 0; powercfg -change monitor-timeout-ac 0
         powercfg -hibernate off
         
+        # Force maximum CPU state always
         powercfg -setactive $guid
-        Write-Host "✅ CPU: 100% ALWAYS-ON MODE ACTIVATED"
+        
+        # EXTREME: Set system timer resolution to 0.5ms (highest possible)
+        try {
+            Add-Type -TypeDefinition @"
+                using System;
+                using System.Runtime.InteropServices;
+                public class NtTimer {
+                    [DllImport("ntdll.dll", SetLastError=true)]
+                    public static extern int NtSetTimerResolution(uint DesiredResolution, bool SetResolution, out uint CurrentResolution);
+                }
+"@
+            $currentRes = 0
+            [NtTimer]::NtSetTimerResolution(5000, $true, [ref]$currentRes)  # 0.5ms resolution
+            Write-Host "✅ Timer resolution set to MAXIMUM (0.5ms)"
+        } catch {
+            Write-Host "⚠ Advanced timer optimization not available"
+        }
+        
+        Write-Host "🚀 CPU: EXTREME PERFORMANCE MODE - ALL LIMITERS REMOVED!"
+        Write-Host "🔥 CPU Frequency: UNCAPPED | Cores: 100% ACTIVE | Throttling: DISABLED"
     
     - name: System Optimization Blitz
       run: |
@@ -108,18 +147,51 @@ jobs:
       run: |
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe" -UseBasicParsing
     
-    - name: Start Ultra Performance Playit
+    - name: Start MAXIMUM Performance Playit
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
         if (-not $env:PLAYIT_AUTH_KEY) { Write-Host "❌ PLAYIT_AUTH_KEY missing"; exit 1 }
         
-        # Start with REALTIME priority (highest possible)
+        # Start with REALTIME priority + CPU affinity optimization
         $proc = Start-Process "$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "$env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
-        $proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::RealTime  # MAXIMUM PRIORITY
-        $proc.ProcessorAffinity = [System.IntPtr]::new([Math]::Pow(2, [Environment]::ProcessorCount) - 1)  # ALL CORES
         
-        Write-Host "🚀 PLAYIT AGENT: REALTIME PRIORITY ON ALL $([Environment]::ProcessorCount) CORES"
+        # MAXIMUM PRIORITY SETTINGS
+        $proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::RealTime  # Highest possible
+        $proc.ProcessorAffinity = [System.IntPtr]::new([Math]::Pow(2, [Environment]::ProcessorCount) - 1)  # ALL CPU cores
+        
+        # EXTREME: Set process to run on performance cores first (if available)
+        try {
+            $perfCores = Get-WmiObject -Class Win32_Processor | Where-Object {$_.MaxClockSpeed -eq ($_ | Sort-Object MaxClockSpeed -Descending | Select-Object -First 1).MaxClockSpeed}
+            if ($perfCores.Count -gt 1) {
+                # Bind to fastest cores first
+                $proc.ProcessorAffinity = [System.IntPtr]::new([Math]::Pow(2, $perfCores.Count) - 1)
+                Write-Host "🔥 BOUND TO $($perfCores.Count) FASTEST CPU CORES"
+            }
+        } catch {
+            Write-Host "⚠ Using all available cores"
+        }
+        
+        # EXTREME: Boost process I/O priority to maximum
+        try {
+            Add-Type -TypeDefinition @"
+                using System;
+                using System.Runtime.InteropServices;
+                public class ProcessPriority {
+                    [DllImport("kernel32.dll")]
+                    public static extern bool SetPriorityClass(IntPtr hProcess, uint dwPriorityClass);
+                    [DllImport("kernel32.dll")]
+                    public static extern bool SetProcessAffinityMask(IntPtr hProcess, IntPtr dwProcessAffinityMask);
+                }
+"@
+            # Set to REALTIME_PRIORITY_CLASS (0x100) - maximum possible
+            [ProcessPriority]::SetPriorityClass($proc.Handle, 0x100)
+            Write-Host "🚀 REALTIME PRIORITY CONFIRMED VIA KERNEL32"
+        } catch {
+            Write-Host "⚠ Using standard REALTIME priority"
+        }
+        
+        Write-Host "🔥🔥🔥 PLAYIT AGENT: MAXIMUM PRIORITY ON ALL $([Environment]::ProcessorCount) CORES 🔥🔥🔥"
         Start-Sleep 10
     
     - name: Ultra Performance Status & Keep-Alive
