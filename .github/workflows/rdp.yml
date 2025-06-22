@@ -1,6 +1,12 @@
 name: Ultra Performance RDP Tunnel
 on:
   workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Session duration (hours)'
+        required: false
+        default: '6'
+        type: string
 jobs:
   ultra-performance-rdp:
     runs-on: windows-latest
