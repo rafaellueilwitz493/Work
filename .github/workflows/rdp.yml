@@ -211,7 +211,7 @@ jobs:
         }
         
         # Clear safe event logs only
-        try { # This was the problematic try block start
+        try {
             $clearedLogs = 0
             $safeLogs = @("Application", "System", "Setup")
             foreach ($logName in $safeLogs) {
@@ -223,7 +223,7 @@ jobs:
                 }
             }
             Write-Host "✓ Event logs cleared: $clearedLogs logs processed"
-        } catch { # Added this catch block
+        } catch {
             Write-Host "⚠ Could not clear some event logs"
         }
         
@@ -313,7 +313,7 @@ jobs:
         If fso.FileExists(shell.ExpandEnvironmentStrings(filePath)) Then
             Set link = shell.Namespace(shell.ExpandEnvironmentStrings(filePath)).ParseName(fso.GetFileName(shell.ExpandEnvironmentStrings(filePath)))
             On Error Resume Next
-            For Each verb In link.Verbs() ' FIX: Corrected VBScript loop syntax
+            For Each verb In link.Verbs()
                 If InStr(verb.name, "Pin to Tas&kbar") > 0 Then verb.DoIt
             Next
             On Error GoTo 0
@@ -328,7 +328,7 @@ jobs:
         If fso.FileExists(terminalPath) Then
             Set link = shell.Namespace(terminalPath).ParseName(fso.GetFileName(terminalPath))
             On Error Resume Next
-            For Each verb In link.Verbs() ' FIX: Corrected VBScript loop syntax
+            For Each verb In link.Verbs()
                 If InStr(verb.name, "Pin to Tas&kbar") > 0 Then verb.DoIt
             Next
             On Error GoTo 0
@@ -344,6 +344,76 @@ jobs:
         
         Write-Host "Attempted to pin VS Code and Microsoft Terminal to Taskbar. Verification recommended."
         
+    - name: WSL Ubuntu Installation and Configuration
+      run: |
+        Write-Host "Starting WSL Ubuntu Installation and Configuration..."
+        
+        # Enable WSL and Virtual Machine Platform features
+        Write-Host "Enabling WSL and Virtual Machine Platform features..."
+        dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+        dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+        Write-Host "WSL features enabled."
+        
+        # Update WSL to ensure latest components
+        Write-Host "Running wsl --update..."
+        wsl --update
+        Write-Host "Setting WSL default version to 2..."
+        wsl --set-default-version 2
+        Write-Host "WSL platform updated and configured for Version 2."
+
+        # Unregister existing distribution if it exists to ensure a clean install
+        Write-Host "Checking for existing Ubuntu installations to unregister..."
+        if ((wsl --list --quiet) -contains "Ubuntu") {
+            Write-Host "Unregistering existing Ubuntu distribution..."
+            wsl --unregister Ubuntu
+            Start-Sleep -Seconds 5 # Give it a moment to unregister
+        }
+        
+        # Install Ubuntu directly using the wsl --install command
+        Write-Host "Installing Ubuntu in WSL2 using wsl --install -d Ubuntu..."
+        # This command will install Ubuntu and automatically trigger initial setup.
+        wsl --install -d Ubuntu
+        
+        # Wait for Ubuntu to be registered and then set default user and password
+        Write-Host "Waiting for Ubuntu installation to complete and configuring user 'rdpadmin' with password 'admin'..."
+        Start-Sleep -Seconds 90 # Increased sleep time for robust provisioning
+        
+        # Set default user and password within the newly installed distribution
+        $wslCommands = @"
+        # Check if rdpadmin exists, create if not
+        if ! id "rdpadmin" &>/dev/null; then
+            echo "Creating user rdpadmin..."
+            adduser --disabled-password --gecos "" rdpadmin
+            echo "rdpadmin:admin" | chpasswd
+        else
+            echo "User rdpadmin already exists."
+        fi
+        
+        # Add rdpadmin to sudo group
+        usermod -aG sudo rdpadmin
+        
+        # Configure default user in /etc/wsl.conf
+        echo "[user]" > /etc/wsl.conf
+        echo "default=rdpadmin" >> /etc/wsl.conf
+        chown rdpadmin:rdpadmin /etc/wsl.conf
+        
+        echo "User rdpadmin configured as default with sudo."
+        
+        # Update and install packages
+        echo "Updating and upgrading Ubuntu packages..."
+        apt update -y && apt dist-upgrade -y
+        apt-get install -y build-essential gdb
+        apt install -y python-is-python3
+        
+        echo "Ubuntu package setup complete."
+        exit
+        "@
+        
+        # Execute commands as root to ensure user creation and config file changes, and package installations
+        wsl --distribution Ubuntu --user root --exec bash -c "$wslCommands"
+        
+        Write-Host "WSL Ubuntu installation and setup complete."
+    
     - name: Adjust Specific Visual Effects
       run: |
         Write-Host "Adjusting specific visual effects for performance..."
@@ -493,12 +563,12 @@ jobs:
         }
         
         # Disable indexing on C: drive for maximum disk performance
-        try { # This was also a problematic try block start
+        try {
             $drive = Get-WmiObject -Class Win32_Volume -Filter "DriveLetter='C:'"
             $drive.IndexingEnabled = $false
             $drive.Put()
             Write-Host "Indexing disabled on C: drive for maximum performance"
-        } catch { # Added this catch block
+        } catch {
             Write-Host "Could not disable indexing"
         }
     
@@ -614,76 +684,6 @@ jobs:
         Write-Host "🚀 ADMINISTRATOR ACCESS ENABLED"
         Write-Host "🚀 READY FOR MAXIMUM WORKLOAD"
         Write-Host "=== SYSTEM READY FOR MAXIMUM PERFORMANCE ==="
-    
-    - name: WSL Ubuntu Installation and Configuration
-      run: |
-        Write-Host "Starting WSL Ubuntu Installation and Configuration..."
-        
-        # Enable WSL and Virtual Machine Platform features
-        Write-Host "Enabling WSL and Virtual Machine Platform features..."
-        dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
-        dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
-        Write-Host "WSL features enabled."
-        
-        # Update WSL to ensure latest components
-        Write-Host "Running wsl --update..."
-        wsl --update
-        Write-Host "Setting WSL default version to 2..."
-        wsl --set-default-version 2
-        Write-Host "WSL platform updated and configured for Version 2."
-
-        # Unregister existing distribution if it exists to ensure a clean install
-        Write-Host "Checking for existing Ubuntu installations to unregister..."
-        if ((wsl --list --quiet) -contains "Ubuntu") {
-            Write-Host "Unregistering existing Ubuntu distribution..."
-            wsl --unregister Ubuntu
-            Start-Sleep -Seconds 5 # Give it a moment to unregister
-        }
-        
-        # Install Ubuntu directly using the wsl --install command
-        Write-Host "Installing Ubuntu in WSL2 using wsl --install -d Ubuntu..."
-        # This command will install Ubuntu and automatically trigger initial setup.
-        wsl --install -d Ubuntu
-        
-        # Wait for Ubuntu to be registered and then set default user and password
-        Write-Host "Waiting for Ubuntu installation to complete and configuring user 'rdpadmin' with password 'admin'..."
-        Start-Sleep -Seconds 90 # Increased sleep time for robust provisioning
-        
-        # Set default user and password within the newly installed distribution
-        $wslCommands = @"
-        # Check if rdpadmin exists, create if not
-        if ! id "rdpadmin" &>/dev/null; then
-            echo "Creating user rdpadmin..."
-            adduser --disabled-password --gecos "" rdpadmin
-            echo "rdpadmin:admin" | chpasswd
-        else
-            echo "User rdpadmin already exists."
-        fi
-        
-        # Add rdpadmin to sudo group
-        usermod -aG sudo rdpadmin
-        
-        # Configure default user in /etc/wsl.conf
-        echo "[user]" > /etc/wsl.conf
-        echo "default=rdpadmin" >> /etc/wsl.conf
-        chown rdpadmin:rdpadmin /etc/wsl.conf
-        
-        echo "User rdpadmin configured as default with sudo."
-        
-        # Update and install packages
-        echo "Updating and upgrading Ubuntu packages..."
-        apt update -y && apt dist-upgrade -y
-        apt-get install -y build-essential gdb
-        apt install -y python-is-python3
-        
-        echo "Ubuntu package setup complete."
-        exit
-        "@
-        
-        # Execute commands as root to ensure user creation and config file changes, and package installations
-        wsl --distribution Ubuntu --user root --exec bash -c "$wslCommands"
-        
-        Write-Host "WSL Ubuntu installation and setup complete."
     
     - name: Keep Maximum Performance Session Alive
       run: |
