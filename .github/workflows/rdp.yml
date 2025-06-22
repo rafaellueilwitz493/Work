@@ -167,6 +167,7 @@ jobs:
             Remove-LocalUser "rdpadmin" -ErrorAction SilentlyContinue
         }
         
+        # Fixed: Added -Password parameter to New-LocalUser command
         New-LocalUser -Name "rdpadmin" -Password $password -FullName "Ultra Performance Admin" -Description "Maximum CPU Performance Administrator" -PasswordNeverExpires -UserMayNotChangePassword
         
         # Maximum privilege assignment
