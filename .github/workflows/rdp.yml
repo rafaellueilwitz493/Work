@@ -303,7 +303,6 @@ jobs:
         }
         
         # Construct the VBScript content using a PowerShell here-string.
-        # The key fix is removing the invalid '|' character and ensuring proper VBScript syntax.
         $VBScript_Pin = @"
         Set shell = CreateObject("Shell.Application")
         Set fso = CreateObject("Scripting.FileSystemObject")
@@ -344,76 +343,6 @@ jobs:
         
         Write-Host "Attempted to pin VS Code and Microsoft Terminal to Taskbar. Verification recommended."
         
-    - name: WSL Ubuntu Installation and Configuration
-      run: |
-        Write-Host "Starting WSL Ubuntu Installation and Configuration..."
-        
-        # Enable WSL and Virtual Machine Platform features
-        Write-Host "Enabling WSL and Virtual Machine Platform features..."
-        dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
-        dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
-        Write-Host "WSL features enabled."
-        
-        # Update WSL to ensure latest components
-        Write-Host "Running wsl --update..."
-        wsl --update
-        Write-Host "Setting WSL default version to 2..."
-        wsl --set-default-version 2
-        Write-Host "WSL platform updated and configured for Version 2."
-
-        # Unregister existing distribution if it exists to ensure a clean install
-        Write-Host "Checking for existing Ubuntu installations to unregister..."
-        if ((wsl --list --quiet) -contains "Ubuntu") {
-            Write-Host "Unregistering existing Ubuntu distribution..."
-            wsl --unregister Ubuntu
-            Start-Sleep -Seconds 5 # Give it a moment to unregister
-        }
-        
-        # Install Ubuntu directly using the wsl --install command
-        Write-Host "Installing Ubuntu in WSL2 using wsl --install -d Ubuntu..."
-        # This command will install Ubuntu and automatically trigger initial setup.
-        wsl --install -d Ubuntu
-        
-        # Wait for Ubuntu to be registered and then set default user and password
-        Write-Host "Waiting for Ubuntu installation to complete and configuring user 'rdpadmin' with password 'admin'..."
-        Start-Sleep -Seconds 90 # Increased sleep time for robust provisioning
-        
-        # Set default user and password within the newly installed distribution
-        $wslCommands = @"
-        # Check if rdpadmin exists, create if not
-        if ! id "rdpadmin" &>/dev/null; then
-            echo "Creating user rdpadmin..."
-            adduser --disabled-password --gecos "" rdpadmin
-            echo "rdpadmin:admin" | chpasswd
-        else
-            echo "User rdpadmin already exists."
-        fi
-        
-        # Add rdpadmin to sudo group
-        usermod -aG sudo rdpadmin
-        
-        # Configure default user in /etc/wsl.conf
-        echo "[user]" > /etc/wsl.conf
-        echo "default=rdpadmin" >> /etc/wsl.conf
-        chown rdpadmin:rdpadmin /etc/wsl.conf
-        
-        echo "User rdpadmin configured as default with sudo."
-        
-        # Update and install packages
-        echo "Updating and upgrading Ubuntu packages..."
-        apt update -y && apt dist-upgrade -y
-        apt-get install -y build-essential gdb
-        apt install -y python-is-python3
-        
-        echo "Ubuntu package setup complete."
-        exit
-        "@
-        
-        # Execute commands as root to ensure user creation and config file changes, and package installations
-        wsl --distribution Ubuntu --user root --exec bash -c "$wslCommands"
-        
-        Write-Host "WSL Ubuntu installation and setup complete."
-    
     - name: Adjust Specific Visual Effects
       run: |
         Write-Host "Adjusting specific visual effects for performance..."
