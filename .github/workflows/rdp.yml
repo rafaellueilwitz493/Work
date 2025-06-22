@@ -1,19 +1,36 @@
 name: Ultra Performance RDP - Latest Windows
 on:
   workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Session duration (hours)'
+        required: false
+        default: '6'
+        type: string
+
 jobs:
   ultra-performance-rdp:
-    runs-on: windows-2025  # Latest Windows Server 2025
+    runs-on: windows-latest
+    timeout-minutes: 360
+    
     steps:
-    - name: Checkout
+    - name: Checkout Repository
       uses: actions/checkout@v4
     
     - name: Maximize CPU Performance
       run: |
+        Write-Host "Setting up MAXIMUM CPU performance..."
+        
         # Ultimate Performance Power Scheme
-        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
-        $scheme = (powercfg -list | Select-String "Ultimate").Line.Split()[3]
-        powercfg -setactive $scheme
+        try {
+          powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+          $scheme = (powercfg -list | Select-String "Ultimate" | Select-Object -First 1).Line.Split()[3]
+          powercfg -setactive $scheme
+          Write-Host "Ultimate Performance scheme activated"
+        } catch {
+          powercfg -setactive SCHEME_MIN
+          Write-Host "High Performance scheme activated"
+        }
         
         # Extreme CPU Settings - 100% Performance Always
         $guid = (powercfg -getactivescheme).Split()[3]
@@ -33,87 +50,147 @@ jobs:
         powercfg -hibernate off
         
         # Maximum CPU priority for all processes
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 24
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 24 -ErrorAction SilentlyContinue
         
         Write-Host "✅ CPU set to MAXIMUM performance - 100% always-on"
+      shell: powershell
     
-    - name: Windows Update & Optimization
+    - name: System Optimization
       run: |
-        # Force Windows Update
-        Install-Module PSWindowsUpdate -Force
-        Get-WindowsUpdate -AcceptAll -Install -AutoReboot
+        Write-Host "Optimizing system for maximum performance..."
         
         # Disable non-essential services for CPU focus
-        $services = @("DiagTrack","WSearch","Themes","TabletInputService","Fax","XblAuthManager","XblGameSave")
+        $services = @("DiagTrack","WSearch","Themes","TabletInputService","Fax","XblAuthManager","XblGameSave","MapsBroker","lfsvc")
         foreach($svc in $services) {
+          try {
             Stop-Service $svc -Force -ErrorAction SilentlyContinue
             Set-Service $svc -StartupType Disabled -ErrorAction SilentlyContinue
+            Write-Host "Disabled service: $svc"
+          } catch {
+            Write-Host "Could not disable service: $svc"
+          }
         }
         
         # Disable ALL visual effects
-        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "UserPreferencesMask" -Value ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00))
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "UserPreferencesMask" -Value ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00)) -ErrorAction SilentlyContinue
         
-        Write-Host "✅ Windows updated & optimized for maximum CPU performance"
+        # Disable Windows Defender for maximum CPU
+        try {
+          Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+          Write-Host "Windows Defender real-time protection disabled"
+        } catch {
+          Write-Host "Could not disable Windows Defender"
+        }
+        
+        Write-Host "✅ System optimized for maximum CPU performance"
+      shell: powershell
     
     - name: Setup Ultra RDP
       run: |
+        Write-Host "Setting up Ultra Performance RDP..."
+        
         # Enable RDP with maximum performance
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         
         # Ultra performance RDP settings
         $rdp = 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
-        Set-ItemProperty -Path $rdp -Name "MaxInstanceCount" -Value 50
-        Set-ItemProperty -Path $rdp -Name "fDisableWallpaper" -Value 1
-        Set-ItemProperty -Path $rdp -Name "fDisableFullWindowDrag" -Value 1
-        Set-ItemProperty -Path $rdp -Name "fDisableMenuAnims" -Value 1
-        Set-ItemProperty -Path $rdp -Name "fDisableTheming" -Value 1
-        Set-ItemProperty -Path $rdp -Name "fDisableComposition" -Value 1
+        Set-ItemProperty -Path $rdp -Name "MaxInstanceCount" -Value 50 -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $rdp -Name "fDisableWallpaper" -Value 1 -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $rdp -Name "fDisableFullWindowDrag" -Value 1 -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $rdp -Name "fDisableMenuAnims" -Value 1 -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $rdp -Name "fDisableTheming" -Value 1 -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $rdp -Name "fDisableComposition" -Value 1 -ErrorAction SilentlyContinue
         
         # Create admin user
         $pass = ConvertTo-SecureString "UltraAdmin2024!" -AsPlainText -Force
-        New-LocalUser -Name "ultraadmin" -Password $pass -FullName "Ultra Admin" -PasswordNeverExpires -UserMayNotChangePassword
-        Add-LocalGroupMember -Group "Administrators" -Member "ultraadmin"
-        Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ultraadmin"
-        
-        Write-Host "✅ Ultra RDP configured - Username: ultraadmin | Password: UltraAdmin2024!"
+        try {
+          if (Get-LocalUser -Name "ultraadmin" -ErrorAction SilentlyContinue) {
+            Remove-LocalUser -Name "ultraadmin" -ErrorAction SilentlyContinue
+          }
+          New-LocalUser -Name "ultraadmin" -Password $pass -FullName "Ultra Admin" -Description "Ultra Performance RDP Admin" -PasswordNeverExpires -UserMayNotChangePassword
+          Add-LocalGroupMember -Group "Administrators" -Member "ultraadmin"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "ultraadmin"
+          Write-Host "✅ Ultra RDP user created - Username: ultraadmin | Password: UltraAdmin2024!"
+        } catch {
+          Write-Host "Error creating RDP user: $($_.Exception.Message)"
+        }
+      shell: powershell
     
-    - name: Install & Start Playit
+    - name: Install and Start Playit
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "playit.exe"
+        Write-Host "Installing Playit Agent..."
         
-        # Start with REALTIME priority for maximum CPU access
-        $proc = Start-Process -FilePath "playit.exe" -ArgumentList "--secret", "$env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
-        $proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::RealTime
-        $proc.ProcessorAffinity = [System.IntPtr]::new([Math]::Pow(2, [Environment]::ProcessorCount) - 1)
-        
-        Write-Host "✅ Playit started with REALTIME priority"
-    
-    - name: Final CPU Boost & Keep Alive
-      run: |
-        # Disable Windows Defender for maximum CPU
-        Set-MpPreference -DisableRealtimeMonitoring $true
-        
-        # Set system to maximum performance mode
-        powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c
-        
-        Write-Host "🚀 ULTRA PERFORMANCE RDP READY!"
-        Write-Host "🔥 CPU: MAXIMUM performance, REALTIME priority"
-        Write-Host "👤 User: ultraadmin | 🔑 Pass: UltraAdmin2024!"
-        Write-Host "⚡ System: Latest Windows, fully updated"
-        
-        # Keep alive for 6 hours
-        $end = (Get-Date).AddHours(6)
-        while ((Get-Date) -lt $end) {
-            # Maintain REALTIME priority on Playit
-            $playit = Get-Process -Name "playit*" -ErrorAction SilentlyContinue
-            if ($playit -and $playit.PriorityClass -ne "RealTime") {
-                $playit.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::RealTime
-            }
-            Start-Sleep 300
+        if (-not $env:PLAYIT_AUTH_KEY) {
+          Write-Host "Error: PLAYIT_AUTH_KEY secret not set"
+          exit 1
         }
         
-        Write-Host "✅ 6-hour ultra performance session completed"
+        try {
+          Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe" -UseBasicParsing
+          Write-Host "Playit Agent downloaded successfully"
+          
+          # Start with HIGH priority for maximum CPU access
+          $proc = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "$env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
+          $proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+          $proc.ProcessorAffinity = [System.IntPtr]::new([Math]::Pow(2, [Environment]::ProcessorCount) - 1)
+          
+          Write-Host "✅ Playit started with HIGH priority (PID: $($proc.Id))"
+          Start-Sleep -Seconds 10
+          
+          if (Get-Process -Id $proc.Id -ErrorAction SilentlyContinue) {
+            Write-Host "✅ Playit Agent running successfully"
+          }
+        } catch {
+          Write-Host "Error with Playit Agent: $($_.Exception.Message)"
+          exit 1
+        }
+      shell: powershell
+    
+    - name: System Status and Keep Alive
+      run: |
+        Write-Host "🚀 ULTRA PERFORMANCE RDP READY!"
+        Write-Host "🔥 CPU: MAXIMUM performance, HIGH priority processes"
+        Write-Host "👤 Username: ultraadmin"
+        Write-Host "🔑 Password: UltraAdmin2024!"
+        Write-Host "⚡ System: Latest Windows, fully optimized"
+        Write-Host "🛡️ Access Level: FULL ADMINISTRATOR"
+        Write-Host ""
+        
+        # System info
+        $cpu = Get-CimInstance -ClassName Win32_Processor
+        $memory = Get-CimInstance -ClassName Win32_OperatingSystem
+        $totalMemoryGB = [math]::Round($memory.TotalVisibleMemorySize / 1MB, 2)
+        
+        Write-Host "💻 System Specs:"
+        Write-Host "   CPU: $($cpu.Name)"
+        Write-Host "   Cores: $($cpu.NumberOfLogicalProcessors) (ALL ACTIVE)"
+        Write-Host "   Memory: $totalMemoryGB GB"
+        Write-Host ""
+        
+        # Keep alive for specified duration
+        $duration = if ($env:DURATION) { [int]$env:DURATION } else { 6 }
+        $end = (Get-Date).AddHours($duration)
+        Write-Host "🕒 Session will run for $duration hours until $($end.ToString('yyyy-MM-dd HH:mm:ss'))"
+        
+        while ((Get-Date) -lt $end) {
+          $remaining = $end - (Get-Date)
+          Write-Host "⏰ Time remaining: $($remaining.Hours)h $($remaining.Minutes)m - System running at MAXIMUM performance"
+          
+          # Maintain HIGH priority on Playit
+          $playit = Get-Process -Name "playit*" -ErrorAction SilentlyContinue
+          if ($playit -and $playit.PriorityClass -ne "High") {
+            $playit.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+            Write-Host "🔧 Restored HIGH priority to Playit Agent"
+          }
+          
+          Start-Sleep 300  # Check every 5 minutes
+        }
+        
+        Write-Host "✅ Ultra performance session completed successfully!"
+      shell: powershell
+      env:
+        DURATION: ${{ github.event.inputs.duration }}
