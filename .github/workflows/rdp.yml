@@ -199,7 +199,7 @@ jobs:
       run: |
         Write-Host "Performing AGGRESSIVE resource cleanup and service optimization (EXTREME)..."
 
-        # Stop and disable non-essential services (expanded EXTREME list)
+        # Stop and disable non-essential services (expanded EXTREME list - reviewed for stability)
         $servicesToDisable = @(
             "DiagTrack",           # Diagnostics Tracking Service
             "dmwappushservice",    # Device Management WAP Push
@@ -225,7 +225,6 @@ jobs:
             "WiaRpc",              # Still Image Service
             "DoSvc",               # Delivery Optimization
             "PcaSvc",              # Program Compatibility Assistant Service
-            "FontCache",           # Windows Font Cache Service
             "XboxGmsCore",         # Xbox Game Bar and Game Mode
             "dmEnrollmentSvc",     # DM Enrollment Service
             "cbdhsvc",             # Clipboard User Service
@@ -239,28 +238,15 @@ jobs:
             "upnphost",            # UPnP Device Host
             "PNRPAutoReg",         # PNRP Machine Name Publication Service
             "PNRPsvc",             # Peer Name Resolution Protocol
-            "W32Time",             # Windows Time (can cause issues, but for raw performance)
             "RemoteRegistry",      # Remote Registry (disable unless needed)
             "BrokerInfrastructure", # Background Tasks Infrastructure Service
             "DevicePicker",         # Device Association Service
             "DeviceInstall",        # Device Install Service
             "DusmSvc",              # Data Usage
-            "NetMsmqDp",            # Net.Msmq Listener Adapter
-            "NetPipeDp",            # Net.Pipe Listener Adapter
             "PeerDistSvc",          # Peer Networking Grouping
-            "PptpMiniport",         # PPTP Miniport
             "VaultSvc",             # Credential Manager
-            "WlanSvc",              # WLAN AutoConfig (if not using Wi-Fi)
             "RmSvc",                # Windows Remote Management (WS-Management)
-            "CscService",           # Offline Files
-            "CertPropSvc",          # Certificate Propagation
-            "DPS",                  # Diagnostic Policy Service
-            "EventLog",             # Windows Event Log (critical, but trying extreme)
-            "EventSystem",          # COM+ Event System
-            "NlaSvc",               # Network Location Awareness
-            "Netlogon",             # Netlogon
-            "RasMan",               # Remote Access Connection Manager
-            "RemoteAccess"          # Remote Access Auto Connection Manager
+            "CscService"            # Offline Files
         )
 
         $servicesDisabled = 0
@@ -269,14 +255,22 @@ jobs:
                 $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
                 if ($svc -and $svc.Status -ne "Disabled") {
                     if ($svc.Status -eq "Running") {
+                        Write-Host "Attempting to stop service: $service"
                         Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+                        # Add a short delay to ensure service stops
+                        Start-Sleep -Milliseconds 100
                     }
+                    Write-Host "Attempting to disable service: $service"
                     Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
                     $servicesDisabled++
                     Write-Host "✓ Disabled service: $service"
+                } elseif (-not $svc) {
+                    Write-Host "ℹ️ Service not found (might not be installed): $service"
+                } else {
+                    Write-Host "ℹ️ Service already disabled: $service"
                 }
             } catch {
-                Write-Host "⚠ Could not disable service: $service ($($_.Exception.Message))"
+                Write-Host "⚠ Critical error disabling service: $service ($($_.Exception.Message))"
             }
         }
         Write-Host "Services optimization: $servicesDisabled services disabled."
@@ -301,11 +295,19 @@ jobs:
         $cleanedPaths = 0
         foreach ($path in $tempPaths) {
             try {
-                $itemsRemoved = (Remove-Item $path -Recurse -Force -ErrorAction SilentlyContinue -PassThru).Count
+                # Use Get-ChildItem and then Remove-Item for better error handling on individual items
+                Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+                    try {
+                        Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+                        $itemsRemoved++
+                    } catch {
+                        # Suppress individual file removal errors but log them verbosely if needed for debug
+                        # Write-Host "DEBUG: Could not remove $($_.FullName): $($_.Exception.Message)"
+                    }
+                }
                 if ($itemsRemoved -gt 0) { $cleanedPaths++ }
             } catch {
-                # Skip protected files, but log if it's a significant error
-                Write-Host "⚠ Error cleaning $path: $($_.Exception.Message)"
+                Write-Host "⚠ Error processing path $path: $($_.Exception.Message)"
             }
         }
         Write-Host "✓ Cleanup completed: $cleanedPaths locations processed."
@@ -317,7 +319,7 @@ jobs:
             $clearedLogs = 0
             foreach ($log in $eventLogs) {
                 try {
-                    Clear-WinEvent -LogName $log.LogName -Confirm:$false -ErrorAction SilentlyContinue
+                    wevtutil cl $log.LogName 2>$null # Using wevtutil for more reliability
                     $clearedLogs++
                 } catch {
                     Write-Host "⚠ Could not clear event log: $($log.LogName) ($($_.Exception.Message))"
@@ -484,7 +486,7 @@ jobs:
             Set-Service -Name "wuauserv" -StartupType Disabled -ErrorAction SilentlyContinue
 
             Stop-Service -Name "BITS" -Force -ErrorAction SilentlyContinue # Background Intelligent Transfer Service
-            Set-Service -Name "BITS" -StartupType Disabled -ErrorAction SilelyContinue
+            Set-Service -Name "BITS" -StartupType Disabled -ErrorAction SilentlyContinue
 
             Stop-Service -Name "DoSvc" -Force -ErrorAction SilentlyContinue # Delivery Optimization Service
             Set-Service -Name "DoSvc" -StartupType Disabled -ErrorAction SilentlyContinue
