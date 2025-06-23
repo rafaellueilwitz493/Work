@@ -252,8 +252,15 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         
+        netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
+        New-NetFirewallRule -DisplayName "RDP-In" -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -ErrorAction SilentlyContinue
+        
+        # Ensure Terminal Services start
+        Start-Service -Name "TermService" -ErrorAction SilentlyContinue
+        Set-Service -Name "TermService" -StartupType Automatic -ErrorAction SilentlyContinue
+        
         # Disable Network Level Authentication for faster connections (less secure but faster)
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 1
         
         # Maximum performance RDP settings
         $rdpPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
@@ -523,9 +530,9 @@ jobs:
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel" -Name "ObCaseInsensitive" -Value 1 -ErrorAction SilentlyContinue
         # Disable security mitigations for max performance (VERY RISKY) - with correct syntax
         try {
-            bcdedit /set "{current}" hypervisorlaunchtype off 2>$null
-            bcdedit /set "{current}" nx AlwaysOff 2>$null
-            bcdedit /set "{current}" pae ForceDisable 2>$null
+            # bcdedit /set "{current}" hypervisorlaunchtype off 2>$null
+            # bcdedit /set "{current}" nx AlwaysOff 2>$null
+            # bcdedit /set "{current}" pae ForceDisable 2>$null
             Write-Host "✅ Security mitigations disabled for performance"
         } catch {
             Write-Host "⚠️ Some security settings require administrator privileges"
@@ -554,8 +561,8 @@ jobs:
         }
         # Apply boot optimizations with correct syntax
         try {
-            bcdedit /set "{current}" nx AlwaysOff 2>$null
-            bcdedit /set "{current}" pae ForceDisable 2>$null
+            # bcdedit /set "{current}" nx AlwaysOff 2>$null
+            # bcdedit /set "{current}" pae ForceDisable 2>$null
             bcdedit /set "{current}" nointegritychecks on 2>$null
             bcdedit /set "{current}" bootmenupolicy legacy 2>$null
             bcdedit /set "{current}" bootstatuspolicy ignoreallfailures 2>$null
@@ -627,53 +634,6 @@ jobs:
         # Optimize memory allocation for CPU cache alignment
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "PoolUsageMaximum" -Value 60 -ErrorAction SilentlyContinue
         Write-Host "✅ Memory bandwidth optimized for CPU performance"
-
-    - name: Final Extreme Optimizations and Warnings
-      run: |
-        Write-Host "Applying final extreme optimizations..."
-        # Force CPU governor to performance mode (Linux equivalent)
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes" -Name "ActiveOverlayAcPowerScheme" -Value "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c" -ErrorAction SilentlyContinue
-        # Disable Windows Defender real-time protection (SECURITY RISK)
-        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-        # Force reboot to apply all changes
-        Write-Host "========================================="
-        Write-Host "⚠️  CRITICAL WARNINGS:"
-        Write-Host "- System security is now SEVERELY COMPROMISED"
-        Write-Host "- CPU will run at MAXIMUM heat - MONITOR TEMPERATURES"
-        Write-Host "- System may become unstable"
-        Write-Host "- Battery life will be minimal"
-        Write-Host "- Some changes require reboot"
-        Write-Host "========================================="
-        Write-Host "✅ EXTREME CPU optimizations completed"
-        # Create startup script to launch PlayIt.gg after reboot
-        $startupScript = @'
-        @echo off
-        echo Starting PlayIt.gg after CPU optimization reboot...
-        timeout /t 30 /nobreak >nul
-        start "" "C:\Program Files\PlayIt.gg\playit.exe"
-        if not %errorlevel%==0 (
-            echo PlayIt.gg not found at default location, trying alternative paths...
-            start "" "C:\Program Files (x86)\PlayIt.gg\playit.exe"
-            if not %errorlevel%==0 (
-                start "" "%LOCALAPPDATA%\PlayIt.gg\playit.exe"
-                if not %errorlevel%==0 (
-                    start "" "%APPDATA%\PlayIt.gg\playit.exe"
-                    if not %errorlevel%==0 (
-                        echo PlayIt.gg executable not found. Please start manually.
-                        pause
-                    )
-                )
-            )
-        )
-        del "%~f0"
-        '@
-        $startupPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\start_playitgg.bat"
-        $startupScript | Out-File -FilePath $startupPath -Encoding ASCII -Force
-        Write-Host "✅ PlayIt.gg will auto-start after reboot"
-        # Force immediate reboot to apply all optimizations
-        Write-Host "🔄 REBOOTING IN 10 SECONDS TO APPLY OPTIMIZATIONS..."
-        Write-Host "🎮 PlayIt.gg will start automatically after reboot!"
-        shutdown /r /t 10 /c "Rebooting to apply extreme CPU optimizations - PlayIt.gg will auto-start"
 
     - name: Keep Maximum Performance Session Alive
       run: |
