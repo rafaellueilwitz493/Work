@@ -76,8 +76,8 @@ jobs:
         # Set a large, static page file on C: (4GB initial, 8GB max) for stability
         # Remove existing page file settings before setting new ones to prevent errors
         Get-CimInstance -ClassName Win32_PageFileSetting -ErrorAction SilentlyContinue | Remove-CimInstance -ErrorAction SilentlyContinue
-        # Create a new page file setting
-        New-CimInstance -ClassName Win32_PageFileSetting -Property @{Name = "C:\pagefile.sys"; InitialSize = 4096; MaximumSize = 8192}
+        # Create a new page file setting with explicit type casting for sizes
+        New-CimInstance -ClassName Win32_PageFileSetting -Property @{Name = "C:\pagefile.sys"; InitialSize = [uint32]4096; MaximumSize = [uint32]8192}
         # Disable search indexing service for better disk performance
         sc.exe config "WSearch" start=disabled
         sc.exe stop "WSearch"
@@ -158,7 +158,7 @@ jobs:
         Write-Host "🚀 RDP TUNNEL IS ACTIVE! Connect using the address from your playit.gg dashboard."
         Write-Host "   ================================"
         Write-Host "   👤 Username: rdpadmin"
-        Write-Host "   🔑 Password: $fqrfFRFr23"
+        Write-Host "   🔑 Password: $env:RDP_PASSWORD"
         Write-Host "   ================================"
         Write-Host "🕒 This session will remain active for approximately 6 hours."
 
