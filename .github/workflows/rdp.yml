@@ -25,24 +25,48 @@ jobs:
     - name: ⚙️ Apply Maximum System & CPU Performance Tweaks
       run: |
         # --- 1. SET ULTIMATE PERFORMANCE POWER PLAN & CPU SETTINGS ---
-        Write-Host "Setting Ultimate Performance power plan and maxing out CPU settings..."
-        # The Ultimate Performance GUID is e9a42b02-d5df-448d-aa00-03f14749eb61
-        powercfg /duplicatesscheme e9a42b02-d5df-448d-aa00-03f14749eb61
-        $UltimateScheme = (powercfg -list | Select-String "Ultimate Performance").Line.Split(' ')[3]
-        powercfg /setactive $UltimateScheme
+        Write-Host "Attempting to set Ultimate Performance power plan..."
+
+        # Known GUIDs for power schemes
+        $UltimatePerformanceGuid = "e9a42b02-d5df-448d-aa00-03f14749eb61"
+        $HighPerformanceGuid = "8c5e7fd1-a8b8-4a42-b1d1-e8d4281de196"
+
+        # Check if Ultimate Performance scheme exists and activate it
+        $UltimatePerformanceScheme = (powercfg -list | Select-String $UltimatePerformanceGuid -ErrorAction SilentlyContinue)
+
+        if ($UltimatePerformanceScheme) {
+            Write-Host "Ultimate Performance plan found. Activating..."
+            powercfg /setactive $UltimatePerformanceGuid
+        } else {
+            Write-Host "Ultimate Performance plan not found. Falling back to High Performance plan..."
+            # Check if High Performance scheme exists and activate it
+            $HighPerformanceScheme = (powercfg -list | Select-String $HighPerformanceGuid -ErrorAction SilentlyContinue)
+            if ($HighPerformanceScheme) {
+                powercfg /setactive $HighPerformanceGuid
+            } else {
+                Write-Host "Neither Ultimate Performance nor High Performance plan found. Using current active plan."
+            }
+        }
+
+        # Apply settings to the currently active scheme
+        powercfg /setactive SCHEME_CURRENT
+
 
         # Disable all power-saving timeouts
+        Write-Host "Disabling power-saving timeouts..."
         powercfg -change standby-timeout-ac 0
         powercfg -change hibernate-timeout-ac 0
         powercfg -change disk-timeout-ac 0
         powercfg -change monitor-timeout-ac 0
 
         # Set CPU to 100% minimum and maximum state to prevent throttling
+        Write-Host "Setting CPU minimum and maximum states to 100%..."
         powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100
         powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
         # Set system cooling policy to Active to ramp up fans sooner and prevent thermal throttling
+        Write-Host "Setting system cooling policy to Active..."
         powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR SYSCOOLPOL 1
-        powercfg -setactive SCHEME_CURRENT # Apply settings
+        powercfg -setactive SCHEME_CURRENT # Apply updated settings
 
         # --- 2. OPTIMIZE PAGE FILE & DISABLE INDEXING ---
         Write-Host "Optimizing page file and disabling search indexing..."
@@ -50,7 +74,8 @@ jobs:
         $ComputerSystem = Get-CimInstance -ClassName Win32_ComputerSystem
         Set-CimInstance -InputObject $ComputerSystem -Property @{AutomaticManagedPagefile = $false}
         # Set a large, static page file on C: (4GB initial, 8GB max) for stability
-        Get-CimInstance -ClassName Win32_PageFileSetting | Remove-CimInstance
+        # Remove existing page file settings before setting new ones to prevent errors
+        Get-CimInstance -ClassName Win32_PageFileSetting -ErrorAction SilentlyContinue | Remove-CimInstance -ErrorAction SilentlyContinue
         Set-CimInstance -ClassName Win32_PageFileSetting -Arguments @{Name = "C:\pagefile.sys"; InitialSize = 4096; MaximumSize = 8192}
         # Disable search indexing service for better disk performance
         sc.exe config "WSearch" start=disabled
