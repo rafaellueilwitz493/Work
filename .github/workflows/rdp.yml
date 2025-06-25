@@ -1,185 +1,146 @@
-# This workflow creates a highly performant and stable RDP session.
-# It is designed to run for the maximum duration allowed by GitHub Actions (approx. 6 hours).
-#
-# How it works:
-# 1. Optimizes Windows for maximum stable performance (Power Plan, CPU settings, Services).
-# 2. Creates a dedicated RDP user with Administrator rights and a static password.
-# 3. Configures RDP for a low-latency, high-performance connection by disabling visual effects.
-# 4. Uses playit.gg to create a secure tunnel to the RDP session.
-# 5. Includes a robust keep-alive mechanism to monitor and maintain the tunnel.
-#
-# IMPORTANT: You must add your Playit secret to your repository's secrets with the name `PLAYIT_SECRET`.
 name: Maximum Performance Stable RDP Tunnel
+
 on:
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
-    timeout-minutes: 355 # Set timeout just under 6 hours to allow for graceful exit
+    timeout-minutes: 355
 
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
 
     - name: ⚙️ Apply Maximum System & CPU Performance Tweaks
+      shell: pwsh
       run: |
-        # --- 1. SET ULTIMATE PERFORMANCE POWER PLAN & CPU SETTINGS ---
-        Write-Host "Attempting to set Ultimate Performance power plan..."
-
-        # Known GUIDs for power schemes
-        $UltimatePerformanceGuid = "e9a42b02-d5df-448d-aa00-03f14749eb61"
-        $HighPerformanceGuid = "8c5e7fd1-a8b8-4a42-b1d1-e8d4281de196"
-
-        # Check if Ultimate Performance scheme exists and activate it
-        $UltimatePerformanceScheme = (powercfg -list | Select-String $UltimatePerformanceGuid -ErrorAction SilentlyContinue)
-
-        if ($UltimatePerformanceScheme) {
-            Write-Host "Ultimate Performance plan found. Activating..."
-            powercfg /setactive $UltimatePerformanceGuid
-        } else {
-            Write-Host "Ultimate Performance plan not found. Falling back to High Performance plan..."
-            # Check if High Performance scheme exists and activate it
-            $HighPerformanceScheme = (powercfg -list | Select-String $HighPerformanceGuid -ErrorAction SilentlyContinue)
-            if ($HighPerformanceScheme) {
-                powercfg /setactive $HighPerformanceGuid
-            } else {
-                Write-Host "Neither Ultimate Performance nor High Performance plan found. Using current active plan."
-            }
+        # Power Plan: Ultimate
+        $UltimateGUID = "e9a42b02-d5df-448d-aa00-03f14749eb61"
+        if (!(powercfg -list | Select-String $UltimateGUID)) {
+          powercfg -duplicatescheme $UltimateGUID
         }
+        powercfg /setactive $UltimateGUID
 
-        # Apply settings to the currently active scheme
-        powercfg /setactive SCHEME_CURRENT
-
-
-        # Disable all power-saving timeouts
-        Write-Host "Disabling power-saving timeouts..."
+        # Disable sleep, hibernate, etc.
         powercfg -change standby-timeout-ac 0
         powercfg -change hibernate-timeout-ac 0
         powercfg -change disk-timeout-ac 0
         powercfg -change monitor-timeout-ac 0
 
-        # Set CPU to 100% minimum and maximum state to prevent throttling
-        Write-Host "Setting CPU minimum and maximum states to 100%..."
+        # Set CPU 100%
         powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100
         powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
-        # Set system cooling policy to Active to ramp up fans sooner and prevent thermal throttling
-        Write-Host "Setting system cooling policy to Active..."
         powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR SYSCOOLPOL 1
-        powercfg -setactive SCHEME_CURRENT # Apply updated settings
+        powercfg /setactive SCHEME_CURRENT
 
-        # --- 2. OPTIMIZE PAGE FILE & DISABLE INDEXING ---
-        Write-Host "Optimizing page file and disabling search indexing..."
-        # Disable automatic page file management
-        $ComputerSystem = Get-CimInstance -ClassName Win32_ComputerSystem
-        Set-CimInstance -InputObject $ComputerSystem -Property @{AutomaticManagedPagefile = $false}
-        # Set a large, static page file on C: (4GB initial, 8GB max) for stability
-        # Remove existing page file settings before setting new ones to prevent errors
-        Get-CimInstance -ClassName Win32_PageFileSetting -ErrorAction SilentlyContinue | Remove-CimInstance -ErrorAction SilentlyContinue
-        # Create a new page file setting with explicit type casting for sizes
-        New-CimInstance -ClassName Win32_PageFileSetting -Property @{Name = "C:\pagefile.sys"; InitialSize = [uint32]4096; MaximumSize = [uint32]8192}
-        # Disable search indexing service for better disk performance
-        sc.exe config "WSearch" start=disabled
-        sc.exe stop "WSearch"
+        # Pagefile settings
+        Get-CimInstance Win32_PageFileSetting | Remove-CimInstance -ErrorAction SilentlyContinue
+        Set-CimInstance (Get-CimInstance Win32_ComputerSystem) -Property @{AutomaticManagedPagefile = $false}
+        New-CimInstance -ClassName Win32_PageFileSetting -Property @{Name="C:\pagefile.sys"; InitialSize=4096; MaximumSize=8192}
 
-    - name: 🔐 Create Admin User & Configure RDP
-      id: rdp_user
+        # Disable indexing
+        Stop-Service -Name "WSearch" -Force -ErrorAction SilentlyContinue
+        Set-Service -Name "WSearch" -StartupType Disabled -ErrorAction SilentlyContinue
+
+    - name: 🔐 Create Admin User & Configure RDP + GPU + Clipboard
+      id: rdp
+      shell: pwsh
       run: |
-        # --- 3. CREATE ADMIN USER WITH STATIC PASSWORD ---
-        Write-Host "Creating RDP user with specified credentials..."
-        # Set the static username and password
         $Username = "rdpadmin"
         $Password = "UltraStable2024!"
         $SecurePassword = ConvertTo-SecureString $Password -AsPlainText -Force
-        New-LocalUser $Username -Password $SecurePassword -FullName "RDP Admin" -Description "RDP Administrator User" -PasswordNeverExpires
-        Add-LocalGroupMember -Group "Administrators" -Member $Username
-        Add-LocalGroupMember -Group "Remote Desktop Users" -Member $Username
 
-        # Output credentials to the log and to a step output
-        Write-Host "✅ RDP User created!"
-        Write-Host "   ================================"
-        Write-Host "   👤 Username: $Username"
-        Write-Host "   🔑 Password: $Password"
-        Write-Host "   ================================"
-        echo "::set-output name=password::$Password"
-
-        # --- 4. CONFIGURE RDP FOR MAXIMUM PERFORMANCE & STABILITY ---
-        Write-Host "Configuring RDP for a snappy, low-latency experience..."
-        # Enable RDP and set firewall rule
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-
-        # Disable Network Level Authentication (NLA) for broader compatibility.
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
-
-        # Force RDP to use its optimized graphics provider for better performance
-        Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fEnableWddmDriver" -Value 1 -Force
-
-        # --- 5. DISABLE VISUALS, SERVICES & DEFENDER ---
-        Write-Host "Disabling non-essential services and visual effects..."
-        # Set "Adjust for best performance" to turn off all Aero effects, animations, etc.
-        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
-        # Disable non-essential services
-        $servicesToDisable = @("DiagTrack", "dmwappushservice", "MapsBroker", "TrkWks", "WbioSrvc", "WMPNetworkSvc", "XblAuthManager", "XblGameSave", "XboxGipSvc", "Fax", "Themes")
-        foreach ($service in $servicesToDisable) {
-            Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
-            Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
+        if (!(Get-LocalUser -Name $Username -ErrorAction SilentlyContinue)) {
+          New-LocalUser $Username -Password $SecurePassword -FullName "RDP Admin" -PasswordNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member $Username
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $Username
         }
-        # Disable Windows Defender real-time monitoring
+
+        # Enable RDP and disable NLA
+        Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' fDenyTSConnections 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' UserAuthentication 0
+
+        # Enable GPU acceleration
+        New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Force | Out-Null
+        Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fEnableWddmDriver" -Value 1
+
+        # Clipboard & Drive redirection (usually controlled by client, but enable at server side)
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableClip" -Value 0
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableCdm" -Value 0
+
+        # Disable visual distractions for latency
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
+        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "UserPreferencesMask" -Value ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00))
+
+        # Disable RDP font smoothing, wallpaper
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Terminal Server Client" -Name "DisableFontSmoothing" -Value 1
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Terminal Server Client" -Name "DisableWallpaper" -Value 1
+
+        # Disable unnecessary services
+        $services = "DiagTrack","dmwappushservice","MapsBroker","TrkWks","WbioSrvc","WMPNetworkSvc","XblAuthManager","XblGameSave","XboxGipSvc","Fax","Themes"
+        foreach ($s in $services) {
+          Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
+          Set-Service -Name $s -StartupType Disabled -ErrorAction SilentlyContinue
+        }
+
+        # Disable Defender
         Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-        # Disable Windows Update service
         Stop-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue
         Set-Service -Name "wuauserv" -StartupType Disabled -ErrorAction SilentlyContinue
 
+        # Optional Auto-login (may not work on GitHub hosted runners, safe guarded)
+        try {
+          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "AutoAdminLogon" -Value "1"
+          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "DefaultUsername" -Value $Username
+          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "DefaultPassword" -Value $Password
+        } catch {
+          Write-Host "Auto-login setup skipped (non-critical)"
+        }
+
+        # Export password
+        echo "RDP_PASSWORD=$Password" >> $env:GITHUB_ENV
+
     - name: 🚀 Start RDP Tunnel and Keep Alive
+      shell: pwsh
       env:
         PLAYIT_SECRET: ${{ secrets.PLAYIT_SECRET }}
-        RDP_PASSWORD: ${{ steps.rdp_user.outputs.password }}
+        RDP_PASSWORD: ${{ env.RDP_PASSWORD }}
       run: |
-        # Download the playit agent
-        Write-Host "Downloading Playit agent..."
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+        $exePath = "$env:USERPROFILE\playit.exe"
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile $exePath
 
-        # Check if the secret is set
         if (-not $env:PLAYIT_SECRET) {
-            Write-Host "❌ ERROR: PLAYIT_SECRET is not set in repository secrets. The tunnel cannot start."
-            exit 1
+          Write-Host "❌ PLAYIT_SECRET is missing."
+          exit 1
         }
 
-        # Start the tunnel process in the background
-        Write-Host "Starting Playit tunnel..."
-        $process = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "$env:PLAYIT_SECRET" -WindowStyle Hidden -PassThru
-        $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-        Write-Host "✅ Playit Agent started with HIGH PRIORITY (PID: $($process.Id))"
-        Write-Host "Please wait about 15-30 seconds for the tunnel to initialize..."
+        $proc = Start-Process -FilePath $exePath -ArgumentList "--secret", "$env:PLAYIT_SECRET" -WindowStyle Hidden -PassThru
+        $proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
         Start-Sleep -Seconds 20
 
-        # --- KEEP-ALIVE LOOP ---
-        Write-Host "🚀 RDP TUNNEL IS ACTIVE! Connect using the address from your playit.gg dashboard."
-        Write-Host "   ================================"
+        Write-Host "✅ RDP Tunnel Started!"
+        Write-Host "   ============================"
         Write-Host "   👤 Username: rdpadmin"
         Write-Host "   🔑 Password: $env:RDP_PASSWORD"
-        Write-Host "   ================================"
-        Write-Host "🕒 This session will remain active for approximately 6 hours."
+        Write-Host "   ============================"
 
-        $endTime = (Get-Date).AddHours(5).AddMinutes(50)
-        while ((Get-Date) -lt $endTime) {
-            $playitProcess = Get-Process -Name "playit" -ErrorAction SilentlyContinue
-            if ($playitProcess) {
-                # All is well, the process is running.
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Tunnel is active (PID: $($playitProcess.Id), Priority: $($playitProcess.PriorityClass))."
-            } else {
-                # If the process crashed, log it and attempt a restart.
-                Write-Host "⚠️ [$(Get-Date -Format 'HH:mm:ss')] Playit tunnel process not found! Attempting to restart..."
-                try {
-                    $restartedProcess = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "$env:PLAYIT_SECRET" -WindowStyle Hidden -PassThru
-                    $restartedProcess.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-                    Write-Host "✅ Tunnel process restarted successfully (New PID: $($restartedProcess.Id))."
-                } catch {
-                    Write-Host "❌ Failed to restart the tunnel process: $($_.Exception.Message)"
-                }
+        $end = (Get-Date).AddHours(5).AddMinutes(50)
+        while ((Get-Date) -lt $end) {
+          $check = Get-Process -Name "playit" -ErrorAction SilentlyContinue
+          if (-not $check) {
+            try {
+              $proc = Start-Process -FilePath $exePath -ArgumentList "--secret", "$env:PLAYIT_SECRET" -WindowStyle Hidden -PassThru
+              $proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+              Write-Host "✅ Tunnel restarted (PID: $($proc.Id))"
+            } catch {
+              Write-Host "❌ Restart failed: $_"
             }
-            # Sleep for a few minutes between checks.
-            Start-Sleep -Seconds 180
+          } else {
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Tunnel is active (PID: $($check.Id))"
+          }
+          Start-Sleep -Seconds 180
         }
-        Write-Host "🏁 Session duration limit reached. Closing tunnel."
+
+        Write-Host "⏹️ Time's up. Tunnel closed."
