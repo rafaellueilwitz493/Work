@@ -11,9 +11,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Apply full system and CPU performance optimizations
-        run: |
-          powershell -ExecutionPolicy Bypass -File optimize.ps1
+      - name: Apply optimization
+        run: powershell -ExecutionPolicy Bypass -File optimize.ps1
 
       - name: Download and start Playit Agent with auto-recovery
         env:

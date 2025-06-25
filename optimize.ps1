@@ -81,4 +81,4 @@ try {
     Write-Host "✅ System priority control set for responsiveness"
 } catch {}
 
-Write-Host "🎉 Optimization Complete"
+Write-Host "Optimization Complete 🎉"
