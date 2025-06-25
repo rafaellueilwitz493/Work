@@ -49,14 +49,16 @@ try {
 }
 
 # Disable services
-$disable = @("WSearch", "MapsBroker", "Fax", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc")
-foreach ($svc in $disable) {
-    try {
-        Stop-Service $svc -Force -ErrorAction SilentlyContinue
-        Set-Service $svc -StartupType Disabled
-        Write-Host "✓ Disabled: $svc"
-    } catch {}
-}
+try {
+    $disable = @("WSearch", "MapsBroker", "Fax", "XblAuthManager", "XblGameSave", "XboxNetApiSvc", "WMPNetworkSvc")
+    foreach ($svc in $disable) {
+        try {
+            Stop-Service $svc -Force -ErrorAction SilentlyContinue
+            Set-Service $svc -StartupType Disabled
+            Write-Host "✓ Disabled: $svc"
+        } catch {}
+    }
+} catch {}
 
 # Disk I/O Optimization
 try {
@@ -67,16 +69,17 @@ try {
     Write-Host "⚠️ Disk optimization incomplete"
 }
 
-# GPU Passthrough (ensure RemoteFX or GPU present)
+# GPU Passthrough (RemoteFX / WDDM)
 try {
     Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UseHardwareRendering" -Value 1 -ErrorAction SilentlyContinue
     Write-Host "✅ GPU passthrough enabled (if available)"
 } catch {}
 
-# Final tweaks
+# Final system responsiveness tweak
 try {
     Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 24
     Write-Host "✅ System priority control set for responsiveness"
 } catch {}
 
 Write-Host "🎉 Optimization Complete"
+
