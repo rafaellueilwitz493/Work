@@ -112,12 +112,16 @@ try {
     Write-Host "✓ Disabled last access time updates"
     
     # Only defrag if it's an HDD (not SSD)
-    $driveType = (Get-PhysicalDisk | Where-Object {$_.DeviceId -eq 0}).MediaType
-    if ($driveType -eq "HDD") {
-        defrag C: /O /U /V
-        Write-Host "✓ Disk defragmentation completed"
-    } else {
-        Write-Host "ℹ Skipping defrag (SSD detected)"
+    try {
+        $driveType = (Get-PhysicalDisk | Where-Object {$_.DeviceId -eq 0}).MediaType
+        if ($driveType -eq "HDD") {
+            defrag C: /O /U /V
+            Write-Host "✓ Disk defragmentation completed"
+        } else {
+            Write-Host "ℹ Skipping defrag (SSD detected)"
+        }
+    } catch {
+        Write-Host "⚠️ Could not determine drive type or defrag"
     }
     
     Write-Host "✅ Disk I/O optimized"
