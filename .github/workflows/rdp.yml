@@ -1,131 +1,69 @@
-# === FULL OPTIMIZED VERSION ===
 name: Maximum Performance RDP Tunnel with Admin Access
+
 on:
   workflow_dispatch:
+
 jobs:
-  setup-maximum-performance-rdp:
+  max-performance-rdp:
     runs-on: windows-latest
+    timeout-minutes: 360
     steps:
-    - name: Check out the repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    # ⚡ System Optimization for Performance
-    - name: Enable Ultimate Performance Mode
-      run: |
-        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
-        $guid = (powercfg -list | Select-String "Ultimate").Line.Split()[3]
-        powercfg -setactive $guid
+      - name: Apply full system and CPU performance optimizations
+        run: |
+          powershell -ExecutionPolicy Bypass -File optimize.ps1
 
-    - name: CPU Optimization and Parking Disable
-      run: |
-        $guid = (powercfg -getactivescheme).Split()[3]
-        powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
-        powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
-        powercfg -setacvalueindex $guid SUB_PROCESSOR CPMINCORES 100
-        powercfg -setacvalueindex $guid SUB_PROCESSOR CPMAXCORES 100
-        powercfg -setactive $guid
-
-    - name: Disable Visual Effects
-      run: |
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "UserPreferencesMask" -Value ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00))
-
-    - name: Disable Background Services
-      run: |
-        $services = @("DiagTrack", "WMPNetworkSvc", "MapsBroker", "WSearch")
-        foreach ($svc in $services) {
-          Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
-          Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
-        }
-
-    - name: Aggressive Cleanup
-      run: |
-        Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
-        Remove-Item "$env:WINDIR\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
-
-    # 🛡️ Secure, High-Performance RDP Setup
-    - name: Enhance RDP Stability - TCP Keepalive & Timeout Fixes
-      run: |
-        New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "KeepAliveTime" -PropertyType DWord -Value 30000 -Force
-        New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "TcpMaxDataRetransmissions" -PropertyType DWord -Value 10 -Force
-        New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name "KeepAliveEnable" -PropertyType DWord -Value 1 -Force
-
-    - name: Enable Remote Desktop
-      run: |
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Set-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Control\\Terminal Server' -Name \"fDenyTSConnections\" -Value 0
-        Enable-NetFirewallRule -DisplayGroup \"Remote Desktop\"
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
-        Start-Service -Name "TermService"
-        Set-Service -Name "TermService" -StartupType Automatic
-
-
-    - name: Configure RDP Settings
-      run: |
-        $rdpPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
-        New-NetFirewallRule -DisplayName "RDP-In" -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow
-        Set-ItemProperty -Path $rdpPath -Name "ColorDepth" -Value 4
-        Set-ItemProperty -Path $rdpPath -Name "fDisableWallpaper" -Value 1
-        Set-ItemProperty -Path $rdpPath -Name "fDisableTheming" -Value 1
-        Set-ItemProperty -Path $rdpPath -Name "fEnableBitmapCache" -Value 1
-        Set-ItemProperty -Path $rdpPath -Name "BitmapCacheSize" -Value 32768
-
-    - name: Create RDP Administrator User
-      run: |
-        $password = ConvertTo-SecureString "SuperAdmin2024!" -AsPlainText -Force
-        if (Get-LocalUser -Name "rdpadmin" -ErrorAction SilentlyContinue) {
-          Remove-LocalUser -Name "rdpadmin" -ErrorAction SilentlyContinue
-        }
-        New-LocalUser -Name "rdpadmin" -Password $password -FullName "RDP Administrator" -Description "RDP Admin" -PasswordNeverExpires -UserMayNotChangePassword
-        Add-LocalGroupMember -Group "Administrators" -Member "rdpadmin"
-        Add-LocalGroupMember -Group "Remote Desktop Users" -Member "rdpadmin"
-
-    # 🚀 Playit Tunnel with Watchdog for Stability
-    - name: Download Playit Agent
-      run: |
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
-
-    - name: Start Resilient Playit Agent (Watchdog)
-      env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
-      run: |
-        Write-Host "Starting Playit Agent with watchdog..."
-        $script = @"
-        while (\$true) {
-          try {
-            \$p = Start-Process -FilePath "\$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "\$env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
-            \$p.PriorityClass = 'High'
-            \$p.ProcessorAffinity = [System.IntPtr]::new([Math]::Pow(2, [Environment]::ProcessorCount) - 1)
-            Write-Host "✓ Playit running (PID: \$($p.Id))"
-            \$p.WaitForExit()
-            Write-Host "Restarting Playit in 5s..."
-            Start-Sleep -Seconds 5
-          } catch {
-            Write-Host "Playit crash: \$($_.Exception.Message)"
-            Start-Sleep -Seconds 10
+      - name: Download and start Playit Agent with auto-recovery
+        env:
+          PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+        run: |
+          $exe = "$env:USERPROFILE\playit.exe"
+          Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile $exe -UseBasicParsing
+          Start-Process -FilePath $exe -ArgumentList "--secret", "$env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru | ForEach-Object {
+              $_.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+              $_.ProcessorAffinity = [System.IntPtr]::new([Math]::Pow(2, [Environment]::ProcessorCount) - 1)
           }
-        }
-        "@
-        Set-Content "$env:TEMP\playit_watchdog.ps1" $script
-        Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `$env:TEMP\playit_watchdog.ps1" -WindowStyle Hidden
 
-    - name: Final Status
-      run: |
-        Write-Host "✅ All optimizations complete."
-        Write-Host "🖥️ RDP User: rdpadmin"
-        Write-Host "🔐 Password: SuperAdmin2024!"
-        Write-Host "📡 Playit Tunnel is active with watchdog monitoring."
-        Write-Host "💪 System is running in ULTIMATE PERFORMANCE mode."
+      - name: Enable and configure RDP with performance tuning
+        run: |
+          powershell -Command "& {
+            Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value 0
+            Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+            Start-Service -Name 'TermService'
+            Set-Service -Name 'TermService' -StartupType Automatic
+          }"
 
-    - name: Keep RDP Session Alive for Full 6 Hours
-      run: |
-        Write-Host "🕒 Maintaining active session for 6 hours..."
-        $endTime = (Get-Date).AddHours(6)
-        while ((Get-Date) -lt $endTime) {
-          Write-Host "💡 Heartbeat: Session active at $(Get-Date -Format 'HH:mm:ss')"
-          Start-Sleep -Seconds 180
-        }
-        Write-Host "✅ 6 hours completed. Job will now exit."
+      - name: Create RDP Admin User
+        run: |
+          powershell -Command "& {
+            $p = ConvertTo-SecureString 'SuperAdmin2024!' -AsPlainText -Force
+            Try { Remove-LocalUser -Name 'rdpadmin' -ErrorAction SilentlyContinue } Catch {}
+            New-LocalUser -Name 'rdpadmin' -Password $p -PasswordNeverExpires
+            Add-LocalGroupMember -Group 'Administrators' -Member 'rdpadmin'
+            Add-LocalGroupMember -Group 'Remote Desktop Users' -Member 'rdpadmin'
+          }"
+
+      - name: Monitor Playit and maintain performance for 6 hours
+        run: |
+          powershell -Command "& {
+            $end = (Get-Date).AddHours(6)
+            while ((Get-Date) -lt $end) {
+              Start-Sleep -Seconds 180
+              $proc = Get-Process playit* -ErrorAction SilentlyContinue
+              if ($proc) {
+                if ($proc.PriorityClass -ne 'High') {
+                  $proc.PriorityClass = 'High'
+                }
+              } else {
+                Start-Process -FilePath \"$env:USERPROFILE\playit.exe\" -ArgumentList \"--secret\", \"$env:PLAYIT_AUTH_KEY\" -WindowStyle Hidden -PassThru | ForEach-Object {
+                  $_.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+                  $_.ProcessorAffinity = [System.IntPtr]::new([Math]::Pow(2, [Environment]::ProcessorCount) - 1)
+                }
+              }
+            }
+          }"
+
+      - name: Done
+        run: echo "✅ Maximum Performance RDP session ended after 6 hours"
