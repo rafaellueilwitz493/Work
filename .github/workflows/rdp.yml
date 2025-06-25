@@ -289,8 +289,8 @@ jobs:
       run: |
         Write-Host "👤 Creating secure RDP administrator..."
         
-        # Generate secure password
-        $password = ConvertTo-SecureString "RdpAdmin2024#$(Get-Random -Minimum 1000 -Maximum 9999)" -AsPlainText -Force
+        # Use predefined credentials
+        $password = ConvertTo-SecureString "SuperAdmin2024!" -AsPlainText -Force
         $username = "rdpadmin"
         
         try {
@@ -310,29 +310,28 @@ jobs:
             # Set account policies
             net accounts /maxpwage:unlimited 2>$null
             
-            # Display credentials securely
-            $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
+            # Display credentials
             Write-Host "✅ RDP Administrator created successfully"
             Write-Host "📋 CONNECTION CREDENTIALS:"
             Write-Host "   👤 Username: $username"
-            Write-Host "   🔑 Password: $plainPassword"
+            Write-Host "   🔑 Password: SuperAdmin2024!"
             Write-Host "   🔐 Access Level: Administrator"
             
             # Store credentials for later use
             $env:RDP_USERNAME = $username
-            $env:RDP_PASSWORD = $plainPassword
+            $env:RDP_PASSWORD = "SuperAdmin2024!"
             
         } catch {
             Write-Host "❌ Error creating RDP user: $($_.Exception.Message)"
-            # Create fallback user
+            # Create fallback user with same credentials
             try {
-                $fallbackPassword = ConvertTo-SecureString "FallbackUser2024!" -AsPlainText -Force
-                New-LocalUser -Name "rdpuser" -Password $fallbackPassword -FullName "RDP User" -Description "Fallback RDP User" -PasswordNeverExpires
-                Add-LocalGroupMember -Group "Remote Desktop Users" -Member "rdpuser"
-                Add-LocalGroupMember -Group "Administrators" -Member "rdpuser"
-                Write-Host "✅ Fallback user created: rdpuser / FallbackUser2024!"
-                $env:RDP_USERNAME = "rdpuser"
-                $env:RDP_PASSWORD = "FallbackUser2024!"
+                $fallbackPassword = ConvertTo-SecureString "SuperAdmin2024!" -AsPlainText -Force
+                New-LocalUser -Name "rdpadmin" -Password $fallbackPassword -FullName "RDP User" -Description "Fallback RDP User" -PasswordNeverExpires
+                Add-LocalGroupMember -Group "Remote Desktop Users" -Member "rdpadmin"
+                Add-LocalGroupMember -Group "Administrators" -Member "rdpadmin"
+                Write-Host "✅ Fallback user created: rdpadmin / SuperAdmin2024!"
+                $env:RDP_USERNAME = "rdpadmin"
+                $env:RDP_PASSWORD = "SuperAdmin2024!"
             } catch {
                 Write-Host "❌ Failed to create any RDP user"
                 exit 1
