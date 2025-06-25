@@ -49,6 +49,15 @@ jobs:
         New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "TcpMaxDataRetransmissions" -PropertyType DWord -Value 10 -Force
         New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name "KeepAliveEnable" -PropertyType DWord -Value 1 -Force
 
+    - name: Enable Remote Desktop
+      run: |
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
+        Start-Service -Name "TermService"
+        Set-Service -Name "TermService" -StartupType Automatic
+
+
     - name: Configure RDP Settings
       run: |
         $rdpPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
@@ -62,11 +71,11 @@ jobs:
         Set-ItemProperty -Path $rdpPath -Name "fEnableBitmapCache" -Value 1
         Set-ItemProperty -Path $rdpPath -Name "BitmapCacheSize" -Value 32768
 
-    - name: Create Admin RDP User
+    - name: Create RDP Administrator User
       run: |
         $password = ConvertTo-SecureString "SuperAdmin2024!" -AsPlainText -Force
         if (Get-LocalUser -Name "rdpadmin" -ErrorAction SilentlyContinue) {
-            Remove-LocalUser -Name "rdpadmin" -ErrorAction SilentlyContinue
+          Remove-LocalUser -Name "rdpadmin" -ErrorAction SilentlyContinue
         }
         New-LocalUser -Name "rdpadmin" -Password $password -FullName "RDP Administrator" -Description "RDP Admin" -PasswordNeverExpires -UserMayNotChangePassword
         Add-LocalGroupMember -Group "Administrators" -Member "rdpadmin"
