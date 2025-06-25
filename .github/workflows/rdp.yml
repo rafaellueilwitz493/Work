@@ -1,505 +1,159 @@
-name: ULTIMATE RDP Fix - No More Disconnections (FIXED)
+# This workflow creates a highly performant and stable RDP session.
+# It is designed to run for the maximum duration allowed by GitHub Actions (approx. 6 hours).
+#
+# How it works:
+# 1. Optimizes Windows for maximum stable performance (Power Plan, CPU settings, Services).
+# 2. Creates a dedicated RDP user with Administrator rights and a static password.
+# 3. Configures RDP for a low-latency, high-performance connection by disabling visual effects.
+# 4. Uses playit.gg to create a secure tunnel to the RDP session.
+# 5. Includes a robust keep-alive mechanism to monitor and maintain the tunnel.
+#
+# IMPORTANT: You must add your Playit secret to your repository's secrets with the name `PLAYIT_SECRET`.
+name: Maximum Performance Stable RDP Tunnel
 on:
   workflow_dispatch:
+
 jobs:
-  fix-rdp-disconnections:
+  build:
     runs-on: windows-latest
+    timeout-minutes: 355 # Set timeout just under 6 hours to allow for graceful exit
+
     steps:
-    - name: Check out the repository
+    - name: Checkout Code
       uses: actions/checkout@v4
-    
-    - name: CRITICAL FIX - Disable ALL RDP Timeouts and Session Limits
+
+    - name: ⚙️ Apply Maximum System & CPU Performance Tweaks
       run: |
-        Write-Host "🔧 APPLYING CRITICAL RDP DISCONNECTION FIXES..."
-        
-        # MOST IMPORTANT - Disable Group Policy timeouts that override registry
-        $policyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
-        if (-not (Test-Path $policyPath)) {
-            New-Item -Path $policyPath -Force | Out-Null
-        }
-        
-        # Disable ALL policy-based timeouts (these override registry settings!)
-        Set-ItemProperty -Path $policyPath -Name "MaxIdleTime" -Value 0 -Type DWord -Force
-        Set-ItemProperty -Path $policyPath -Name "MaxDisconnectionTime" -Value 0 -Type DWord -Force  
-        Set-ItemProperty -Path $policyPath -Name "MaxConnectionTime" -Value 0 -Type DWord -Force
-        Set-ItemProperty -Path $policyPath -Name "RemoteAppLogoffTimeLimit" -Value 0 -Type DWord -Force
-        Set-ItemProperty -Path $policyPath -Name "fResetBroken" -Value 0 -Type DWord -Force
-        Set-ItemProperty -Path $policyPath -Name "fDisableAutoReconnect" -Value 0 -Type DWord -Force
-        Set-ItemProperty -Path $policyPath -Name "EnableTimeoutWarning" -Value 0 -Type DWord -Force
-        
-        Write-Host "✅ Policy-based timeouts DISABLED"
-        
-        # CRITICAL - Fix the main RDP timeout registry settings
-        $rdpPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
-        
-        # Completely disable session timeouts
-        Set-ItemProperty -Path $rdpPath -Name "MaxConnectionTime" -Value 0 -Type DWord -Force
-        Set-ItemProperty -Path $rdpPath -Name "MaxIdleTime" -Value 0 -Type DWord -Force  
-        Set-ItemProperty -Path $rdpPath -Name "MaxDisconnectionTime" -Value 0 -Type DWord -Force
-        
-        # CRITICAL LOGIN TIMEOUT FIX - Increase login timeout to prevent login drops
-        Set-ItemProperty -Path $rdpPath -Name "LogonTimeout" -Value 300000 -Type DWord -Force  # 5 minutes
-        
-        # Disable broken connection reset (major cause of disconnections)
-        Set-ItemProperty -Path $rdpPath -Name "fResetBroken" -Value 0 -Type DWord -Force
-        Set-ItemProperty -Path $rdpPath -Name "fReconnectSame" -Value 1 -Type DWord -Force
-        
-        # CRITICAL - Enable persistent connections
-        Set-ItemProperty -Path $rdpPath -Name "fInheritResetBroken" -Value 0 -Type DWord -Force
-        Set-ItemProperty -Path $rdpPath -Name "fInheritMaxIdleTime" -Value 0 -Type DWord -Force
-        Set-ItemProperty -Path $rdpPath -Name "fInheritMaxDisconnectionTime" -Value 0 -Type DWord -Force
-        Set-ItemProperty -Path $rdpPath -Name "fInheritMaxConnectionTime" -Value 0 -Type DWord -Force
-        
-        # Enable aggressive keep-alive (CRITICAL for GitHub Actions)
-        Set-ItemProperty -Path $rdpPath -Name "KeepAliveEnable" -Value 1 -Type DWord -Force
-        Set-ItemProperty -Path $rdpPath -Name "KeepAliveInterval" -Value 1 -Type DWord -Force  # Every 1 minute
-        Set-ItemProperty -Path $rdpPath -Name "KeepAliveTimeout" -Value 3600000 -Type DWord -Force  # 1 hour
-        
-        Write-Host "✅ RDP registry timeouts FIXED"
-        
-        # Fix Terminal Services main configuration
-        $terminalPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server"
-        Set-ItemProperty -Path $terminalPath -Name "fSingleSessionPerUser" -Value 0 -Type DWord -Force
-        Set-ItemProperty -Path $terminalPath -Name "TSEnabled" -Value 1 -Type DWord -Force
-        Set-ItemProperty -Path $terminalPath -Name "fDenyTSConnections" -Value 0 -Type DWord -Force
-        Set-ItemProperty -Path $terminalPath -Name "AllowTSConnections" -Value 1 -Type DWord -Force
-        
-        # CRITICAL - Disable session shadowing restrictions
-        Set-ItemProperty -Path $terminalPath -Name "Shadow" -Value 4 -Type DWord -Force
-        
-        Write-Host "✅ Terminal Services configuration FIXED"
-    
-    - name: ADVANCED FIX - Network and TCP Optimizations for RDP Stability
-      run: |
-        Write-Host "🌐 APPLYING ADVANCED NETWORK FIXES FOR RDP STABILITY..."
-        
-        # CRITICAL TCP settings for RDP (prevents network-based disconnections)
-        $tcpPath = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"
-        
-        # Disable TCP chimney offload (causes RDP issues)
-        Set-ItemProperty -Path $tcpPath -Name "EnableTCPChimney" -Value 0 -Type DWord -Force
-        
-        # Optimize TCP for RDP
-        Set-ItemProperty -Path $tcpPath -Name "TcpAckFrequency" -Value 1 -Type DWord -Force
-        Set-ItemProperty -Path $tcpPath -Name "TCPNoDelay" -Value 1 -Type DWord -Force
-        Set-ItemProperty -Path $tcpPath -Name "TcpWindowSize" -Value 65535 -Type DWord -Force
-        Set-ItemProperty -Path $tcpPath -Name "DefaultTTL" -Value 64 -Type DWord -Force
-        Set-ItemProperty -Path $tcpPath -Name "EnablePMTUDiscovery" -Value 1 -Type DWord -Force
-        Set-ItemProperty -Path $tcpPath -Name "GlobalMaxTcpWindowSize" -Value 65535 -Type DWord -Force
-        
-        # CRITICAL - Increase TCP connection timeout
-        Set-ItemProperty -Path $tcpPath -Name "TcpMaxConnectRetransmissions" -Value 10 -Type DWord -Force
-        Set-ItemProperty -Path $tcpPath -Name "TcpMaxDataRetransmissions" -Value 10 -Type DWord -Force
-        Set-ItemProperty -Path $tcpPath -Name "TcpTimedWaitDelay" -Value 300 -Type DWord -Force
-        
-        # Disable TCP scaling issues
-        try {
-            netsh int tcp set global autotuninglevel=normal
-            netsh int tcp set global rss=enabled  
-            netsh int tcp set global chimney=disabled
-            netsh int tcp set global rsc=enabled
-            netsh int tcp set global netdma=enabled
-            
-            # CRITICAL - Fix Windows network throttling
-            netsh int tcp set global nonsackrttresiliency=disabled
-            netsh int tcp set global timestamps=disabled
-            
-            Write-Host "✅ TCP/Network optimizations APPLIED"
-        }
-        catch {
-            Write-Host "⚠️ Some netsh commands failed (this is normal in GitHub Actions)"
-        }
-        
-        # RDP-specific network fixes
-        $rdpNetPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp"
-        
-        # Optimize RDP network buffers
-        Set-ItemProperty -Path $rdpNetPath -Name "OutBufDelay" -Value 100 -Type DWord -Force
-        Set-ItemProperty -Path $rdpNetPath -Name "OutBufCount" -Value 8 -Type DWord -Force
-        Set-ItemProperty -Path $rdpNetPath -Name "TypedBufferSize" -Value 32768 -Type DWord -Force
-        Set-ItemProperty -Path $rdpNetPath -Name "OutBufLength" -Value 8192 -Type DWord -Force
-        
-        Write-Host "✅ RDP network buffers OPTIMIZED"
-    
-    - name: SYSTEM LEVEL FIX - Disable Services That Interfere with RDP
-      run: |
-        Write-Host "⚙️ DISABLING SERVICES THAT CAUSE RDP DISCONNECTIONS..."
-        
-        # Services that actively interfere with RDP connections
-        $interferingServices = @(
-            "SessionEnv",          # Terminal Services Session Broker (causes session issues)
-            "UmRdpService",        # Remote Desktop Services UserMode Port Redirector (conflicts)
-            "WerSvc",              # Windows Error Reporting (can crash RDP)
-            "PcaSvc",              # Program Compatibility Assistant (interferes)
-            "DiagTrack",           # Diagnostics Tracking (consumes resources)
-            "DPS",                 # Diagnostic Policy Service (can interfere)
-            "WdiServiceHost",      # Diagnostic Service Host (resource consumer)
-            "WdiSystemHost"        # Diagnostic System Host (resource consumer)
-        )
-        
-        foreach ($service in $interferingServices) {
-            try {
-                $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
-                if ($svc) {
-                    if ($svc.Status -eq "Running") {
-                        Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
-                        Write-Host "🛑 Stopped interfering service: $service"
-                    }
-                    Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
-                    Write-Host "✅ Disabled service: $service"
-                }
-            } catch {
-                Write-Host "⚠️ Could not disable service: $service"
-            }
-        }
-        
-        # CRITICAL - Ensure core RDP services are running with optimal settings
-        $coreServices = @(
-            @{Name="TermService"; Description="Terminal Services"},
-            @{Name="RpcSs"; Description="Remote Procedure Call"},
-            @{Name="LanmanServer"; Description="Server Service"},
-            @{Name="SENS"; Description="System Event Notification"},
-            @{Name="EventLog"; Description="Windows Event Log"},
-            @{Name="PlugPlay"; Description="Plug and Play"}
-        )
-        
-        foreach ($service in $coreServices) {
-            try {
-                Set-Service -Name $service.Name -StartupType Automatic -ErrorAction SilentlyContinue
-                Start-Service -Name $service.Name -ErrorAction SilentlyContinue
-                
-                # Set to high priority if possible
-                $proc = Get-Process | Where-Object {$_.ProcessName -like "*$($service.Name)*"} | Select-Object -First 1
-                if ($proc) {
-                    try {
-                        $proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-                    } catch {
-                        # Priority setting may fail in GitHub Actions
-                    }
-                }
-                Write-Host "✅ Optimized core service: $($service.Description)"
-            } catch {
-                Write-Host "⚠️ Could not optimize: $($service.Description)"
-            }
-        }
-    
-    - name: USER LEVEL FIX - Configure User Session Settings
-      run: |
-        Write-Host "👤 CONFIGURING USER-LEVEL RDP FIXES..."
-        
-        # Fix user-specific timeout settings using WMI
-        try {
-            # Disable timeout warnings
-            Set-WmiInstance -Path "\\localhost\root\CIMV2\TerminalServices:Win32_TSSessionSetting.TerminalName='RDP-Tcp'" -Argument @{EnableTimeoutWarning=0} -ErrorAction SilentlyContinue
-            
-            # Set unlimited timeouts via WMI
-            Set-WmiInstance -Path "\\localhost\root\CIMV2\TerminalServices:Win32_TSSessionSetting.TerminalName='RDP-Tcp'" -Argument @{MaxIdleTime=0} -ErrorAction SilentlyContinue
-            Set-WmiInstance -Path "\\localhost\root\CIMV2\TerminalServices:Win32_TSSessionSetting.TerminalName='RDP-Tcp'" -Argument @{MaxConnectionTime=0} -ErrorAction SilentlyContinue
-            Set-WmiInstance -Path "\\localhost\root\CIMV2\TerminalServices:Win32_TSSessionSetting.TerminalName='RDP-Tcp'" -Argument @{MaxDisconnectionTime=0} -ErrorAction SilentlyContinue
-            
-            Write-Host "✅ WMI session settings CONFIGURED"
-        } catch {
-            Write-Host "⚠️ Some WMI settings could not be applied (normal in GitHub Actions)"
-        }
-        
-        # CRITICAL - Set current user registry keys to prevent session drops
-        $userPath = "HKCU:\Software\Microsoft\Terminal Server Client"
-        if (-not (Test-Path $userPath)) {
-            New-Item -Path $userPath -Force | Out-Null
-        }
-        
-        Set-ItemProperty -Path $userPath -Name "RDP_Compress" -Value 1 -Type DWord -Force
-        Set-ItemProperty -Path $userPath -Name "RDP_LPTTimeout" -Value 0 -Type DWord -Force
-        Set-ItemProperty -Path $userPath -Name "RDP_COMTimeout" -Value 0 -Type DWord -Force
-        
-        Write-Host "✅ User session settings CONFIGURED"
-        
-        # Create stable RDP user with never-expire settings
-        Write-Host "Creating ultra-stable RDP user..."
-        $password = ConvertTo-SecureString "UltraStable2024!" -AsPlainText -Force
-        
-        try {
-            # Remove if exists
-            if (Get-LocalUser -Name "stablerdp" -ErrorAction SilentlyContinue) {
-                Remove-LocalUser -Name "stablerdp" -ErrorAction SilentlyContinue
-            }
-            
-            # Create new user with never-expire password
-            New-LocalUser -Name "stablerdp" -Password $password -FullName "Stable RDP User" -Description "Ultra-stable RDP connection user" -PasswordNeverExpires -UserMayNotChangePassword -AccountNeverExpires
-            
-            # Add to all necessary groups
-            Add-LocalGroupMember -Group "Administrators" -Member "stablerdp"
-            Add-LocalGroupMember -Group "Remote Desktop Users" -Member "stablerdp"
-            Add-LocalGroupMember -Group "Users" -Member "stablerdp"
-            
-            Write-Host "✅ STABLE RDP USER CREATED"
-            Write-Host "   Username: stablerdp"
-            Write-Host "   Password: UltraStable2024!"
-            Write-Host "   Features: Never expires, Admin access, RDP optimized"
-        } catch {
-            Write-Host "⚠️ Could not create stable user: $($_.Exception.Message)"
-        }
-    
-    - name: POWER MANAGEMENT FIX - Disable All Power Saving That Affects RDP
-      run: |
-        Write-Host "⚡ DISABLING POWER MANAGEMENT FEATURES THAT BREAK RDP..."
-        
-        # Set to Ultimate Performance (never sleep/hibernate)
-        try {
-            powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null
-            $ultimateScheme = (powercfg -list | Select-String "Ultimate").Line.Split()[3]
-            if ($ultimateScheme) {
-                powercfg -setactive $ultimateScheme
-                Write-Host "✅ Ultimate Performance activated"
-            } else {
-                powercfg -setactive SCHEME_MIN  # High Performance fallback
-                Write-Host "✅ High Performance activated"
-            }
-        } catch {
-            Write-Host "⚠️ Using default power scheme"
-        }
-        
-        # CRITICAL - Disable ALL sleep/hibernate features
+        # --- 1. SET ULTIMATE PERFORMANCE POWER PLAN & CPU SETTINGS ---
+        Write-Host "Setting Ultimate Performance power plan and maxing out CPU settings..."
+        # The Ultimate Performance GUID is e9a42b02-d5df-448d-aa00-03f14749eb61
+        powercfg /duplicatesscheme e9a42b02-d5df-448d-aa00-03f14749eb61
+        $UltimateScheme = (powercfg -list | Select-String "Ultimate Performance").Line.Split(' ')[3]
+        powercfg /setactive $UltimateScheme
+
+        # Disable all power-saving timeouts
         powercfg -change standby-timeout-ac 0
-        powercfg -change standby-timeout-dc 0  
         powercfg -change hibernate-timeout-ac 0
-        powercfg -change hibernate-timeout-dc 0
         powercfg -change disk-timeout-ac 0
-        powercfg -change disk-timeout-dc 0
         powercfg -change monitor-timeout-ac 0
-        powercfg -change monitor-timeout-dc 0
-        powercfg -hibernate off
-        
-        # CRITICAL - Disable USB power management (can disconnect input devices)
-        $usbPath = "HKLM:\SYSTEM\CurrentControlSet\Services\usbhub\hubg"
-        if (Test-Path $usbPath) {
-            Set-ItemProperty -Path $usbPath -Name "DisableSelectiveSuspend" -Value 1 -Type DWord -Force
-        }
-        
-        # Disable network adapter power management  
-        try {
-            $adapters = Get-NetAdapter -Physical | Where-Object {$_.Status -eq "Up"}
-            foreach ($adapter in $adapters) {
-                Set-NetAdapterPowerManagement -Name $adapter.Name -SelectiveSuspend Disabled -ErrorAction SilentlyContinue
-                Write-Host "✅ Disabled power management for: $($adapter.Name)"
-            }
-        } catch {
-            Write-Host "⚠️ Some network adapters could not be configured"
-        }
-        
-        Write-Host "✅ Power management fixes APPLIED"
-    
-    - name: FINAL CRITICAL FIX - Restart Services and Configure Firewall (FIXED)
+
+        # Set CPU to 100% minimum and maximum state to prevent throttling
+        powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100
+        powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
+        # Set system cooling policy to Active to ramp up fans sooner and prevent thermal throttling
+        powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR SYSCOOLPOL 1
+        powercfg -setactive SCHEME_CURRENT # Apply settings
+
+        # --- 2. OPTIMIZE PAGE FILE & DISABLE INDEXING ---
+        Write-Host "Optimizing page file and disabling search indexing..."
+        # Disable automatic page file management
+        $ComputerSystem = Get-CimInstance -ClassName Win32_ComputerSystem
+        Set-CimInstance -InputObject $ComputerSystem -Property @{AutomaticManagedPagefile = $false}
+        # Set a large, static page file on C: (4GB initial, 8GB max) for stability
+        Get-CimInstance -ClassName Win32_PageFileSetting | Remove-CimInstance
+        Set-CimInstance -ClassName Win32_PageFileSetting -Arguments @{Name = "C:\pagefile.sys"; InitialSize = 4096; MaximumSize = 8192}
+        # Disable search indexing service for better disk performance
+        sc.exe config "WSearch" start=disabled
+        sc.exe stop "WSearch"
+
+    - name: 🔐 Create Admin User & Configure RDP
+      id: rdp_user
       run: |
-        Write-Host "🔐 APPLYING FINAL CRITICAL FIXES..."
-        
-        # Skip problematic registry permission commands that cause exit code 1
-        Write-Host "⚠️ Skipping registry permission changes (not needed in GitHub Actions)"
-        
-        # Force restart Terminal Services with new settings
-        Write-Host "🔄 RESTARTING RDP SERVICES WITH NEW CONFIGURATION..."
-        
-        try {
-            # Stop all RDP-related services
-            Stop-Service -Name "TermService" -Force -ErrorAction SilentlyContinue
-            Stop-Service -Name "SessionEnv" -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 3
-            
-            # Start core RDP service
-            Start-Service -Name "TermService" -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 2
-            
-            # Verify service is running
-            $rdpService = Get-Service -Name "TermService"
-            if ($rdpService.Status -eq "Running") {
-                Write-Host "✅ Terminal Services RESTARTED successfully"
-            } else {
-                Write-Host "⚠️ Terminal Services status: $($rdpService.Status)"
-            }
-        } catch {
-            Write-Host "⚠️ Service restart encountered issues: $($_.Exception.Message)"
+        # --- 3. CREATE ADMIN USER WITH STATIC PASSWORD ---
+        Write-Host "Creating RDP user with specified credentials..."
+        # Set the static username and password
+        $Username = "rdpadmin"
+        $Password = "UltraStable2024!"
+        $SecurePassword = ConvertTo-SecureString $Password -AsPlainText -Force
+        New-LocalUser $Username -Password $SecurePassword -FullName "RDP Admin" -Description "RDP Administrator User" -PasswordNeverExpires
+        Add-LocalGroupMember -Group "Administrators" -Member $Username
+        Add-LocalGroupMember -Group "Remote Desktop Users" -Member $Username
+
+        # Output credentials to the log and to a step output
+        Write-Host "✅ RDP User created!"
+        Write-Host "   ================================"
+        Write-Host "   👤 Username: $Username"
+        Write-Host "   🔑 Password: $Password"
+        Write-Host "   ================================"
+        echo "::set-output name=password::$Password"
+
+        # --- 4. CONFIGURE RDP FOR MAXIMUM PERFORMANCE & STABILITY ---
+        Write-Host "Configuring RDP for a snappy, low-latency experience..."
+        # Enable RDP and set firewall rule
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+
+        # Disable Network Level Authentication (NLA) for broader compatibility.
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
+
+        # Force RDP to use its optimized graphics provider for better performance
+        Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fEnableWddmDriver" -Value 1 -Force
+
+        # --- 5. DISABLE VISUALS, SERVICES & DEFENDER ---
+        Write-Host "Disabling non-essential services and visual effects..."
+        # Set "Adjust for best performance" to turn off all Aero effects, animations, etc.
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
+        # Disable non-essential services
+        $servicesToDisable = @("DiagTrack", "dmwappushservice", "MapsBroker", "TrkWks", "WbioSrvc", "WMPNetworkSvc", "XblAuthManager", "XblGameSave", "XboxGipSvc", "Fax", "Themes")
+        foreach ($service in $servicesToDisable) {
+            Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+            Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
         }
-        
-        # Final firewall configuration
-        Write-Host "🔥 CONFIGURING FIREWALL FOR STABLE RDP..."
-        
-        try {
-            # Remove existing rules and add new ones
-            Remove-NetFirewallRule -DisplayName "RDP-Stable*" -ErrorAction SilentlyContinue
-            
-            # Add comprehensive RDP firewall rules
-            New-NetFirewallRule -DisplayName "RDP-Stable-In-TCP" -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -Profile Any -ErrorAction SilentlyContinue
-            New-NetFirewallRule -DisplayName "RDP-Stable-Out-TCP" -Direction Outbound -Protocol TCP -LocalPort 3389 -Action Allow -Profile Any -ErrorAction SilentlyContinue
-            
-            # Enable built-in RDP rules
-            Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
-            
-            Write-Host "✅ Firewall rules CONFIGURED"
-        }
-        catch {
-            Write-Host "⚠️ Some firewall rules could not be applied (normal in GitHub Actions)"
-        }
-        
-        Write-Host ""
-        Write-Host "🎉 ============================================="
-        Write-Host "🎉 ALL RDP DISCONNECTION FIXES APPLIED!"
-        Write-Host "🎉 ============================================="
-        Write-Host ""
-        Write-Host "✅ Policy-based timeouts DISABLED"
-        Write-Host "✅ Registry timeouts set to UNLIMITED"  
-        Write-Host "✅ TCP/Network settings OPTIMIZED"
-        Write-Host "✅ Interfering services DISABLED"
-        Write-Host "✅ Core RDP services OPTIMIZED"
-        Write-Host "✅ Power management DISABLED"
-        Write-Host "✅ User session limits REMOVED"
-        Write-Host "✅ Firewall rules CONFIGURED"
-        Write-Host ""
-        Write-Host "🔐 CREDENTIALS:"
-        Write-Host "   Username: stablerdp"
-        Write-Host "   Password: UltraStable2024!"
-        Write-Host ""
-        Write-Host "⚠️  IMPORTANT: These fixes target the ROOT CAUSES of RDP disconnections!"
-        Write-Host ""
-    
-    - name: Download and Configure Playit Agent with Connection Monitoring
-      run: |
-        Write-Host "📡 SETTING UP PLAYIT AGENT WITH CONNECTION MONITORING..."
-        
-        try {
-            # Download Playit Agent
-            Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe" -UseBasicParsing
-            Write-Host "✅ Playit Agent downloaded"
-        } catch {
-            Write-Host "❌ Error downloading Playit Agent: $($_.Exception.Message)"
-            exit 1
-        }
-    
-    - name: Start Playit Agent and Monitor RDP Connection Stability
+        # Disable Windows Defender real-time monitoring
+        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+        # Disable Windows Update service
+        Stop-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue
+        Set-Service -Name "wuauserv" -StartupType Disabled -ErrorAction SilentlyContinue
+
+    - name: 🚀 Start RDP Tunnel and Keep Alive
       env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+        PLAYIT_SECRET: ${{ secrets.PLAYIT_SECRET }}
+        RDP_PASSWORD: ${{ steps.rdp_user.outputs.password }}
       run: |
-        Write-Host "🚀 STARTING ULTRA-STABLE RDP SESSION..."
-        
-        # Start Playit Agent
-        try {
-            $playitProcess = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "$env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
-            try {
-                $playitProcess.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-            } catch {
-                # Priority setting may fail in GitHub Actions
-            }
-            Write-Host "✅ Playit Agent started (PID: $($playitProcess.Id))"
-        } catch {
-            Write-Host "❌ Failed to start Playit Agent: $($_.Exception.Message)"
+        # Download the playit agent
+        Write-Host "Downloading Playit agent..."
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+
+        # Check if the secret is set
+        if (-not $env:PLAYIT_SECRET) {
+            Write-Host "❌ ERROR: PLAYIT_SECRET is not set in repository secrets. The tunnel cannot start."
             exit 1
         }
-        
-        # Enhanced monitoring loop with disconnection prevention
-        Write-Host "🔄 ENHANCED RDP STABILITY MONITORING ACTIVE..."
-        $endTime = (Get-Date).AddHours(6)
-        $lastActivityTime = Get-Date
-        $connectionResets = 0
-        
+
+        # Start the tunnel process in the background
+        Write-Host "Starting Playit tunnel..."
+        $process = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "$env:PLAYIT_SECRET" -WindowStyle Hidden -PassThru
+        $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+        Write-Host "✅ Playit Agent started with HIGH PRIORITY (PID: $($process.Id))"
+        Write-Host "Please wait about 15-30 seconds for the tunnel to initialize..."
+        Start-Sleep -Seconds 20
+
+        # --- KEEP-ALIVE LOOP ---
+        Write-Host "🚀 RDP TUNNEL IS ACTIVE! Connect using the address from your playit.gg dashboard."
+        Write-Host "   ================================"
+        Write-Host "   👤 Username: rdpadmin"
+        Write-Host "   🔑 Password: $env:RDP_PASSWORD"
+        Write-Host "   ================================"
+        Write-Host "🕒 This session will remain active for approximately 6 hours."
+
+        $endTime = (Get-Date).AddHours(5).AddMinutes(50)
         while ((Get-Date) -lt $endTime) {
-            $currentTime = Get-Date
-            $remainingTime = $endTime - $currentTime
-            
-            # Every 60 seconds - comprehensive stability check
-            if (($currentTime - $lastActivityTime).TotalSeconds -ge 60) {
-                Write-Host "=== 🛡️  CONNECTION STABILITY CHECK at $($currentTime.ToString('HH:mm:ss')) ==="
-                Write-Host "⏱️  Time remaining: $($remainingTime.Hours)h $($remainingTime.Minutes)m"
-                
-                # Check and maintain RDP service
-                $rdpService = Get-Service -Name "TermService" -ErrorAction SilentlyContinue
-                if ($rdpService.Status -ne "Running") {
-                    Write-Host "🔧 RDP Service down - RESTARTING..."
-                    Start-Service -Name "TermService" -ErrorAction SilentlyContinue
-                    $connectionResets++
-                    Write-Host "✅ RDP Service restarted (Resets: $connectionResets)"
-                } else {
-                    Write-Host "✅ RDP Service: STABLE"
-                }
-                
-                # Check Playit Agent
-                $playitCheck = Get-Process -Id $playitProcess.Id -ErrorAction SilentlyContinue
-                if ($playitCheck) {
-                    Write-Host "✅ Playit Agent: RUNNING (Priority: $($playitCheck.PriorityClass))"
-                    # Maintain high priority
-                    try {
-                        if ($playitCheck.PriorityClass -ne "High") {
-                            $playitCheck.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-                        }
-                    } catch {
-                        # Priority setting may fail
-                    }
-                } else {
-                    Write-Host "🔧 Playit Agent stopped - RESTARTING..."
-                    try {
-                        $playitProcess = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "$env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
-                        try {
-                            $playitProcess.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-                        } catch {
-                            # Priority setting may fail
-                        }
-                        Write-Host "✅ Playit Agent restarted"
-                    } catch {
-                        Write-Host "⚠️ Could not restart Playit Agent"
-                    }
-                }
-                
-                # Prevent system idle by simulating activity
+            $playitProcess = Get-Process -Name "playit" -ErrorAction SilentlyContinue
+            if ($playitProcess) {
+                # All is well, the process is running.
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Tunnel is active (PID: $($playitProcess.Id), Priority: $($playitProcess.PriorityClass))."
+            } else {
+                # If the process crashed, log it and attempt a restart.
+                Write-Host "⚠️ [$(Get-Date -Format 'HH:mm:ss')] Playit tunnel process not found! Attempting to restart..."
                 try {
-                    # Create a small file to simulate disk activity
-                    $tempFile = "$env:TEMP\rdp_keepalive_$(Get-Date -Format 'HHmmss').tmp"
-                    "keepalive" | Out-File -FilePath $tempFile
-                    Remove-Item -Path $tempFile -Force -ErrorAction SilentlyContinue
-                    
-                    # Simulate minimal CPU activity
-                    $null = Get-Process | Select-Object -First 1
-                    
-                    Write-Host "💓 System keepalive signal sent"
+                    $restartedProcess = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "$env:PLAYIT_SECRET" -WindowStyle Hidden -PassThru
+                    $restartedProcess.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+                    Write-Host "✅ Tunnel process restarted successfully (New PID: $($restartedProcess.Id))."
                 } catch {
-                    # Silent keepalive
-                }
-                
-                # Network connectivity check
-                try {
-                    $networkTest = Test-NetConnection -ComputerName "8.8.8.8" -Port 53 -InformationLevel Quiet -WarningAction SilentlyContinue
-                    if ($networkTest) {
-                        Write-Host "🌐 Network: CONNECTED"
-                    } else {
-                        Write-Host "⚠️ Network: Limited connectivity"
-                    }
-                } catch {
-                    Write-Host "🌐 Network: Checking..."
-                }
-                
-                Write-Host "=============================================="
-                $lastActivityTime = $currentTime
-            }
-            
-            # Sleep for 30 seconds between checks
-            Start-Sleep -Seconds 30
-            
-            # Every 5 minutes - force RDP session refresh to prevent timeouts
-            if ($currentTime.Minute % 5 -eq 0 -and $currentTime.Second -lt 30) {
-                try {
-                    # Query RDP sessions to keep them active
-                    $sessions = quser 2>$null
-                    if ($sessions) {
-                        Write-Host "🔄 RDP sessions refreshed (Active sessions detected)"
-                    }
-                } catch {
-                    # Silent refresh
+                    Write-Host "❌ Failed to restart the tunnel process: $($_.Exception.Message)"
                 }
             }
+            # Sleep for a few minutes between checks.
+            Start-Sleep -Seconds 180
         }
-        
-        Write-Host ""
-        Write-Host "🏁 6-HOUR ULTRA-STABLE RDP SESSION COMPLETED"
-        Write-Host "📊 FINAL STATISTICS:"
-        Write-Host "   🔄 Connection resets: $connectionResets"
-        Write-Host "   🛡️ Stability fixes: ALL APPLIED"
-        Write-Host "   ✅ Session completed: SUCCESSFULLY"
-        Write-Host ""
-        Write-Host "🎉 NO MORE RDP DISCONNECTION ISSUES!"
+        Write-Host "🏁 Session duration limit reached. Closing tunnel."
