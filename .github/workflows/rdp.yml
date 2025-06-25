@@ -52,6 +52,8 @@ jobs:
     - name: Enable Remote Desktop
       run: |
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Set-ItemProperty -Path 'HKLM:\\System\\CurrentControlSet\\Control\\Terminal Server' -Name \"fDenyTSConnections\" -Value 0
+        Enable-NetFirewallRule -DisplayGroup \"Remote Desktop\"
         Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
         netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
         Start-Service -Name "TermService"
