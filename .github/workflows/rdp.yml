@@ -108,3 +108,13 @@ jobs:
         Write-Host "🔐 Password: SuperAdmin2024!"
         Write-Host "📡 Playit Tunnel is active with watchdog monitoring."
         Write-Host "💪 System is running in ULTIMATE PERFORMANCE mode."
+
+    - name: Keep RDP Session Alive for Full 6 Hours
+      run: |
+        Write-Host "🕒 Maintaining active session for 6 hours..."
+        $endTime = (Get-Date).AddHours(6)
+        while ((Get-Date) -lt $endTime) {
+          Write-Host "💡 Heartbeat: Session active at $(Get-Date -Format 'HH:mm:ss')"
+          Start-Sleep -Seconds 180
+        }
+        Write-Host "✅ 6 hours completed. Job will now exit."
