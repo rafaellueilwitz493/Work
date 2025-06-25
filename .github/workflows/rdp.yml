@@ -1,146 +1,110 @@
-name: Maximum Performance Stable RDP Tunnel
-
+# === FULL OPTIMIZED VERSION ===
+name: Maximum Performance RDP Tunnel with Admin Access
 on:
   workflow_dispatch:
-
 jobs:
-  build:
+  setup-maximum-performance-rdp:
     runs-on: windows-latest
-    timeout-minutes: 355
-
     steps:
-    - name: Checkout Code
+    - name: Check out the repository
       uses: actions/checkout@v4
 
-    - name: ⚙️ Apply Maximum System & CPU Performance Tweaks
-      shell: pwsh
+    # ⚡ System Optimization for Performance
+    - name: Enable Ultimate Performance Mode
       run: |
-        # Power Plan: Ultimate
-        $UltimateGUID = "e9a42b02-d5df-448d-aa00-03f14749eb61"
-        if (!(powercfg -list | Select-String $UltimateGUID)) {
-          powercfg -duplicatescheme $UltimateGUID
-        }
-        powercfg /setactive $UltimateGUID
+        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+        $guid = (powercfg -list | Select-String "Ultimate").Line.Split()[3]
+        powercfg -setactive $guid
 
-        # Disable sleep, hibernate, etc.
-        powercfg -change standby-timeout-ac 0
-        powercfg -change hibernate-timeout-ac 0
-        powercfg -change disk-timeout-ac 0
-        powercfg -change monitor-timeout-ac 0
-
-        # Set CPU 100%
-        powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100
-        powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
-        powercfg -setacvalueindex SCHEME_CURRENT SUB_PROCESSOR SYSCOOLPOL 1
-        powercfg /setactive SCHEME_CURRENT
-
-        # Pagefile settings
-        Get-CimInstance Win32_PageFileSetting | Remove-CimInstance -ErrorAction SilentlyContinue
-        Set-CimInstance (Get-CimInstance Win32_ComputerSystem) -Property @{AutomaticManagedPagefile = $false}
-        New-CimInstance -ClassName Win32_PageFileSetting -Property @{Name="C:\pagefile.sys"; InitialSize=4096; MaximumSize=8192}
-
-        # Disable indexing
-        Stop-Service -Name "WSearch" -Force -ErrorAction SilentlyContinue
-        Set-Service -Name "WSearch" -StartupType Disabled -ErrorAction SilentlyContinue
-
-    - name: 🔐 Create Admin User & Configure RDP + GPU + Clipboard
-      id: rdp
-      shell: pwsh
+    - name: CPU Optimization and Parking Disable
       run: |
-        $Username = "rdpadmin"
-        $Password = "UltraStable2024!"
-        $SecurePassword = ConvertTo-SecureString $Password -AsPlainText -Force
+        $guid = (powercfg -getactivescheme).Split()[3]
+        powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMAX 100
+        powercfg -setacvalueindex $guid SUB_PROCESSOR PROCTHROTTLEMIN 100
+        powercfg -setacvalueindex $guid SUB_PROCESSOR CPMINCORES 100
+        powercfg -setacvalueindex $guid SUB_PROCESSOR CPMAXCORES 100
+        powercfg -setactive $guid
 
-        if (!(Get-LocalUser -Name $Username -ErrorAction SilentlyContinue)) {
-          New-LocalUser $Username -Password $SecurePassword -FullName "RDP Admin" -PasswordNeverExpires
-          Add-LocalGroupMember -Group "Administrators" -Member $Username
-          Add-LocalGroupMember -Group "Remote Desktop Users" -Member $Username
-        }
-
-        # Enable RDP and disable NLA
-        Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server' fDenyTSConnections 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' UserAuthentication 0
-
-        # Enable GPU acceleration
-        New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Force | Out-Null
-        Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fEnableWddmDriver" -Value 1
-
-        # Clipboard & Drive redirection (usually controlled by client, but enable at server side)
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableClip" -Value 0
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "fDisableCdm" -Value 0
-
-        # Disable visual distractions for latency
-        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2
+    - name: Disable Visual Effects
+      run: |
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "UserPreferencesMask" -Value ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00))
 
-        # Disable RDP font smoothing, wallpaper
-        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Terminal Server Client" -Name "DisableFontSmoothing" -Value 1
-        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Terminal Server Client" -Name "DisableWallpaper" -Value 1
-
-        # Disable unnecessary services
-        $services = "DiagTrack","dmwappushservice","MapsBroker","TrkWks","WbioSrvc","WMPNetworkSvc","XblAuthManager","XblGameSave","XboxGipSvc","Fax","Themes"
-        foreach ($s in $services) {
-          Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
-          Set-Service -Name $s -StartupType Disabled -ErrorAction SilentlyContinue
-        }
-
-        # Disable Defender
-        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-        Stop-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue
-        Set-Service -Name "wuauserv" -StartupType Disabled -ErrorAction SilentlyContinue
-
-        # Optional Auto-login (may not work on GitHub hosted runners, safe guarded)
-        try {
-          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "AutoAdminLogon" -Value "1"
-          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "DefaultUsername" -Value $Username
-          Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "DefaultPassword" -Value $Password
-        } catch {
-          Write-Host "Auto-login setup skipped (non-critical)"
-        }
-
-        # Export password
-        echo "RDP_PASSWORD=$Password" >> $env:GITHUB_ENV
-
-    - name: 🚀 Start RDP Tunnel and Keep Alive
-      shell: pwsh
-      env:
-        PLAYIT_SECRET: ${{ secrets.PLAYIT_SECRET }}
-        RDP_PASSWORD: ${{ env.RDP_PASSWORD }}
+    - name: Disable Background Services
       run: |
-        $exePath = "$env:USERPROFILE\playit.exe"
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile $exePath
-
-        if (-not $env:PLAYIT_SECRET) {
-          Write-Host "❌ PLAYIT_SECRET is missing."
-          exit 1
+        $services = @("DiagTrack", "WMPNetworkSvc", "MapsBroker", "WSearch")
+        foreach ($svc in $services) {
+          Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+          Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
         }
 
-        $proc = Start-Process -FilePath $exePath -ArgumentList "--secret", "$env:PLAYIT_SECRET" -WindowStyle Hidden -PassThru
-        $proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-        Start-Sleep -Seconds 20
+    - name: Aggressive Cleanup
+      run: |
+        Remove-Item "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item "$env:WINDIR\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
 
-        Write-Host "✅ RDP Tunnel Started!"
-        Write-Host "   ============================"
-        Write-Host "   👤 Username: rdpadmin"
-        Write-Host "   🔑 Password: $env:RDP_PASSWORD"
-        Write-Host "   ============================"
+    # 🛡️ Secure, High-Performance RDP Setup
+    - name: Enhance RDP Stability - TCP Keepalive & Timeout Fixes
+      run: |
+        New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "KeepAliveTime" -PropertyType DWord -Value 30000 -Force
+        New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "TcpMaxDataRetransmissions" -PropertyType DWord -Value 10 -Force
+        New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server" -Name "KeepAliveEnable" -PropertyType DWord -Value 1 -Force
 
-        $end = (Get-Date).AddHours(5).AddMinutes(50)
-        while ((Get-Date) -lt $end) {
-          $check = Get-Process -Name "playit" -ErrorAction SilentlyContinue
-          if (-not $check) {
-            try {
-              $proc = Start-Process -FilePath $exePath -ArgumentList "--secret", "$env:PLAYIT_SECRET" -WindowStyle Hidden -PassThru
-              $proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-              Write-Host "✅ Tunnel restarted (PID: $($proc.Id))"
-            } catch {
-              Write-Host "❌ Restart failed: $_"
-            }
-          } else {
-            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Tunnel is active (PID: $($check.Id))"
+    - name: Configure RDP Settings
+      run: |
+        $rdpPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
+        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+        netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
+        New-NetFirewallRule -DisplayName "RDP-In" -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow
+        Set-ItemProperty -Path $rdpPath -Name "ColorDepth" -Value 4
+        Set-ItemProperty -Path $rdpPath -Name "fDisableWallpaper" -Value 1
+        Set-ItemProperty -Path $rdpPath -Name "fDisableTheming" -Value 1
+        Set-ItemProperty -Path $rdpPath -Name "fEnableBitmapCache" -Value 1
+        Set-ItemProperty -Path $rdpPath -Name "BitmapCacheSize" -Value 32768
+
+    - name: Create Admin RDP User
+      run: |
+        $password = ConvertTo-SecureString "SuperAdmin2024!" -AsPlainText -Force
+        if (Get-LocalUser -Name "rdpadmin" -ErrorAction SilentlyContinue) {
+            Remove-LocalUser -Name "rdpadmin" -ErrorAction SilentlyContinue
+        }
+        New-LocalUser -Name "rdpadmin" -Password $password -FullName "RDP Administrator" -Description "RDP Admin" -PasswordNeverExpires -UserMayNotChangePassword
+        Add-LocalGroupMember -Group "Administrators" -Member "rdpadmin"
+        Add-LocalGroupMember -Group "Remote Desktop Users" -Member "rdpadmin"
+
+    # 🚀 Playit Tunnel with Watchdog for Stability
+    - name: Download Playit Agent
+      run: |
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/download/v0.15.26/playit-windows-x86_64-signed.exe" -OutFile "$env:USERPROFILE\playit.exe"
+
+    - name: Start Resilient Playit Agent (Watchdog)
+      env:
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+      run: |
+        Write-Host "Starting Playit Agent with watchdog..."
+        $script = @"
+        while (\$true) {
+          try {
+            \$p = Start-Process -FilePath "\$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "\$env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
+            \$p.PriorityClass = 'High'
+            \$p.ProcessorAffinity = [System.IntPtr]::new([Math]::Pow(2, [Environment]::ProcessorCount) - 1)
+            Write-Host "✓ Playit running (PID: \$($p.Id))"
+            \$p.WaitForExit()
+            Write-Host "Restarting Playit in 5s..."
+            Start-Sleep -Seconds 5
+          } catch {
+            Write-Host "Playit crash: \$($_.Exception.Message)"
+            Start-Sleep -Seconds 10
           }
-          Start-Sleep -Seconds 180
         }
+        "@
+        Set-Content "$env:TEMP\playit_watchdog.ps1" $script
+        Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `$env:TEMP\playit_watchdog.ps1" -WindowStyle Hidden
 
-        Write-Host "⏹️ Time's up. Tunnel closed."
+    - name: Final Status
+      run: |
+        Write-Host "✅ All optimizations complete."
+        Write-Host "🖥️ RDP User: rdpadmin"
+        Write-Host "🔐 Password: SuperAdmin2024!"
+        Write-Host "📡 Playit Tunnel is active with watchdog monitoring."
+        Write-Host "💪 System is running in ULTIMATE PERFORMANCE mode."
