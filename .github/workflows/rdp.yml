@@ -514,14 +514,14 @@ jobs:
                 foreach ($service in $rdpServices) {
                     $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
                     if ($svc -and $svc.Status -eq "Running") {
-                        Write-Host "✅ $service: Running"
+                        Write-Host "✅ ${service}: Running"
                     } else {
-                        Write-Host "⚠️ $service: Issue detected - restarting..."
+                        Write-Host "⚠️ ${service}: Issue detected - restarting..."
                         try {
                             Start-Service -Name $service -Force
-                            Write-Host "✅ $service: Restarted"
+                            Write-Host "✅ ${service}: Restarted"
                         } catch {
-                            Write-Host "❌ $service: Restart failed"
+                            Write-Host "❌ ${service}: Restart failed"
                         }
                     }
                 }
