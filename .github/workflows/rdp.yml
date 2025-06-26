@@ -92,13 +92,16 @@ jobs:
         Set-ItemProperty -Path $rdpPath -Name "fLogonDisabled" -Value 0 -Force
         
         # Disable Network Level Authentication for compatibility
-        Set-ItemProperty -Path $rdpPath -Name "UserAuthentication" -Value 0 -Force
+        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0 -Force
+        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 0 -Force
+        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "SecurityLayer" -Value 0 -Force
         
         # Configure advanced firewall rules
         Write-Host "🔥 Configuring advanced firewall rules..."
         Remove-NetFirewallRule -DisplayName "RDP*" -ErrorAction SilentlyContinue
         New-NetFirewallRule -DisplayName "RDP-Enhanced-TCP" -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -Profile Any -EdgeTraversalPolicy Allow
         New-NetFirewallRule -DisplayName "RDP-Enhanced-UDP" -Direction Inbound -Protocol UDP -LocalPort 3389 -Action Allow -Profile Any -EdgeTraversalPolicy Allow
+        netsh advfirewall firewall add rule name="RDP-In" dir=in action=allow protocol=TCP localport=3389
         
         # Enable RemoteFX if available (hardware acceleration)
         try {
