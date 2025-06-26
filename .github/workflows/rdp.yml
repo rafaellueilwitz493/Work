@@ -357,14 +357,20 @@ jobs:
             # Start with high priority and optimized arguments
             $processInfo = New-Object System.Diagnostics.ProcessStartInfo
             $processInfo.FileName = $playitPath
-            $processInfo.Arguments = "--secret `"$env:PLAYIT_AUTH_KEY`" --region auto --protocol tcp --local-ip 127.0.0.1 --local-port 3389"
+            $processInfo.Arguments = "--secret-path - --agent-name `"GitHub-RDP-$([System.Environment]::MachineName)`""
             $processInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
             $processInfo.UseShellExecute = $false
             $processInfo.CreateNoWindow = $true
-            
+            $processInfo.RedirectStandardInput = $true
+            $processInfo.RedirectStandardOutput = $true
+            $processInfo.RedirectStandardError = $true
             $process = [System.Diagnostics.Process]::Start($processInfo)
             
             if ($process) {
+                # Send the auth key via stdin
+                $process.StandardInput.WriteLine($env:PLAYIT_AUTH_KEY)
+                $process.StandardInput.Close()
+                
                 # Set high priority for tunnel performance
                 $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
                 
@@ -395,11 +401,11 @@ jobs:
             } else {
                 throw "Failed to start high-performance Playit Agent"
             }
-            
-        } catch {
-            Write-Host "❌ Error starting Playit Agent: $($_.Exception.Message)"
-            exit 1
-        }
+
+            } catch {
+                Write-Host "❌ Error starting Playit Agent: $($_.Exception.Message)"
+                exit 1
+            }
     
     - name: Display Optimized Connection Information
       run: |
