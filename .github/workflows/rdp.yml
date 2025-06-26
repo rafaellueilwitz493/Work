@@ -86,13 +86,23 @@ jobs:
         # Connection limits and timeouts
         Set-ItemProperty -Path $rdpPath -Name "MaxConnectionTime" -Value 0 -Force
         Set-ItemProperty -Path $rdpPath -Name "MaxIdleTime" -Value 0 -Force
-        Set-ItemProperty -Path $rdpPath -Name "MaxDisconnectionTime" -Value 30000 -Force
+        Set-ItemProperty -Path $rdpPath -Name "MaxDisconnectionTime" -Value 0 -Force
         
         # Enhanced session management
         Set-ItemProperty -Path $rdpPath -Name "fInheritMaxSessionTime" -Value 0 -Force
-        Set-ItemProperty -Path $rdpPath -Name "fReconnectSame" -Value 1 -Force
+        Set-ItemProperty -Path $rdpPath -Name "fReconnectSame" -Value 0 -Force
         Set-ItemProperty -Path $rdpPath -Name "fLogonDisabled" -Value 0 -Force
+
+        # Disable automatic disconnection policies
+        Set-ItemProperty -Path $rdpPath -Name "fInheritAutoLogon" -Value 0 -Force
+        Set-ItemProperty -Path $rdpPath -Name "fPromptForPassword" -Value 0 -Force
+        Set-ItemProperty -Path $rdpPath -Name "fDisableAutoReconnect" -Value 0 -Force
         
+        # Additional stability settings
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" -Name "fDisableAutoReconnect" -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" -Name "MaxDisconnectionTime" -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" -Name "MaxIdleTime" -Value 0 -Force -ErrorAction SilentlyContinue
+
         # Configure advanced firewall rules
         Write-Host "🔥 Configuring advanced firewall rules..."
         Remove-NetFirewallRule -DisplayName "*RDP*" -ErrorAction SilentlyContinue
