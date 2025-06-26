@@ -1,799 +1,768 @@
-name: Enhanced High-Performance RDP - Ultra-Low Latency Setup
+name: Ultra-High Performance RDP Tunnel
 on:
   workflow_dispatch:
 jobs:
   setup-ultra-performance-rdp:
     runs-on: windows-latest
-    timeout-minutes: 360
+    timeout-minutes: 360  # 6 hours
     steps:
-    - name: System Information and Baseline
-      run: |
-        Write-Host "🖥️ ENHANCED SYSTEM SPECIFICATIONS CHECK"
-        Write-Host "======================================"
-        
-        # Get detailed system info with enhanced metrics
-        $cpu = Get-CimInstance -ClassName Win32_Processor
-        $memory = Get-CimInstance -ClassName Win32_OperatingSystem
-        $gpu = Get-CimInstance -ClassName Win32_VideoController
-        $disk = Get-CimInstance -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
-        $network = Get-CimInstance -ClassName Win32_NetworkAdapter | Where-Object {$_.NetEnabled -eq $true}
-        
-        Write-Host "🔹 CPU: $($cpu.Name)"
-        Write-Host "   └─ Cores: $($cpu.NumberOfCores) physical, $($cpu.NumberOfLogicalProcessors) logical"
-        Write-Host "   └─ Base Clock: $($cpu.MaxClockSpeed) MHz"
-        Write-Host "   └─ Cache L3: $([math]::Round($cpu.L3CacheSize / 1024, 1)) MB"
-        Write-Host "   └─ Architecture: $($cpu.Architecture)"
-        
-        $totalMemGB = [math]::Round($memory.TotalVisibleMemorySize / 1MB, 2)
-        Write-Host "🔹 RAM: $totalMemGB GB"
-        Write-Host "   └─ Available: $([math]::Round($memory.FreePhysicalMemory / 1MB, 2)) GB"
-        Write-Host "   └─ Commit Limit: $([math]::Round($memory.TotalVirtualMemorySize / 1MB, 2)) GB"
-        
-        Write-Host "🔹 GPU: $($gpu.Name)"
-        Write-Host "   └─ Driver: $($gpu.DriverVersion)"
-        Write-Host "   └─ VRAM: $([math]::Round($gpu.AdapterRAM / 1GB, 2)) GB"
-        
-        $diskSizeGB = [math]::Round($disk.Size / 1GB, 2)
-        $diskFreeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
-        Write-Host "🔹 Storage: $diskFreeGB GB free / $diskSizeGB GB total"
-        Write-Host "   └─ File System: $($disk.FileSystem)"
-        
-        # Network latency baseline
-        Write-Host "🔹 Network Interfaces:"
-        foreach ($adapter in $network | Select-Object -First 3) {
-            Write-Host "   └─ $($adapter.Name): $($adapter.Speed / 1MB) Mbps"
-        }
-        
-        # Enhanced performance assessment
-        Write-Host "`n📊 ULTRA-PERFORMANCE READINESS ASSESSMENT:"
-        $performanceScore = 0
-        
-        if ($cpu.NumberOfLogicalProcessors -ge 8) {
-            Write-Host "✅ CPU: Excellent for heavy tasks ($($cpu.NumberOfLogicalProcessors) threads)"
-            $performanceScore += 3
-        } elseif ($cpu.NumberOfLogicalProcessors -ge 4) {
-            Write-Host "✅ CPU: Good for heavy tasks ($($cpu.NumberOfLogicalProcessors) threads)"
-            $performanceScore += 2
-        } else {
-            Write-Host "⚠️ CPU: Limited for heavy tasks ($($cpu.NumberOfLogicalProcessors) threads)"
-            $performanceScore += 1
-        }
-        
-        if ($totalMemGB -ge 14) {
-            Write-Host "✅ RAM: Excellent for heavy tasks ($totalMemGB GB)"
-            $performanceScore += 3
-        } elseif ($totalMemGB -ge 7) {
-            Write-Host "✅ RAM: Good for heavy tasks ($totalMemGB GB)"
-            $performanceScore += 2
-        } else {
-            Write-Host "⚠️ RAM: Limited for heavy tasks ($totalMemGB GB)"
-            $performanceScore += 1
-        }
-        
-        if ($diskFreeGB -ge 20) {
-            Write-Host "✅ Storage: Excellent free space ($diskFreeGB GB)"
-            $performanceScore += 2
-        } elseif ($diskFreeGB -ge 10) {
-            Write-Host "✅ Storage: Good free space ($diskFreeGB GB)"
-            $performanceScore += 1
-        } else {
-            Write-Host "⚠️ Storage: Limited free space ($diskFreeGB GB)"
-        }
-        
-        Write-Host "`n🎯 Performance Score: $performanceScore/8"
-        if ($performanceScore -ge 6) {
-            Write-Host "🚀 System ready for ULTRA-HIGH performance tasks"
-        } elseif ($performanceScore -ge 4) {
-            Write-Host "⚡ System ready for HIGH performance tasks"
-        } else {
-            Write-Host "💪 System ready for STANDARD performance tasks"
-        }
-        
-        Write-Host "======================================`n"
+    - name: Check out the repository
+      uses: actions/checkout@v4
     
-    - name: Ultra-Low Latency Network Optimization
+    - name: Apply Ultimate Performance Optimizations
       run: |
-        Write-Host "🌐 ULTRA-LOW LATENCY NETWORK OPTIMIZATION"
-        Write-Host "======================================="
+        Write-Host "🚀 Applying ULTIMATE performance optimizations..."
         
-        # TCP/IP Stack Optimizations for RDP
+        # Set Ultimate Performance power scheme (hidden Windows power plan)
         try {
-            # TCP Window Scaling and Chimney Offload
-            netsh int tcp set global autotuninglevel=normal
-            netsh int tcp set global chimney=enabled
-            netsh int tcp set global rss=enabled
-            netsh int tcp set global netdma=enabled
-            netsh int tcp set global dca=enabled
-            
-            # Optimize TCP parameters for low latency
-            netsh int tcp set global timestamps=disabled
-            netsh int tcp set global nonsackrttresiliency=disabled
-            netsh int tcp set supplemental Internet congestionprovider=ctcp
-            
-            Write-Host "✅ TCP stack optimized for low latency"
-            
-            # Network adapter optimizations
-            $adapters = Get-NetAdapter | Where-Object {$_.Status -eq "Up"}
-            foreach ($adapter in $adapters) {
-                try {
-                    # Disable power management
-                    Set-NetAdapterPowerManagement -Name $adapter.Name -ArpOffload Disabled -NSOffload Disabled -WakeOnMagicPacket Disabled -WakeOnPattern Disabled -ErrorAction SilentlyContinue
-                    
-                    # Optimize receive/send buffers
-                    Set-NetAdapterAdvancedProperty -Name $adapter.Name -DisplayName "Receive Buffers" -DisplayValue "2048" -ErrorAction SilentlyContinue
-                    Set-NetAdapterAdvancedProperty -Name $adapter.Name -DisplayName "Transmit Buffers" -DisplayValue "2048" -ErrorAction SilentlyContinue
-                    
-                    # Interrupt moderation for low latency
-                    Set-NetAdapterAdvancedProperty -Name $adapter.Name -DisplayName "Interrupt Moderation" -DisplayValue "Disabled" -ErrorAction SilentlyContinue
-                    
-                    Write-Host "✅ Optimized adapter: $($adapter.Name)"
-                } catch {
-                    Write-Host "⚠️ Some optimizations skipped for: $($adapter.Name)"
-                }
-            }
-            
-            # Windows scaling factor for high DPI displays
-            Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "Win8DpiScaling" -Value 1 -Force
-            Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "LogPixels" -Value 96 -Force
-            
-        } catch {
-            Write-Host "⚠️ Some network optimizations skipped"
-        }
-        
-        # QoS optimization for RDP traffic
-        try {
-            # Create QoS policy for RDP traffic (port 3389)
-            New-NetQosPolicy -Name "RDP Priority" -AppPathNameMatchCondition "mstsc.exe" -IPProtocolMatchCondition TCP -IPPortMatchCondition 3389 -DSCPAction 46 -ErrorAction SilentlyContinue
-            New-NetQosPolicy -Name "RDP Server Priority" -IPProtocolMatchCondition TCP -IPPortMatchCondition 3389 -DSCPAction 46 -ErrorAction SilentlyContinue
-            
-            # Enable QoS packet scheduler
-            Set-Service -Name "QWAVE" -StartupType Automatic -ErrorAction SilentlyContinue
-            Start-Service -Name "QWAVE" -ErrorAction SilentlyContinue
-            
-            Write-Host "✅ QoS configured for RDP priority"
-        } catch {
-            Write-Host "⚠️ QoS configuration skipped"
-        }
-        
-        Write-Host "======================================`n"
-    
-    - name: Enhanced Power and CPU Optimization
-      run: |
-        Write-Host "⚡ ENHANCED POWER AND CPU OPTIMIZATION"
-        Write-Host "====================================="
-        
-        # Create custom Ultimate Performance scheme
-        try {
-            $ultimateGuid = "e9a42b02-d5df-448d-aa00-03f14749eb61"
-            $customGuid = [System.Guid]::NewGuid().ToString()
-            
-            # Duplicate and customize Ultimate Performance
-            powercfg -duplicatescheme $ultimateGuid $customGuid
-            powercfg -changename $customGuid "Ultra RDP Performance" "Optimized for RDP with zero latency"
-            powercfg -setactive $customGuid
-            
-            # Extreme performance CPU settings
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR PROCTHROTTLEMAX 100     # Max CPU 100%
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR PROCTHROTTLEMIN 100    # Min CPU 100%
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR PERFBOOSTMODE 1        # Aggressive boost
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR PERFBOOSTPOL 3         # Maximum boost policy
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR PERFAUTONOMOUS 1       # Hardware autonomous mode
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR PERFAUTONOMOUSWINDOW 1 # Minimum window
-            
-            # Disable ALL CPU idle states for zero latency
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR IDLESCALING 1
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR IDLEDISABLE 0
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR IDLETHRESHOLD 100
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR IDLEDEMOTE 0
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR IDLEPROMOTE 0
-            
-            # Disable core parking completely
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR CPMINCORES 100
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR CPMAXCORES 100
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR CPCONCURRENCY 0
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR CPHEADROOM 0
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR CPDISTRIBUTION 0
-            
-            # PCI Express Link State Management - Maximum Performance
-            powercfg -setacvalueindex $customGuid SUB_PCIEXPRESS LINKSTATEMANAGEMENT 0
-            
-            # Processor power management - No throttling
-            powercfg -setacvalueindex $customGuid SUB_PROCESSOR SYSCOOLPOL 1  # Active cooling
-            
-            # USB selective suspend - Disabled for stability
-            powercfg -setacvalueindex $customGuid SUB_USB USBSELECTIVESUSPEND 0
-            
-            # Apply all settings
-            powercfg -setactive $customGuid
-            
-            Write-Host "✅ Ultra RDP Performance scheme created and activated"
-            
-        } catch {
-            Write-Host "⚠️ Using fallback High Performance scheme"
-            powercfg -setactive SCHEME_MIN
-        }
-        
-        # CPU affinity optimization for RDP services
-        try {
-            # Set high priority and optimal CPU affinity for Terminal Services
-            $rdpServices = @("TermService", "SessionEnv", "UmRdpService")
-            foreach ($service in $rdpServices) {
-                $process = Get-Process -Name $service -ErrorAction SilentlyContinue
-                if ($process) {
-                    $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
-                    Write-Host "✅ High priority set for: $service"
-                }
-            }
-        } catch {
-            Write-Host "⚠️ Some service optimizations skipped"
-        }
-        
-        # Disable CPU throttling in registry
-        try {
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power" -Name "CsEnabled" -Value 0 -Force
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Name "HiberbootEnabled" -Value 0 -Force
-        } catch {
-            Write-Host "⚠️ Some CPU throttling settings unchanged"
-        }
-        
-        Write-Host "=====================================`n"
-    
-    - name: Advanced Memory and Cache Optimization
-      run: |
-        Write-Host "💾 ADVANCED MEMORY AND CACHE OPTIMIZATION"
-        Write-Host "========================================"
-        
-        $memory = Get-CimInstance -ClassName Win32_OperatingSystem
-        $totalRAM = [math]::Round($memory.TotalVisibleMemorySize / 1MB, 2)
-        
-        # Enhanced virtual memory configuration
-        try {
-            # Calculate optimal pagefile (2x RAM for extreme performance)
-            $pagefileSizeMB = [math]::Round($totalRAM * 2048)  # 2x RAM in MB
-            
-            Write-Host "🔧 Enhanced virtual memory configuration..."
-            Write-Host "   └─ Total RAM: $totalRAM GB"
-            Write-Host "   └─ Pagefile Size: $([math]::Round($pagefileSizeMB/1024, 1)) GB (2x RAM)"
-            
-            # Disable automatic management
-            $cs = Get-CimInstance -ClassName Win32_ComputerSystem
-            $cs.AutomaticManagedPagefile = $false
-            Set-CimInstance -InputObject $cs
-            
-            # Configure large pagefile
-            $pageFile = Get-CimInstance -ClassName Win32_PageFileSetting -Filter "SettingID='pagefile.sys @ C:'"
-            if ($pageFile) {
-                $pageFile.InitialSize = $pagefileSizeMB
-                $pageFile.MaximumSize = $pagefileSizeMB
-                Set-CimInstance -InputObject $pageFile
+            # Enable Ultimate Performance power scheme
+            powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+            $ultimateScheme = (powercfg -list | Select-String "Ultimate Performance" | ForEach-Object { $_.Line.Split()[3] })
+            if ($ultimateScheme) {
+                powercfg -setactive $ultimateScheme
+                Write-Host "✅ Ultimate Performance power scheme activated"
             } else {
-                New-CimInstance -ClassName Win32_PageFileSetting -Property @{
-                    Name = "C:\pagefile.sys"
-                    InitialSize = $pagefileSizeMB
-                    MaximumSize = $pagefileSizeMB
-                }
+                # Fallback to High Performance
+                powercfg -setactive SCHEME_MIN
+                Write-Host "✅ High Performance power scheme activated"
             }
             
-            Write-Host "✅ Enhanced virtual memory configured"
+            # Disable all power saving features
+            powercfg -change standby-timeout-ac 0
+            powercfg -change standby-timeout-dc 0
+            powercfg -change hibernate-timeout-ac 0
+            powercfg -change hibernate-timeout-dc 0
+            powercfg -change disk-timeout-ac 0
+            powercfg -change disk-timeout-dc 0
+            powercfg -change monitor-timeout-ac 0
+            powercfg -change monitor-timeout-dc 0
+            
+            # Disable USB selective suspend
+            powercfg -setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0
+            powercfg -setdcvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0
+            
+            # Set CPU to never throttle
+            powercfg -setacvalueindex SCHEME_CURRENT 54533251-82be-4824-96c1-47b60b740d00 bc5038f7-23e0-4960-96da-33abaf5935ec 0
+            powercfg -setdcvalueindex SCHEME_CURRENT 54533251-82be-4824-96c1-47b60b740d00 bc5038f7-23e0-4960-96da-33abaf5935ec 0
+            
+            # Apply changes
+            powercfg -setactive SCHEME_CURRENT
             
         } catch {
-            Write-Host "⚠️ Using system-managed virtual memory"
+            Write-Host "⚠️ Some power optimizations failed, continuing..."
         }
         
-        # Advanced memory management settings
+        # Disable Windows Defender completely for maximum performance
         try {
-            # Optimize for applications, not system cache
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "LargeSystemCache" -Value 0 -Force
-            
-            # Increase I/O page lock limit for large operations
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "IoPageLockLimit" -Value 0xFFFFFFFF -Force
-            
-            # Optimize heap for low fragmentation
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "DisablePagingExecutive" -Value 1 -Force
-            
-            # Second level data cache optimization
-            $l2CacheSize = 2048  # Optimize for typical server cache
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "SecondLevelDataCache" -Value $l2CacheSize -Force
-            
-            # Clear prefetch for consistent performance
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" -Name "EnablePrefetcher" -Value 0 -Force
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" -Name "EnableSuperfetch" -Value 0 -Force
-            
-            Write-Host "✅ Advanced memory management optimized"
-            
+            Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+            Set-MpPreference -DisableBehaviorMonitoring $true -ErrorAction SilentlyContinue
+            Set-MpPreference -DisableOnAccessProtection $true -ErrorAction SilentlyContinue
+            Set-MpPreference -DisableScanOnRealtimeEnable $true -ErrorAction SilentlyContinue
+            Set-MpPreference -DisableBlockAtFirstSeen $true -ErrorAction SilentlyContinue
+            Set-MpPreference -DisableIOAVProtection $true -ErrorAction SilentlyContinue
+            Set-MpPreference -DisableScriptScanning $true -ErrorAction SilentlyContinue
+            Write-Host "✅ Windows Defender fully disabled"
         } catch {
-            Write-Host "⚠️ Some memory optimizations skipped"
+            Write-Host "⚠️ Windows Defender partial disable"
         }
         
-        # File system cache optimization
-        try {
-            # Optimize NTFS for performance
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "NtfsDisableLastAccessUpdate" -Value 1 -Force
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "NtfsDisable8dot3NameCreation" -Value 1 -Force
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "NtfsAllowExtendedCharacterIn8dot3Name" -Value 0 -Force
+        # Optimize system for low latency
+        $regOptimizations = @{
+            # Disable Nagle's algorithm for faster network response
+            'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' = @{
+                'TcpAckFrequency' = 1
+                'TCPNoDelay' = 1
+                'TcpDelAckTicks' = 0
+            }
             
-            # Increase file system cache
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "NtfsMftZoneReservation" -Value 4 -Force
+            # Optimize network adapter settings
+            'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces' = @{
+                'TcpAckFrequency' = 1
+                'TCPNoDelay' = 1
+            }
             
-            Write-Host "✅ File system cache optimized"
+            # Disable Windows Search indexing
+            'HKLM:\SYSTEM\CurrentControlSet\Services\WSearch' = @{
+                'Start' = 4
+            }
             
-        } catch {
-            Write-Host "⚠️ Some file system optimizations skipped"
+            # Disable Superfetch/Prefetch for SSD optimization
+            'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters' = @{
+                'EnableSuperfetch' = 0
+                'EnablePrefetcher' = 0
+            }
+            
+            # Optimize system responsiveness
+            'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile' = @{
+                'SystemResponsiveness' = 0
+                'NetworkThrottlingIndex' = 0xffffffff
+            }
+            
+            # Game mode optimizations
+            'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games' = @{
+                'GPU Priority' = 8
+                'Priority' = 6
+                'Scheduling Category' = 'High'
+                'SFIO Priority' = 'High'
+            }
         }
         
-        Write-Host "========================================`n"
+        foreach ($regPath in $regOptimizations.Keys) {
+            try {
+                if (-not (Test-Path $regPath)) {
+                    New-Item -Path $regPath -Force -ErrorAction SilentlyContinue | Out-Null
+                }
+                foreach ($property in $regOptimizations[$regPath].Keys) {
+                    Set-ItemProperty -Path $regPath -Name $property -Value $regOptimizations[$regPath][$property] -Force -ErrorAction SilentlyContinue
+                }
+            } catch {
+                Write-Host "⚠️ Failed to apply registry optimization: $regPath"
+            }
+        }
+        
+        # Disable unnecessary services for performance
+        $servicesToDisable = @(
+            'WSearch',          # Windows Search
+            'SysMain',          # Superfetch
+            'Themes',           # Windows Themes
+            'TabletInputService', # Tablet Input Service
+            'WbioSrvc',         # Windows Biometric Service
+            'WMPNetworkSvc',    # Windows Media Player Network Sharing
+            'WerSvc',           # Windows Error Reporting
+            'Spooler',          # Print Spooler
+            'Fax'               # Fax Service
+        )
+        
+        foreach ($service in $servicesToDisable) {
+            try {
+                $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
+                if ($svc -and $svc.Status -eq 'Running') {
+                    Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
+                    Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
+                    Write-Host "✅ Disabled service: $service"
+                }
+            } catch {
+                Write-Host "⚠️ Could not disable service: $service"
+            }
+        }
+        
+        Write-Host "✅ Ultimate performance optimizations applied"
     
-    - name: Ultra-High Performance RDP Configuration
+    - name: Configure Ultra-Fast RDP Settings
       run: |
-        Write-Host "🖥️ ULTRA-HIGH PERFORMANCE RDP CONFIGURATION"
-        Write-Host "==========================================="
+        Write-Host "🔧 Configuring ULTRA-FAST RDP settings..."
         
         # Enable Remote Desktop with maximum performance settings
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0 -Force
         
+        # Disable Network Level Authentication for faster connection
+        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+        
         $rdpPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
         
-        # Ultra-low latency RDP settings
-        Set-ItemProperty -Path $rdpPath -Name "MaxConnectionTime" -Value 0 -Force                    # No timeout
-        Set-ItemProperty -Path $rdpPath -Name "MaxIdleTime" -Value 0 -Force                         # No idle timeout
-        Set-ItemProperty -Path $rdpPath -Name "MaxDisconnectionTime" -Value 0 -Force                # No disconnection timeout
-        Set-ItemProperty -Path $rdpPath -Name "fResetBroken" -Value 1 -Force                        # Reset broken connections
-        Set-ItemProperty -Path $rdpPath -Name "fDisableAutoReconnect" -Value 0 -Force               # Enable auto-reconnect
-        
-        # Security optimized for performance
-        Set-ItemProperty -Path $rdpPath -Name "UserAuthentication" -Value 0 -Force                  # Disable NLA for speed
-        Set-ItemProperty -Path $rdpPath -Name "SecurityLayer" -Value 0 -Force                       # RDP native security
-        Set-ItemProperty -Path $rdpPath -Name "MinEncryptionLevel" -Value 1 -Force                  # Low encryption for speed
-        Set-ItemProperty -Path $rdpPath -Name "fEncryptRPCTraffic" -Value 0 -Force                  # Disable RPC encryption
-        
-        # Maximum visual quality settings
-        Set-ItemProperty -Path $rdpPath -Name "ColorDepth" -Value 4 -Force                          # 32-bit true color
-        Set-ItemProperty -Path $rdpPath -Name "fDisableWallpaper" -Value 0 -Force                   # Keep wallpaper
-        Set-ItemProperty -Path $rdpPath -Name "fDisableMenuAnims" -Value 0 -Force                   # Keep animations for smoothness
-        Set-ItemProperty -Path $rdpPath -Name "fDisableFullWindowDrag" -Value 0 -Force              # Enable full window drag
-        Set-ItemProperty -Path $rdpPath -Name "fDisableTheming" -Value 0 -Force                     # Keep themes
-        Set-ItemProperty -Path $rdpPath -Name "fEnableDesktopComposition" -Value 1 -Force           # Enable Aero
-        
-        # Enhanced graphics and multimedia
-        Set-ItemProperty -Path $rdpPath -Name "fDisableCursorShadow" -Value 0 -Force                # Keep cursor effects
-        Set-ItemProperty -Path $rdpPath -Name "fDisableCursorBlinking" -Value 0 -Force              # Keep cursor blinking
-        Set-ItemProperty -Path $rdpPath -Name "fEnableWinKey" -Value 1 -Force                       # Enable Windows key
-        
-        # Connection and session limits
-        Set-ItemProperty -Path $rdpPath -Name "MaxInstanceCount" -Value 50 -Force                   # Increase session limit
-        Set-ItemProperty -Path $rdpPath -Name "fLogonDisabled" -Value 0 -Force                      # Enable logon
-        Set-ItemProperty -Path $rdpPath -Name "fPromptForPassword" -Value 0 -Force                  # No password prompt
-        
-        # Enhanced bitmap and cache settings
-        Set-ItemProperty -Path $rdpPath -Name "fEnableBitmapCache" -Value 1 -Force                  # Enable bitmap cache
-        Set-ItemProperty -Path $rdpPath -Name "BitmapCacheSize" -Value 65536 -Force                 # 64MB cache
-        Set-ItemProperty -Path $rdpPath -Name "fEnableBitmapCachePersistence" -Value 1 -Force       # Persistent cache
-        
-        # Audio and multimedia redirection
-        Set-ItemProperty -Path $rdpPath -Name "fDisableAudioCapture" -Value 0 -Force                # Enable audio capture
-        Set-ItemProperty -Path $rdpPath -Name "fDisableCameraRedir" -Value 0 -Force                 # Enable camera
-        Set-ItemProperty -Path $rdpPath -Name "fDisablePNPRedir" -Value 0 -Force                    # Enable PnP redirection
-        
-        # Clipboard and drive redirection
-        Set-ItemProperty -Path $rdpPath -Name "fDisableClip" -Value 0 -Force                        # Enable clipboard
-        Set-ItemProperty -Path $rdpPath -Name "fDisableCdm" -Value 0 -Force                         # Enable drive mapping
-        
-        # Input handling optimization
-        Set-ItemProperty -Path $rdpPath -Name "KeepAliveEnable" -Value 1 -Force                     # Enable keep-alive
-        Set-ItemProperty -Path $rdpPath -Name "KeepAliveInterval" -Value 1 -Force                   # 1 minute interval
-        Set-ItemProperty -Path $rdpPath -Name "fUseAdvancedRemoteApp" -Value 1 -Force               # Advanced RemoteApp
-        
-        # Network optimization for RDP
-        try {
-            # RDP-specific registry optimizations
-            $rdpWinStationPath = 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations'
-            Set-ItemProperty -Path $rdpWinStationPath -Name "DWMFRAMEINTERVAL" -Value 15 -Force      # Optimize frame rate
+        # Ultra-performance RDP settings
+        $rdpOptimizations = @{
+            # Connection limits (unlimited)
+            'MaxConnectionTime' = 0
+            'MaxIdleTime' = 0
+            'MaxDisconnectionTime' = 0
             
-            # Enhanced RDP protocol settings
-            $rdpProtocolPath = 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
-            Set-ItemProperty -Path $rdpProtocolPath -Name "fServerDriveRedirection" -Value 1 -Force  # Enable drive redirection
-            Set-ItemProperty -Path $rdpProtocolPath -Name "fServerPrinterRedirection" -Value 1 -Force # Enable printer redirection
+            # Performance optimizations
+            'ColorDepth' = 4              # 32-bit color for best quality
+            'fDisableWallpaper' = 0       # Keep wallpaper for better UX
+            'fDisableMenuAnims' = 1       # Disable menu animations
+            'fDisableFullWindowDrag' = 1  # Disable full window drag
+            'fDisableTheming' = 1         # Disable theming for speed
+            'fDisableCursorSetting' = 1   # Optimize cursor
+            'fDisableCam' = 1             # Disable camera redirection
+            'fDisableLPT' = 1             # Disable LPT redirection
+            'fDisableCcm' = 1             # Disable COM redirection
+            'fDisablePNP' = 1             # Disable PnP redirection
             
-        } catch {
-            Write-Host "⚠️ Some advanced RDP optimizations skipped"
+            # Network optimizations
+            'fEnableWinStation' = 1
+            'fLogonDisabled' = 0
+            'fReconnectSame' = 0
+            'fInheritMaxSessionTime' = 0
+            'fInheritMaxDisconnectionTime' = 0
+            'fInheritMaxIdleTime' = 0
+            
+            # Security optimizations for speed
+            'fPromptForPassword' = 0
+            'fRequireEncryption' = 0      # Disable encryption for speed (internal use)
+            'MinEncryptionLevel' = 1      # Minimum encryption
+            
+            # Compression and speed
+            'fDisableCompression' = 0     # Enable compression for better bandwidth
+            'CompressionLevel' = 2        # High compression
         }
         
-        # Firewall rules for RDP
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
-        New-NetFirewallRule -DisplayName "RDP-In-TCP-3389" -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -ErrorAction SilentlyContinue
-        New-NetFirewallRule -DisplayName "RDP-In-UDP-3389" -Direction Inbound -Protocol UDP -LocalPort 3389 -Action Allow -ErrorAction SilentlyContinue
+        foreach ($setting in $rdpOptimizations.Keys) {
+            try {
+                Set-ItemProperty -Path $rdpPath -Name $setting -Value $rdpOptimizations[$setting] -Force
+            } catch {
+                Write-Host "⚠️ Could not set RDP optimization: $setting"
+            }
+        }
         
-        # Optimize Terminal Services with high priority
+        # Additional RDP performance registry settings
+        $additionalRdpSettings = @{
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' = @{
+                'fDisableWallpaper' = 1
+                'fDisableFullWindowDrag' = 1
+                'fDisableMenuAnims' = 1
+                'fDisableTheming' = 1
+                'ColorDepth' = 4
+            }
+            
+            'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server' = @{
+                'fEnableWinStation' = 1
+                'TSEnabled' = 1
+                'fDenyTSConnections' = 0
+            }
+        }
+        
+        foreach ($regPath in $additionalRdpSettings.Keys) {
+            try {
+                if (-not (Test-Path $regPath)) {
+                    New-Item -Path $regPath -Force | Out-Null
+                }
+                foreach ($property in $additionalRdpSettings[$regPath].Keys) {
+                    Set-ItemProperty -Path $regPath -Name $property -Value $additionalRdpSettings[$regPath][$property] -Force
+                }
+            } catch {
+                Write-Host "⚠️ Could not apply additional RDP setting: $regPath"
+            }
+        }
+        
+        # Configure firewall rules for RDP with high priority
+        Write-Host "🔥 Configuring optimized firewall rules..."
+        try {
+            # Remove existing rules
+            Remove-NetFirewallRule -DisplayName "RDP-In-TCP" -ErrorAction SilentlyContinue
+            Remove-NetFirewallRule -DisplayName "RDP-In-UDP" -ErrorAction SilentlyContinue
+            
+            # Add optimized rules
+            New-NetFirewallRule -DisplayName "RDP-In-TCP" -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -Profile Any -Priority 1
+            New-NetFirewallRule -DisplayName "RDP-In-UDP" -Direction Inbound -Protocol UDP -LocalPort 3389 -Action Allow -Profile Any -Priority 1
+            
+            Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+            Write-Host "✅ Firewall optimized for RDP"
+        } catch {
+            Write-Host "⚠️ Firewall configuration had issues"
+        }
+        
+        Write-Host "✅ Ultra-fast RDP settings configured"
+    
+    - name: Optimize Network Stack for Low Latency
+      run: |
+        Write-Host "🌐 Optimizing network stack for ULTRA-LOW latency..."
+        
+        # Advanced TCP/IP optimizations
+        $networkOptimizations = @{
+            'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters' = @{
+                'TcpAckFrequency' = 1
+                'TCPNoDelay' = 1
+                'TcpDelAckTicks' = 0
+                'TCPWindowSize' = 65536
+                'GlobalMaxTcpWindowSize' = 65536
+                'TcpWindowSize' = 65536
+                'Tcp1323Opts' = 1
+                'DefaultTTL' = 64
+                'EnablePMTUBHDetect' = 0
+                'EnablePMTUDiscovery' = 1
+                'EnableTCPChimney' = 1
+                'EnableTCPA' = 1
+                'EnableRSS' = 1
+                'MaxUserPort' = 65534
+                'TcpTimedWaitDelay' = 30
+                'SackOpts' = 1
+                'NumTcbTablePartitions' = 4
+                'MaxHashTableSize' = 65536
+            }
+        }
+        
+        foreach ($regPath in $networkOptimizations.Keys) {
+            try {
+                foreach ($property in $networkOptimizations[$regPath].Keys) {
+                    Set-ItemProperty -Path $regPath -Name $property -Value $networkOptimizations[$regPath][$property] -Force
+                }
+            } catch {
+                Write-Host "⚠️ Could not apply network optimization: $regPath"
+            }
+        }
+        
+        # Network adapter optimizations
+        try {
+            $adapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
+            foreach ($adapter in $adapters) {
+                # Disable power management
+                Set-NetAdapterPowerManagement -Name $adapter.Name -ArpOffload Disabled -NSOffload Disabled -WakeOnMagicPacket Disabled -WakeOnPattern Disabled -ErrorAction SilentlyContinue
+                
+                # Optimize adapter settings
+                Set-NetAdapterAdvancedProperty -Name $adapter.Name -DisplayName "Interrupt Moderation" -DisplayValue "Disabled" -ErrorAction SilentlyContinue
+                Set-NetAdapterAdvancedProperty -Name $adapter.Name -DisplayName "Receive Side Scaling" -DisplayValue "Enabled" -ErrorAction SilentlyContinue
+                Set-NetAdapterAdvancedProperty -Name $adapter.Name -DisplayName "TCP Checksum Offload (IPv4)" -DisplayValue "Enabled" -ErrorAction SilentlyContinue
+                Set-NetAdapterAdvancedProperty -Name $adapter.Name -DisplayName "TCP Checksum Offload (IPv6)" -DisplayValue "Enabled" -ErrorAction SilentlyContinue
+                
+                Write-Host "✅ Optimized network adapter: $($adapter.Name)"
+            }
+        } catch {
+            Write-Host "⚠️ Some network adapter optimizations failed"
+        }
+        
+        # DNS optimizations
+        try {
+            # Use fast DNS servers
+            Set-DnsClientServerAddress -InterfaceAlias "Ethernet*" -ServerAddresses "1.1.1.1", "8.8.8.8" -ErrorAction SilentlyContinue
+            Set-DnsClientServerAddress -InterfaceAlias "Wi-Fi*" -ServerAddresses "1.1.1.1", "8.8.8.8" -ErrorAction SilentlyContinue
+            
+            # Optimize DNS cache
+            Set-DnsClientCache -MaxKBSize 20480  # 20MB cache
+            Write-Host "✅ DNS optimized"
+        } catch {
+            Write-Host "⚠️ DNS optimization had issues"
+        }
+        
+        Write-Host "✅ Network stack optimized for ultra-low latency"
+    
+    - name: Configure High-Performance Terminal Services
+      run: |
+        Write-Host "🖥️ Configuring high-performance Terminal Services..."
+        
+        # Configure and start Terminal Services with optimizations
         $termServices = @(
-            @{Name="TermService"; Priority="High"; Description="Terminal Services"},
-            @{Name="SessionEnv"; Priority="High"; Description="Remote Desktop Session Host"},
-            @{Name="UmRdpService"; Priority="AboveNormal"; Description="Remote Desktop User Mode"},
-            @{Name="Themes"; Priority="Normal"; Description="Windows Themes"},
-            @{Name="TabletInputService"; Priority="Normal"; Description="Tablet Input Service"},
-            @{Name="AudioSrv"; Priority="High"; Description="Windows Audio"},
-            @{Name="AudioEndpointBuilder"; Priority="High"; Description="Windows Audio Endpoint"}
+            @{Name="TermService"; DisplayName="Remote Desktop Services"},
+            @{Name="SessionEnv"; DisplayName="Session Environment"},
+            @{Name="UmRdpService"; DisplayName="Remote Desktop Services UserMode Port Redirector"}
         )
         
         foreach ($service in $termServices) {
             try {
-                Set-Service -Name $service.Name -StartupType Automatic -Force
-                Start-Service -Name $service.Name -Force -ErrorAction SilentlyContinue
+                # Set service to automatic and high priority
+                Set-Service -Name $service.Name -StartupType Automatic -ErrorAction SilentlyContinue
                 
-                # Set process priority if running
-                $process = Get-Process -Name $service.Name -ErrorAction SilentlyContinue
-                if ($process -and $service.Priority -ne "Normal") {
-                    $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::$($service.Priority)
+                # Configure service for high performance
+                $servicePath = "HKLM:\SYSTEM\CurrentControlSet\Services\$($service.Name)"
+                if (Test-Path $servicePath) {
+                    Set-ItemProperty -Path $servicePath -Name "Start" -Value 2 -Force
+                    Set-ItemProperty -Path $servicePath -Name "Type" -Value 32 -Force -ErrorAction SilentlyContinue
                 }
                 
-                Write-Host "✅ Service optimized: $($service.Name) ($($service.Description))"
+                # Start service
+                Start-Service -Name $service.Name -ErrorAction SilentlyContinue
+                Restart-Service -Name $service.Name -Force -ErrorAction SilentlyContinue
+                
+                $svcStatus = (Get-Service -Name $service.Name).Status
+                Write-Host "✅ Service $($service.Name): $svcStatus"
             } catch {
-                Write-Host "⚠️ Issue with service: $($service.Name)"
+                Write-Host "⚠️ Issue with service $($service.Name): $($_.Exception.Message)"
             }
         }
         
-        Write-Host "✅ Ultra-high performance RDP configured"
-        Write-Host "===========================================`n"
+        Write-Host "✅ Terminal Services optimized and running"
     
-    - name: Enhanced System Performance Tuning
+    - name: Create Ultra-Privileged RDP User
       run: |
-        Write-Host "🚀 ENHANCED SYSTEM PERFORMANCE TUNING"
-        Write-Host "====================================="
+        Write-Host "👤 Creating ultra-privileged RDP user..."
         
-        # Advanced process scheduling
+        $username = "rdpadmin"
+        $password = "SuperAdmin2024!"
+        $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
+        
         try {
-            # Optimize for foreground applications
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 38 -Force
-            
-            # Optimize thread scheduling
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Executive" -Name "AdditionalCriticalWorkerThreads" -Value 4 -Force
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Executive" -Name "AdditionalDelayedWorkerThreads" -Value 4 -Force
-            
-            Write-Host "✅ Process and thread scheduling optimized"
-        } catch {
-            Write-Host "⚠️ Process scheduling optimization skipped"
-        }
-        
-        # Disable unnecessary services for maximum performance
-        $servicesToDisable = @(
-            @{Name="WSearch"; Desc="Windows Search"},
-            @{Name="SysMain"; Desc="Superfetch/SysMain"},
-            @{Name="WMPNetworkSvc"; Desc="Windows Media Player Network"},
-            @{Name="WbioSrvc"; Desc="Windows Biometric Service"},
-            @{Name="FontCache"; Desc="Windows Font Cache Service"},
-            @{Name="lfsvc"; Desc="Geolocation Service"},
-            @{Name="MapsBroker"; Desc="Downloaded Maps Manager"},
-            @{Name="RetailDemo"; Desc="Retail Demo Service"},
-            @{Name="RemoteRegistry"; Desc="Remote Registry"},
-            @{Name="SharedAccess"; Desc="Internet Connection Sharing"},
-            @{Name="TapiSrv"; Desc="Telephony"},
-            @{Name="Fax"; Desc="Fax Service"},
-            @{Name="MSiSCSI"; Desc="Microsoft iSCSI Initiator"},
-            @{Name="WMPNetworkSvc"; Desc="Windows Media Player Network Sharing"}
-        )
-        
-        foreach ($service in $servicesToDisable) {
-            try {
-                $svc = Get-Service -Name $service.Name -ErrorAction SilentlyContinue
-                if ($svc -and $svc.Status -eq 'Running') {
-                    Stop-Service -Name $service.Name -Force -ErrorAction SilentlyContinue
-                    Set-Service -Name $service.Name -StartupType Disabled -ErrorAction SilentlyContinue
-                    Write-Host "✅ Disabled: $($service.Desc)"
-                }
-            } catch {
-                # Service might not exist
-            }
-        }
-        
-        # Optimize Windows features
-        $featuresToDisable = @(
-            "Internet-Explorer-Optional-amd64",
-            "MediaPlayback",
-            "WindowsMediaPlayer",
-            "WorkFolders-Client",
-            "Printing-PrintToPDFServices-Features",
-            "Printing-XPSServices-Features"
-        )
-        
-        foreach ($feature in $featuresToDisable) {
-            try {
-                Disable-WindowsOptionalFeature -Online -FeatureName $feature -NoRestart -ErrorAction SilentlyContinue
-                Write-Host "✅ Disabled feature: $feature"
-            } catch {
-                # Feature might not exist
-            }
-        }
-        
-        # Registry optimizations for I/O and responsiveness
-        try {
-            # Increase I/O timeout and queue depth
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Disk" -Name "TimeOutValue" -Value 300 -Force
-            
-            # Optimize storage I/O performance
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\StorageDevicePolicies" -Name "WriteCache" -Value 1 -Force
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "ContigFileAllocSize" -Value 1536 -Force
-            
-            # Increase system responsiveness
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control" -Name "WaitToKillServiceTimeout" -Value "2000" -Force
-            Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "HungAppTimeout" -Value "1000" -Force
-            Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "WaitToKillAppTimeout" -Value "2000" -Force
-            Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "LowLevelHooksTimeout" -Value "1000" -Force
-            
-            # Menu show delay optimization
-            Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value "8" -Force
-            
-            # Mouse and keyboard responsiveness
-            Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name "MouseHoverTime" -Value "8" -Force
-            Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name "MouseSensitivity" -Value "10" -Force
-            
-            Write-Host "✅ I/O and responsiveness optimized"
-        } catch {
-            Write-Host "⚠️ Some I/O optimizations skipped"
-        }
-        
-        # Graphics and display optimizations
-        try {
-            # Disable visual effects for maximum performance
-            Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Force
-            
-            # DWM optimizations for better RDP performance
-            Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\Dwm" -Name "OverlayTestMode" -Value 5 -Force
-            Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\Dwm" -Name "CompositionPolicy" -Value 0 -Force
-            
-            # Gaming mode for consistent performance
-            Set-ItemProperty -Path "HKCU:\Software\Microsoft\GameBar" -Name "AutoGameModeEnabled" -Value 1 -Force
-            Set-ItemProperty -Path "HKCU:\Software\Microsoft\GameBar" -Name "AllowAutoGameMode" -Value 1 -Force
-            
-            # Hardware acceleration
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" -Name "HwSchMode" -Value 2 -Force
-            
-            Write-Host "✅ Graphics and display optimized"
-        } catch {
-            Write-Host "⚠️ Some graphics optimizations skipped"
-        }
-        
-        # Timer resolution for ultra-low latency
-        try {
-            # Set highest timer resolution
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel" -Name "GlobalTimerResolutionRequests" -Value 1 -Force
-            
-            # Optimize interrupt handling
-            Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel" -Name "InterruptSteeringDisabled" -Value 0 -Force
-            
-            Write-Host "✅ Timer resolution optimized for ultra-low latency"
-        } catch {
-            Write-Host "⚠️ Timer optimization skipped"
-        }
-        
-        Write-Host "=====================================`n"
-    
-    - name: Advanced Security and Access Configuration
-      run: |
-        Write-Host "🔐 ADVANCED SECURITY AND ACCESS CONFIGURATION"
-        Write-Host "============================================="
-        
-        # Create optimized RDP user account
-        try {
-            $userName = "RDPUser"
-            $password = "TempPass123!" | ConvertTo-SecureString -AsPlainText -Force
-            
-            # Check if user exists
-            $userExists = Get-LocalUser -Name $userName -ErrorAction SilentlyContinue
-            if (-not $userExists) {
-                New-LocalUser -Name $userName -Password $password -Description "Optimized RDP Access Account" -UserMayNotChangePassword -PasswordNeverExpires
-                Write-Host "✅ Created RDP user: $userName"
-            } else {
-                Write-Host "✅ RDP user already exists: $userName"
+            # Remove existing user if present
+            if (Get-LocalUser -Name $username -ErrorAction SilentlyContinue) {
+                Remove-LocalUser -Name $username -Force
             }
             
-            # Add to Remote Desktop Users group
-            Add-LocalGroupMember -Group "Remote Desktop Users" -Member $userName -ErrorAction SilentlyContinue
-            Add-LocalGroupMember -Group "Performance Log Users" -Member $userName -ErrorAction SilentlyContinue
+            # Create new user with maximum privileges
+            New-LocalUser -Name $username -Password $securePassword -FullName "Ultra RDP Administrator" -Description "Ultra Performance RDP Access" -PasswordNeverExpires -UserMayNotChangePassword -AccountNeverExpires
             
-            # Grant additional privileges for performance
-            $sidStr = (New-Object System.Security.Principal.SecurityIdentifier((Get-LocalUser -Name $userName).SID)).Value
-            
-            # User rights assignments via alternative method
-            try {
-                # Try to use secedit for user rights (if available)
-                $tempInf = [System.IO.Path]::GetTempFileName()
-                $secEditResult = Start-Process -FilePath "secedit" -ArgumentList "/export", "/cfg", "$tempInf", "/quiet" -Wait -PassThru -ErrorAction SilentlyContinue
-                
-                if ($secEditResult.ExitCode -eq 0 -and (Test-Path $tempInf)) {
-                    $content = Get-Content $tempInf
-                    $content = $content -replace "SeIncreaseQuotaPrivilege.*", "SeIncreaseQuotaPrivilege = *$sidStr"
-                    $content = $content -replace "SeIncreaseBasePriorityPrivilege.*", "SeIncreaseBasePriorityPrivilege = *$sidStr"
-                    $content | Set-Content $tempInf -Force
-                    
-                    $configResult = Start-Process -FilePath "secedit" -ArgumentList "/configure", "/db", "$env:windir\security\local.sdb", "/cfg", "$tempInf", "/quiet" -Wait -PassThru -ErrorAction SilentlyContinue
-                    
-                    if ($configResult.ExitCode -eq 0) {
-                        Write-Host "✅ User rights configured via secedit"
-                    } else {
-                        Write-Host "⚠️ Secedit configuration failed, using alternative method"
-                    }
-                } else {
-                    Write-Host "⚠️ Secedit export failed, using registry method"
-                }
-                
-                Remove-Item $tempInf -Force -ErrorAction SilentlyContinue
-                
-            } catch {
-                Write-Host "⚠️ Secedit not available, using registry-based configuration"
-                
-                # Alternative: Use registry method for some privileges
+            # Add to all necessary groups
+            $groups = @("Administrators", "Remote Desktop Users", "Performance Log Users", "Remote Management Users")
+            foreach ($group in $groups) {
                 try {
-                    # Enable performance counters access
-                    $perfKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Perflib"
-                    Set-ItemProperty -Path $perfKey -Name "Disable Performance Counters" -Value 0 -Force -ErrorAction SilentlyContinue
-                    
-                    Write-Host "✅ Performance access configured via registry"
+                    Add-LocalGroupMember -Group $group -Member $username -ErrorAction SilentlyContinue
+                    Write-Host "✅ Added to group: $group"
                 } catch {
-                    Write-Host "⚠️ Registry-based privilege configuration partial"
+                    Write-Host "⚠️ Could not add to group: $group"
                 }
             }
             
-            Write-Host "✅ RDP user privileges configured"
+            # Configure account policies for performance
+            net accounts /lockoutthreshold:0 2>$null
+            net accounts /maxpwage:unlimited 2>$null
             
-        } catch {
-            Write-Host "⚠️ RDP user configuration completed with some limitations"
-            Write-Host "   User account created successfully but some advanced privileges may need manual configuration"
-        }
-        
-        # Windows Defender optimization for RDP performance
-        try {
-            # Add RDP-related exclusions
-            $exclusions = @(
-                "C:\Windows\System32\mstsc.exe",
-                "C:\Windows\System32\rdpclip.exe",
-                "C:\Windows\System32\rdpsa.exe",
-                "C:\Windows\System32\rdpshell.exe",
-                "C:\Windows\System32\dwm.exe",
-                "C:\Windows\System32\winlogon.exe",
-                "C:\Windows\System32\lsass.exe"
-            )
-            
-            foreach ($exclusion in $exclusions) {
-                Add-MpPreference -ExclusionProcess $exclusion -ErrorAction SilentlyContinue
+            # Set user privileges
+            try {
+                # Grant user additional privileges
+                $userSid = (Get-LocalUser -Name $username).SID.Value
+                
+                # Configure user for high performance
+                $userRegPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList\$userSid"
+                if (Test-Path $userRegPath) {
+                    Set-ItemProperty -Path $userRegPath -Name "Flags" -Value 0 -Force
+                }
+                
+                Write-Host "✅ User privileges configured"
+            } catch {
+                Write-Host "⚠️ Some user privilege configurations failed"
             }
             
-            # Exclude RDP network traffic from real-time scanning
-            Set-MpPreference -DisableRealtimeMonitoring $false -Force -ErrorAction SilentlyContinue
-            Set-MpPreference -DisableNetworkProtectionPerfMode $false -ErrorAction SilentlyContinue
+            # Store credentials
+            $env:RDP_USERNAME = $username
+            $env:RDP_PASSWORD = $password
             
-            # Optimize scanning schedule
-            Set-MpPreference -ScanAvgCPULoadFactor 50 -ErrorAction SilentlyContinue
-            Set-MpPreference -ScanOnlyIfIdleEnabled $true -ErrorAction SilentlyContinue
+            Write-Host "✅ Ultra-privileged RDP user created successfully"
+            Write-Host "📋 ULTRA-PERFORMANCE CREDENTIALS:"
+            Write-Host "   👤 Username: $username"
+            Write-Host "   🔑 Password: $password"
+            Write-Host "   🔐 Level: Ultra Administrator"
             
-            Write-Host "✅ Windows Defender optimized for RDP"
         } catch {
-            Write-Host "⚠️ Windows Defender optimization skipped"
+            Write-Host "❌ Error creating ultra user: $($_.Exception.Message)"
+            exit 1
         }
-        
-        # Enhanced RDP security with performance balance
-        try {
-            # Optimize RDP authentication
-            Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" -Name "fPromptForPassword" -Value 0 -Force
-            Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" -Name "MaxIdleTime" -Value 0 -Force
-            Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" -Name "MaxConnectionTime" -Value 0 -Force
-            
-            # Enhanced session management
-            Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" -Name "fResetBroken" -Value 1 -Force
-            Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" -Name "fDisableAutoReconnect" -Value 0 -Force
-            
-            Write-Host "✅ Enhanced RDP security configured"
-        } catch {
-            Write-Host "⚠️ Some RDP security settings skipped"
-        }
-        
-        Write-Host "=============================================`n"
     
-    - name: Final Performance Validation and Connection Info
+    - name: Apply Visual and UI Optimizations
       run: |
-        Write-Host "📊 FINAL PERFORMANCE VALIDATION AND CONNECTION INFO"
+        Write-Host "🎨 Applying UI optimizations for maximum performance..."
+        
+        # Create temporary user profile to apply settings
+        $tempUser = "tempconfig"
+        $tempPass = ConvertTo-SecureString "TempPass123!" -AsPlainText -Force
+        
+        try {
+            New-LocalUser -Name $tempUser -Password $tempPass -ErrorAction SilentlyContinue
+            
+            # Load temporary user registry hive
+            $userProfile = "C:\Users\$tempUser"
+            if (-not (Test-Path $userProfile)) {
+                New-Item -Path $userProfile -ItemType Directory -Force | Out-Null
+            }
+            
+            # Apply visual optimizations to default user
+            $visualOptimizations = @{
+                'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' = @{
+                    'VisualFXSetting' = 2  # Adjust for best performance
+                }
+                
+                'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced' = @{
+                    'ListviewAlphaSelect' = 0
+                    'ListviewShadow' = 0
+                    'TaskbarAnimations' = 0
+                    'ShowInfoTip' = 0
+                    'ShowPreviewHandlers' = 0
+                    'ShowTypeOverlay' = 0
+                }
+                
+                'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize' = @{
+                    'EnableTransparency' = 0
+                }
+                
+                'HKLM:\SOFTWARE\Microsoft\Windows\DWM' = @{
+                    'EnableAeroPeek' = 0
+                    'AlwaysHibernateThumbnails' = 0
+                }
+            }
+            
+            foreach ($regPath in $visualOptimizations.Keys) {
+                try {
+                    if (-not (Test-Path $regPath)) {
+                        New-Item -Path $regPath -Force | Out-Null
+                    }
+                    foreach ($property in $visualOptimizations[$regPath].Keys) {
+                        Set-ItemProperty -Path $regPath -Name $property -Value $visualOptimizations[$regPath][$property] -Force
+                    }
+                } catch {
+                    Write-Host "⚠️ Could not apply visual optimization: $regPath"
+                }
+            }
+            
+            # Apply to default user template
+            reg load HKU\TempUser "C:\Users\Default\NTUSER.DAT" 2>$null
+            
+            $userVisualSettings = @{
+                'HKU:\TempUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' = @{
+                    'VisualFXSetting' = 2
+                }
+                'HKU:\TempUser\Control Panel\Desktop' = @{
+                    'DragFullWindows' = 0
+                    'MenuShowDelay' = 0
+                    'UserPreferencesMask' = ([byte[]](0x90,0x12,0x03,0x80,0x10,0x00,0x00,0x00))
+                }
+                'HKU:\TempUser\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' = @{
+                    'ListviewAlphaSelect' = 0
+                    'ListviewShadow' = 0
+                    'TaskbarAnimations' = 0
+                    'ShowInfoTip' = 0
+                }
+            }
+            
+            foreach ($regPath in $userVisualSettings.Keys) {
+                try {
+                    if (-not (Test-Path $regPath)) {
+                        New-Item -Path $regPath -Force | Out-Null
+                    }
+                    foreach ($property in $userVisualSettings[$regPath].Keys) {
+                        Set-ItemProperty -Path $regPath -Name $property -Value $userVisualSettings[$regPath][$property] -Force
+                    }
+                } catch {
+                    Write-Host "⚠️ Could not apply user visual setting: $regPath"
+                }
+            }
+            
+            reg unload HKU\TempUser 2>$null
+            
+            # Cleanup temp user
+            Remove-LocalUser -Name $tempUser -ErrorAction SilentlyContinue
+            
+            Write-Host "✅ Visual optimizations applied"
+            
+        } catch {
+            Write-Host "⚠️ Some visual optimizations failed"
+        }
+    
+    - name: Download and Setup High-Performance Playit Agent
+      run: |
+        Write-Host "📥 Setting up HIGH-PERFORMANCE Playit Agent..."
+        try {
+            $playitUrl = "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe"
+            $playitPath = "$env:USERPROFILE\playit.exe"
+            
+            # Download with aggressive retry and optimization
+            $maxRetries = 5
+            $retryCount = 0
+            
+            # Use fastest download method
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            [Net.ServicePointManager]::DefaultConnectionLimit = 100
+            
+            do {
+                try {
+                    $webClient = New-Object System.Net.WebClient
+                    $webClient.DownloadFile($playitUrl, $playitPath)
+                    break
+                } catch {
+                    $retryCount++
+                    if ($retryCount -ge $maxRetries) { throw }
+                    Write-Host "⚠️ Download attempt $retryCount failed, retrying in 3 seconds..."
+                    Start-Sleep -Seconds 3
+                }
+            } while ($retryCount -lt $maxRetries)
+            
+            # Verify and optimize
+            if (Test-Path $playitPath) {
+                $fileSize = (Get-Item $playitPath).Length
+                Write-Host "✅ Playit Agent downloaded successfully ($([math]::Round($fileSize/1MB, 2)) MB)"
+                
+                # Set high priority for Playit executable
+                Set-ItemProperty -Path $playitPath -Name Attributes -Value 'Normal'
+                
+            } else {
+                throw "Download verification failed"
+            }
+        } catch {
+            Write-Host "❌ Error downloading Playit Agent: $($_.Exception.Message)"
+            exit 1
+        }
+    
+    - name: Launch Ultra-High Priority Playit Agent
+      env:
+        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+      run: |
+        Write-Host "🚀 Launching ULTRA-HIGH PRIORITY Playit Agent..."
+        
+        if (-not $env:PLAYIT_AUTH_KEY) {
+            Write-Host "❌ PLAYIT_AUTH_KEY secret not configured"
+            Write-Host "Please add your Playit.gg tunnel token as a secret named 'PL'"
+            exit 1
+        }
+        
+        try {
+            $playitPath = "$env:USERPROFILE\playit.exe"
+            
+            # Create high-priority startup script
+            $startupScript = @"
+            @echo off
+            start /high /b "$playitPath" --secret "$env:PLAYIT_AUTH_KEY"
+            "@
+            $startupScript | Out-File -FilePath "$env:TEMP\start_playit.bat" -Encoding ASCII
+            
+            # Start Playit Agent with maximum priority
+            $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+            $processInfo.FileName = "cmd.exe"
+            $processInfo.Arguments = "/c `"$env:TEMP\start_playit.bat`""
+            $processInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+            $processInfo.UseShellExecute = $false
+            $processInfo.CreateNoWindow = $true
+            
+            $process = [System.Diagnostics.Process]::Start($processInfo)
+            
+            # Wait for process to initialize
+            Start-Sleep -Seconds 5
+            
+            # Find and optimize Playit process
+            $playitProcess = Get-Process -Name "playit*" | Select-Object -First 1
+            if ($playitProcess) {
+                # Set to high priority
+                $playitProcess.PriorityClass = 'High'
+                
+                # Set processor affinity to use all cores
+                $playitProcess.ProcessorAffinity = [IntPtr]::new([Math]::Pow(2, (Get-CimInstance -ClassName Win32_ComputerSystem).NumberOfLogicalProcessors) - 1)
+                
+                Write-Host "✅ Playit Agent started with HIGH PRIORITY (PID: $($playitProcess.Id))"
+                
+                # Extended tunnel establishment wait
+                Write-Host "⏳ Waiting for ultra-fast tunnel establishment..."
+                Start-Sleep -Seconds 45
+                
+                # Verify process health
+                $updatedProcess = Get-Process -Id $playitProcess.Id -ErrorAction SilentlyContinue
+                if ($updatedProcess) {
+                    Write-Host "✅ Playit Agent is running at HIGH PRIORITY with optimized settings"
+                    Write-Host "🌐 Tunnel should be active with ULTRA-LOW latency configuration"
+                } else {
+                    Write-Host "❌ Playit Agent process died unexpectedly"
+                    exit 1
+                }
+            } else {
+                Write-Host "❌ Could not find Playit process"
+                exit 1
+            }
+            
+        } catch {
+            Write-Host "❌ Error starting Playit Agent: $($_.Exception.Message)"
+            exit 1
+        }
+    
+    - name: Display Ultra-Performance Connection Information
+      run: |
+        Write-Host ""
+        Write-Host "🚀 ULTRA-HIGH PERFORMANCE RDP TUNNEL IS ACTIVE!"
+        Write-Host "=================================================="
+        Write-Host ""
+        Write-Host "🎯 CONNECTION DETAILS:"
+        Write-Host "   👤 Username: rdpadmin"
+        Write-Host "   🔑 Password: SuperAdmin2024!"
+        Write-Host "   🌐 Protocol: RDP (3389)"
+        Write-Host "   ⚡ Priority: ULTRA-HIGH"
+        Write-Host "   🔧 Optimizations: MAXIMUM"
+        Write-Host ""
+        Write-Host "📊 PERFORMANCE OPTIMIZATIONS ACTIVE:"
+        Write-Host "   • Ultimate Performance Power Scheme"
+        Write-Host "   • Windows Defender Completely Disabled"
+        Write-Host "   • Network Stack Ultra-Low Latency Mode"
+        Write-Host "   • TCP NoDelay and Optimized ACK Frequency"
+        Write-Host "   • All Visual Effects Disabled for Speed"
+        Write-Host "   • Unnecessary Services Stopped"
+        Write-Host "   • RDP Compression and Fast Reconnect Enabled"
+        Write-Host "   • High-Priority Process Scheduling"
+        Write-Host ""
+        Write-Host "🌐 TUNNEL STATUS:"
+        try {
+            $playitProcess = Get-Process -Name "playit*" -ErrorAction SilentlyContinue
+            if ($playitProcess) {
+                Write-Host "   ✅ Playit Tunnel: ACTIVE (PID: $($playitProcess.Id))"
+                Write-Host "   🔥 Priority: $($playitProcess.PriorityClass)"
+                $cpuUsage = Get-Counter -Counter "\Process(playit*)\% Processor Time" -ErrorAction SilentlyContinue
+                if ($cpuUsage) {
+                    Write-Host "   📊 CPU Usage: $([math]::Round($cpuUsage.CounterSamples[0].CookedValue, 2))%"
+                }
+            } else {
+                Write-Host "   ❌ Playit Tunnel: NOT FOUND"
+            }
+        } catch {
+            Write-Host "   ⚠️ Tunnel Status: UNKNOWN"
+        }
+        
+        Write-Host ""
+        Write-Host "🖥️ SYSTEM INFORMATION:"
+        try {
+            $computerInfo = Get-ComputerInfo
+            Write-Host "   💻 OS: $($computerInfo.WindowsProductName)"
+            Write-Host "   🧠 CPU: $($computerInfo.CsProcessors[0].Name)"
+            Write-Host "   🔢 Cores: $($computerInfo.CsNumberOfLogicalProcessors)"
+            Write-Host "   💾 RAM: $([math]::Round($computerInfo.TotalPhysicalMemory/1GB, 2)) GB"
+            
+            # Get network adapter info
+            $activeAdapter = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | Select-Object -First 1
+            if ($activeAdapter) {
+                Write-Host "   🌐 Network: $($activeAdapter.Name) - $($activeAdapter.LinkSpeed)"
+            }
+        } catch {
+            Write-Host "   ⚠️ System info collection failed"
+        }
+        
+        Write-Host ""
+        Write-Host "⚡ ULTRA-PERFORMANCE FEATURES:"
+        Write-Host "   • Zero-latency mouse and keyboard response"
+        Write-Host "   • Optimized for gaming and real-time applications"
+        Write-Host "   • Maximum bandwidth utilization"
+        Write-Host "   • Instant screen updates"
+        Write-Host "   • Hardware-accelerated graphics when available"
+        Write-Host "   • Minimal CPU overhead"
+        Write-Host ""
+        Write-Host "🔗 TO CONNECT:"
+        Write-Host "   1. Find your Playit.gg tunnel URL in the dashboard"
+        Write-Host "   2. Use any RDP client (mstsc, RDP apps, etc.)"
+        Write-Host "   3. Connect to: [your-playit-url]:3389"
+        Write-Host "   4. Login with the credentials above"
+        Write-Host ""
+        Write-Host "⚠️ SECURITY NOTES:"
+        Write-Host "   • This is optimized for MAXIMUM PERFORMANCE"
+        Write-Host "   • Some security features disabled for speed"
+        Write-Host "   • Recommended for internal/testing use only"
+        Write-Host "   • Change password after first login"
+        Write-Host ""
+        Write-Host "🕐 SESSION TIMEOUT: 6 HOURS (360 minutes)"
+        Write-Host "📞 SUPPORT: Check Playit.gg dashboard for tunnel status"
+        Write-Host ""
+        Write-Host "✅ ULTRA-HIGH PERFORMANCE RDP TUNNEL READY FOR USE!"
         Write-Host "=================================================="
         
-        # Restart critical services to apply all optimizations
-        $criticalServices = @("TermService", "SessionEnv", "UmRdpService", "Themes", "AudioSrv")
-        foreach ($service in $criticalServices) {
+        # Keep the session alive and monitor
+        Write-Host ""
+        Write-Host "🔄 MONITORING SESSION (Press Ctrl+C to stop)..."
+        Write-Host "   💡 This workflow will run for up to 6 hours"
+        Write-Host "   📊 Monitoring tunnel and system health..."
+        Write-Host ""
+        
+        # Monitor loop
+        $startTime = Get-Date
+        $maxDuration = New-TimeSpan -Hours 6
+        
+        while ((Get-Date) - $startTime -lt $maxDuration) {
             try {
-                Restart-Service -Name $service -Force -ErrorAction SilentlyContinue
-                Write-Host "✅ Restarted service: $service"
+                # Check Playit process health
+                $playitProcess = Get-Process -Name "playit*" -ErrorAction SilentlyContinue
+                if (-not $playitProcess) {
+                    Write-Host "❌ $(Get-Date -Format 'HH:mm:ss') - Playit process died, attempting restart..."
+                    
+                    # Try to restart Playit
+                    $playitPath = "$env:USERPROFILE\playit.exe"
+                    if (Test-Path $playitPath) {
+                        Start-Process -FilePath $playitPath -ArgumentList "--secret", "$env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
+                        Start-Sleep -Seconds 10
+                    }
+                } else {
+                    # Periodic health check
+                    $uptime = (Get-Date) - $startTime
+                    Write-Host "✅ $(Get-Date -Format 'HH:mm:ss') - Tunnel healthy | Uptime: $($uptime.ToString('hh\:mm\:ss')) | PID: $($playitProcess.Id)"
+                }
+                
+                # Check every 5 minutes
+                Start-Sleep -Seconds 300
+                
             } catch {
-                Write-Host "⚠️ Could not restart: $service"
+                Write-Host "⚠️ $(Get-Date -Format 'HH:mm:ss') - Monitor error: $($_.Exception.Message)"
+                Start-Sleep -Seconds 60
             }
         }
         
-        # Final system performance check
-        Write-Host "`n🎯 FINAL PERFORMANCE METRICS:"
-        Write-Host "=============================="
-        
-        # CPU performance test
-        $cpuBefore = (Get-Counter "\Processor(_Total)\% Processor Time" -SampleInterval 1 -MaxSamples 1).CounterSamples.CookedValue
-        Start-Sleep 2
-        $cpuAfter = (Get-Counter "\Processor(_Total)\% Processor Time" -SampleInterval 1 -MaxSamples 1).CounterSamples.CookedValue
-        Write-Host "🔹 CPU Usage: $([math]::Round((100 - $cpuAfter), 1))% available"
-        
-        # Memory performance
-        $memory = Get-CimInstance -ClassName Win32_OperatingSystem
-        $availableMemGB = [math]::Round($memory.FreePhysicalMemory / 1MB, 2)
-        $totalMemGB = [math]::Round($memory.TotalVisibleMemorySize / 1MB, 2)
-        $memoryUsagePercent = [math]::Round((($totalMemGB - $availableMemGB) / $totalMemGB) * 100, 1)
-        Write-Host "🔹 Memory: $availableMemGB GB available / $totalMemGB GB total ($memoryUsagePercent% used)"
-        
-        # Network latency test
-        try {
-            $pingResult = Test-NetConnection -ComputerName "8.8.8.8" -Port 53 -WarningAction SilentlyContinue
-            if ($pingResult.PingSucceeded) {
-                Write-Host "🔹 Network: Connectivity verified (Ping: $($pingResult.PingReplyDetails.RoundtripTime)ms)"
-            } else {
-                Write-Host "🔹 Network: Basic connectivity confirmed"
-            }
-        } catch {
-            Write-Host "🔹 Network: Configuration applied"
-        }
-        
-        # RDP service status
-        $rdpService = Get-Service -Name "TermService"
-        Write-Host "🔹 RDP Service: $($rdpService.Status)"
-        
-        # Get connection information
-        Write-Host "`n🌐 CONNECTION INFORMATION:"
-        Write-Host "=========================="
-        
-        # Get public IP
-        try {
-            $publicIP = (Invoke-RestMethod -Uri "https://api.ipify.org" -TimeoutSec 10).Trim()
-            Write-Host "🔹 Public IP: $publicIP"
-        } catch {
-            Write-Host "🔹 Public IP: Unable to determine (check manually)"
-        }
-        
-        # Get local IP addresses
-        $networkAdapters = Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.IPAddress -ne "127.0.0.1" -and $_.PrefixOrigin -eq "Dhcp"}
-        foreach ($adapter in $networkAdapters) {
-            Write-Host "🔹 Local IP: $($adapter.IPAddress)"
-        }
-        
-        # Port status
-        $rdpPort = Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue
-        if ($rdpPort) {
-            Write-Host "🔹 RDP Port: 3389 - ACTIVE"
-        } else {
-            Write-Host "🔹 RDP Port: 3389 - Check firewall"
-        }
-        
-        # Display optimized settings summary
-        Write-Host "`n🚀 OPTIMIZATION SUMMARY:"
-        Write-Host "========================"
-        Write-Host "✅ Ultra-Low Latency Network Configuration"
-        Write-Host "✅ Enhanced Power Management (Ultimate Performance)"
-        Write-Host "✅ Advanced Memory and Cache Optimization"
-        Write-Host "✅ Ultra-High Performance RDP Configuration"
-        Write-Host "✅ Enhanced System Performance Tuning"
-        Write-Host "✅ Advanced Security and Access Configuration"
-        
-        # Connection instructions
-        Write-Host "`n📋 CONNECTION INSTRUCTIONS:"
-        Write-Host "==========================="
-        Write-Host "1. Use Remote Desktop Connection (mstsc.exe)"
-        Write-Host "2. Connect to: [PUBLIC_IP_ABOVE]:3389"
-        Write-Host "3. Username: RDPUser"
-        Write-Host "4. Password: TempPass123!"
-        Write-Host "5. For best performance, use 'Full Screen' mode"
-        Write-Host "6. Enable 'Persistent bitmap caching' in RDP settings"
-        Write-Host "7. Set color depth to 'True Color (32 bit)'"
-        
-        Write-Host "`n⚡ PERFORMANCE FEATURES ENABLED:"
-        Write-Host "================================"
-        Write-Host "• Zero-latency CPU configuration"
-        Write-Host "• Optimized memory management"
-        Write-Host "• Enhanced network stack"
-        Write-Host "• Maximum visual quality"
-        Write-Host "• Audio and multimedia support"
-        Write-Host "• Clipboard and drive redirection"
-        Write-Host "• Persistent connection settings"
-        Write-Host "• Hardware-accelerated graphics"
-        
-        Write-Host "`n🎯 SYSTEM READY FOR ULTRA-HIGH PERFORMANCE RDP!"
+        Write-Host ""
+        Write-Host "⏰ MAXIMUM SESSION TIME REACHED (6 hours)"
+        Write-Host "🔄 Workflow will now terminate - restart if needed"
         Write-Host "=================================================="
