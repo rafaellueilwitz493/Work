@@ -63,7 +63,7 @@ jobs:
     - name: Enable and Configure High-Performance RDP
       run: |
         Write-Host "🖥️ Configuring RDP for maximum performance..."
-        
+
         # Enable Remote Desktop with performance focus
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0 -Force
@@ -71,44 +71,54 @@ jobs:
         # Advanced RDP performance settings
         $rdpPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
         
-        # Disable compression for lower CPU usage and latency
-        Set-ItemProperty -Path $rdpPath -Name "fDisableCompression" -Value 1 -Force
+        # Disable Network Level Authentication and set security for compatibility
+        Set-ItemProperty -Path $rdpPath -Name "UserAuthentication" -Value 0 -Force
+        Set-ItemProperty -Path $rdpPath -Name "SecurityLayer" -Value 0 -Force
+        Set-ItemProperty -Path $rdpPath -Name "MinEncryptionLevel" -Value 1 -Force
         
         # Optimize frame rates and display
         Set-ItemProperty -Path $rdpPath -Name "ColorDepth" -Value 4 -Force  # 32-bit color
         Set-ItemProperty -Path $rdpPath -Name "MaxFrameRate" -Value 60 -Force
-        Set-ItemProperty -Path $rdpPath -Name "fDisableWallpaper" -Value 0 -Force  # Keep wallpaper for better UX
-        Set-ItemProperty -Path $rdpPath -Name "fDisableMenuAnims" -Value 0 -Force  # Keep animations for responsiveness
+        Set-ItemProperty -Path $rdpPath -Name "fDisableWallpaper" -Value 0 -Force
+        Set-ItemProperty -Path $rdpPath -Name "fDisableMenuAnims" -Value 0 -Force
         Set-ItemProperty -Path $rdpPath -Name "fDisableFullWindowDrag" -Value 0 -Force
         
         # Connection limits and timeouts
         Set-ItemProperty -Path $rdpPath -Name "MaxConnectionTime" -Value 0 -Force
         Set-ItemProperty -Path $rdpPath -Name "MaxIdleTime" -Value 0 -Force
-        Set-ItemProperty -Path $rdpPath -Name "MaxDisconnectionTime" -Value 30000 -Force  # 30 seconds for reconnection
+        Set-ItemProperty -Path $rdpPath -Name "MaxDisconnectionTime" -Value 30000 -Force
         
         # Enhanced session management
         Set-ItemProperty -Path $rdpPath -Name "fInheritMaxSessionTime" -Value 0 -Force
         Set-ItemProperty -Path $rdpPath -Name "fReconnectSame" -Value 1 -Force
         Set-ItemProperty -Path $rdpPath -Name "fLogonDisabled" -Value 0 -Force
         
-        # Disable Network Level Authentication for compatibility
-        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0 -Force
-        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "UserAuthentication" -Value 0 -Force
-        Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -Name "SecurityLayer" -Value 0 -Force
-        
         # Configure advanced firewall rules
         Write-Host "🔥 Configuring advanced firewall rules..."
-        Remove-NetFirewallRule -DisplayName "RDP*" -ErrorAction SilentlyContinue
+        Remove-NetFirewallRule -DisplayName "*RDP*" -ErrorAction SilentlyContinue
         New-NetFirewallRule -DisplayName "RDP-Enhanced-TCP" -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -Profile Any -EdgeTraversalPolicy Allow
         New-NetFirewallRule -DisplayName "RDP-Enhanced-UDP" -Direction Inbound -Protocol UDP -LocalPort 3389 -Action Allow -Profile Any -EdgeTraversalPolicy Allow
-        netsh advfirewall firewall add rule name="RDP-In" dir=in action=allow protocol=TCP localport=3389
         
-        # Enable RemoteFX if available (hardware acceleration)
-        try {
-            Enable-WindowsOptionalFeature -Online -FeatureName "Microsoft-Hyper-V-Management-PowerShell" -All -NoRestart -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" -Name "fEnableRemoteFXAdvancedRemoteApp" -Value 1 -Force -ErrorAction SilentlyContinue
-        } catch {
-            Write-Host "⚠️ RemoteFX not available on this system"
+        # Additional firewall commands
+        netsh advfirewall firewall add rule name="RDP-In" dir=in action=allow protocol=TCP localport=3389
+        netsh advfirewall set allprofiles firewallpolicy allowinbound,allowoutbound
+        
+        # Enable Terminal Services
+        Set-Service -Name "TermService" -StartupType Automatic -Force
+        Set-Service -Name "SessionEnv" -StartupType Automatic -Force
+        Set-Service -Name "UmRdpService" -StartupType Automatic -Force
+        
+        Start-Service -Name "TermService" -Force
+        Start-Service -Name "SessionEnv" -Force
+        Start-Service -Name "UmRdpService" -Force
+        
+        # Test RDP is listening
+        Write-Host "🔍 Testing RDP service..."
+        $rdpTest = Test-NetConnection -ComputerName "127.0.0.1" -Port 3389 -InformationLevel Quiet
+        if ($rdpTest) {
+            Write-Host "✅ RDP service is listening on port 3389"
+        } else {
+            Write-Host "❌ RDP service is not responding"
         }
         
         Write-Host "✅ High-performance RDP configuration completed"
@@ -344,62 +354,92 @@ jobs:
     
     - name: Start High-Performance Playit Agent
       env:
-        PLAYIT_AUTH_KEY: ${{ secrets.PL }}
+            PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Write-Host "🚀 Starting high-performance Playit Agent..."
-        
-        if (-not $env:PLAYIT_AUTH_KEY) {
-            Write-Host "❌ PLAYIT_AUTH_KEY secret not configured"
-            Write-Host "Please add your Playit.gg tunnel token as repository secret 'PL'"
-            exit 1
-        }
-        
-        try {
-            $playitPath = "$env:USERPROFILE\playit.exe"
+            Write-Host "🚀 Starting high-performance Playit Agent..."
             
-            # Start with high priority and optimized arguments
-            $processInfo = New-Object System.Diagnostics.ProcessStartInfo
-            $processInfo.FileName = $playitPath
-            $processInfo.Arguments = "--secret `"$env:PLAYIT_AUTH_KEY`""
-            $processInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
-            $processInfo.UseShellExecute = $false
-            $processInfo.CreateNoWindow = $true
-            $process = [System.Diagnostics.Process]::Start($processInfo)
+            if (-not $env:PLAYIT_AUTH_KEY) {
+                Write-Host "❌ PLAYIT_AUTH_KEY secret not configured"
+                Write-Host "Please add your Playit.gg tunnel token as repository secret 'PL'"
+                exit 1
+            }
             
-            if ($process) {
-                # Set high priority for tunnel performance
-                $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
+            try {
+                $playitPath = "$env:USERPROFILE\playit.exe"
                 
-                Write-Host "✅ High-performance Playit Agent started (PID: $($process.Id))"
-                Write-Host "🎯 Process priority set to HIGH for optimal performance"
+                # Verify RDP is working locally first
+                Write-Host "🔍 Verifying local RDP service..."
+                $localTest = Test-NetConnection -ComputerName "127.0.0.1" -Port 3389 -InformationLevel Quiet
+                if (-not $localTest) {
+                    Write-Host "❌ Local RDP service not responding - fixing..."
+                    Start-Service -Name "TermService" -Force
+                    Start-Sleep -Seconds 5
+                    $localTest = Test-NetConnection -ComputerName "127.0.0.1" -Port 3389 -InformationLevel Quiet
+                    if (-not $localTest) {
+                        Write-Host "❌ Cannot start local RDP service"
+                        exit 1
+                    }
+                }
+                Write-Host "✅ Local RDP service verified"
                 
-                # Extended wait for tunnel establishment
-                Write-Host "⏳ Establishing high-performance tunnel (45 seconds)..."
-                Start-Sleep -Seconds 45
+                # Start Playit Agent with explicit TCP tunnel
+                $processInfo = New-Object System.Diagnostics.ProcessStartInfo
+                $processInfo.FileName = $playitPath
+                $processInfo.Arguments = "--secret `"$env:PLAYIT_AUTH_KEY`" tcp --local-ip 127.0.0.1 --local-port 3389"
+                $processInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+                $processInfo.UseShellExecute = $false
+                $processInfo.CreateNoWindow = $true
+                $processInfo.RedirectStandardOutput = $true
+                $processInfo.RedirectStandardError = $true
                 
-                # Verify tunnel is working
-                if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
-                    Write-Host "✅ High-performance tunnel established successfully"
+                $process = [System.Diagnostics.Process]::Start($processInfo)
+                
+                if ($process) {
+                    # Set high priority for tunnel performance
+                    $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
                     
-                    # Test local RDP connectivity
-                    try {
-                        $testConnection = Test-NetConnection -ComputerName "127.0.0.1" -Port 3389 -InformationLevel Quiet
-                        if ($testConnection) {
-                            Write-Host "✅ Local RDP service verified and ready"
+                    Write-Host "✅ Playit Agent started (PID: $($process.Id))"
+                    Write-Host "🎯 Process priority set to HIGH"
+                    Write-Host "🔧 Creating TCP tunnel: 127.0.0.1:3389"
+                    
+                    # Wait for tunnel establishment
+                    Write-Host "⏳ Establishing tunnel (60 seconds)..."
+                    Start-Sleep -Seconds 60
+                    
+                    # Verify process is still running
+                    if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
+                        Write-Host "✅ Playit Agent running successfully"
+                        
+                        # Additional verification
+                        Write-Host "🔍 Final verification..."
+                        $finalTest = Test-NetConnection -ComputerName "127.0.0.1" -Port 3389 -InformationLevel Quiet
+                        if ($finalTest) {
+                            Write-Host "✅ RDP service confirmed ready for tunneling"
+                        } else {
+                            Write-Host "⚠️ RDP service verification failed"
                         }
-                    } catch {
-                        Write-Host "⚠️ Local RDP test inconclusive, but tunnel should work"
+                        
+                        Write-Host "🌐 Tunnel should now be visible at: https://playit.gg/account/tunnels"
+                        Write-Host "📋 Look for TCP tunnel with local endpoint 127.0.0.1:3389"
+                        
+                    } else {
+                        Write-Host "❌ Playit Agent process died - checking logs..."
+                        if ($process.StandardError) {
+                            $errorOutput = $process.StandardError.ReadToEnd()
+                            Write-Host "Error: $errorOutput"
+                        }
+                        exit 1
                     }
                 } else {
-                    Write-Host "❌ Playit Agent process died unexpectedly"
-                    exit 1
+                    throw "Failed to start Playit Agent process"
                 }
-            } else {
-                throw "Failed to start high-performance Playit Agent"
-            }
-
+                
             } catch {
                 Write-Host "❌ Error starting Playit Agent: $($_.Exception.Message)"
+                Write-Host "🔧 Troubleshooting steps:"
+                Write-Host "1. Verify PLAYIT_AUTH_KEY secret is correctly set"
+                Write-Host "2. Check if playit.exe downloaded successfully"
+                Write-Host "3. Ensure RDP service is running"
                 exit 1
             }
     
