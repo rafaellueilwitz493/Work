@@ -385,7 +385,7 @@ jobs:
                 # Start Playit Agent with explicit TCP tunnel
                 $processInfo = New-Object System.Diagnostics.ProcessStartInfo
                 $processInfo.FileName = $playitPath
-                $processInfo.Arguments = "--secret `"$env:PLAYIT_AUTH_KEY`" tcp --local-ip 127.0.0.1 --local-port 3389"
+                $processInfo.Arguments = "--secret `"$env:PLAYIT_AUTH_KEY`""
                 $processInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
                 $processInfo.UseShellExecute = $false
                 $processInfo.CreateNoWindow = $true
@@ -540,7 +540,7 @@ jobs:
                     try {
                         $processInfo = New-Object System.Diagnostics.ProcessStartInfo
                         $processInfo.FileName = "$env:USERPROFILE\playit.exe"
-                        $processInfo.Arguments = "--secret `"$env:PLAYIT_AUTH_KEY`" --region auto --protocol tcp --local-ip 127.0.0.1 --local-port 3389"
+                        $processInfo.Arguments = "--secret `"$env:PLAYIT_AUTH_KEY`""
                         $processInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
                         $processInfo.UseShellExecute = $false
                         $newProcess = [System.Diagnostics.Process]::Start($processInfo)
