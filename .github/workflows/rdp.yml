@@ -357,20 +357,13 @@ jobs:
             # Start with high priority and optimized arguments
             $processInfo = New-Object System.Diagnostics.ProcessStartInfo
             $processInfo.FileName = $playitPath
-            $processInfo.Arguments = "--secret-path - --agent-name `"GitHub-RDP-$([System.Environment]::MachineName)`""
+            $processInfo.Arguments = "--secret `"$env:PLAYIT_AUTH_KEY`""
             $processInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
             $processInfo.UseShellExecute = $false
             $processInfo.CreateNoWindow = $true
-            $processInfo.RedirectStandardInput = $true
-            $processInfo.RedirectStandardOutput = $true
-            $processInfo.RedirectStandardError = $true
             $process = [System.Diagnostics.Process]::Start($processInfo)
             
             if ($process) {
-                # Send the auth key via stdin
-                $process.StandardInput.WriteLine($env:PLAYIT_AUTH_KEY)
-                $process.StandardInput.Close()
-                
                 # Set high priority for tunnel performance
                 $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
                 
