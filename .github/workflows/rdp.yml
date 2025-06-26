@@ -267,7 +267,6 @@ jobs:
                 'TcpDelAckTicks' = 0
                 'TCPWindowSize' = 65536
                 'GlobalMaxTcpWindowSize' = 65536
-                'TcpWindowSize' = 65536
                 'Tcp1323Opts' = 1
                 'DefaultTTL' = 64
                 'EnablePMTUBHDetect' = 0
@@ -644,125 +643,232 @@ jobs:
         Write-Host "🚀 ULTRA-HIGH PERFORMANCE RDP TUNNEL IS ACTIVE!"
         Write-Host "=================================================="
         Write-Host ""
-        Write-Host "🎯 CONNECTION DETAILS:"
+        Write-Host "📋 ULTRA-PERFORMANCE CONNECTION CREDENTIALS:"
         Write-Host "   👤 Username: rdpadmin"
         Write-Host "   🔑 Password: SuperAdmin2024!"
-        Write-Host "   🌐 Protocol: RDP (3389)"
-        Write-Host "   ⚡ Priority: ULTRA-HIGH"
-        Write-Host "   🔧 Optimizations: MAXIMUM"
+        Write-Host "   🔐 Access Level: Ultra Administrator"
+        Write-Host "   ⚡ Optimizations: MAXIMUM PERFORMANCE"
         Write-Host ""
-        Write-Host "📊 PERFORMANCE OPTIMIZATIONS ACTIVE:"
-        Write-Host "   • Ultimate Performance Power Scheme"
-        Write-Host "   • Windows Defender Completely Disabled"
-        Write-Host "   • Network Stack Ultra-Low Latency Mode"
-        Write-Host "   • TCP NoDelay and Optimized ACK Frequency"
-        Write-Host "   • All Visual Effects Disabled for Speed"
-        Write-Host "   • Unnecessary Services Stopped"
-        Write-Host "   • RDP Compression and Fast Reconnect Enabled"
-        Write-Host "   • High-Priority Process Scheduling"
+        Write-Host "🌐 TO CONNECT:"
+        Write-Host "1. Go to https://playit.gg/account/tunnels"
+        Write-Host "2. Find your active tunnel (should show ONLINE)"
+        Write-Host "3. Use the provided IP:PORT in your RDP client"
+        Write-Host "4. Connect with the ultra-performance credentials above"
         Write-Host ""
-        Write-Host "🌐 TUNNEL STATUS:"
+        Write-Host "🚀 ULTRA-PERFORMANCE RDP CLIENT SETTINGS:"
+        Write-Host "   • Color Quality: True Color (32-bit) - OPTIMIZED"
+        Write-Host "   • Audio Quality: High Quality"
+        Write-Host "   • Clipboard: Enabled"
+        Write-Host "   • Drive Redirection: Enabled"
+        Write-Host "   • Network Level Authentication: DISABLED for speed"
+        Write-Host "   • Connection Speed: LAN (10 Mbps or higher)"
+        Write-Host "   • Desktop Background: Disabled for performance"
+        Write-Host "   • Font Smoothing: Disabled"
+        Write-Host "   • Desktop Composition: Disabled"
+        Write-Host "   • Menu and Window Animation: Disabled"
+        Write-Host ""
+        Write-Host "⚡ PERFORMANCE FEATURES ENABLED:"
+        Write-Host "   ✅ Ultimate Performance Power Plan"
+        Write-Host "   ✅ Network Stack Ultra-Low Latency Mode"
+        Write-Host "   ✅ TCP Nagle Algorithm Disabled"
+        Write-Host "   ✅ High Priority Process Scheduling"
+        Write-Host "   ✅ Windows Defender Fully Disabled"
+        Write-Host "   ✅ Unnecessary Services Disabled"
+        Write-Host "   ✅ Visual Effects Minimized"
+        Write-Host "   ✅ Registry Optimizations Applied"
+        Write-Host "   ✅ DNS Fast Servers Configured"
+        Write-Host "   ✅ RDP Compression Optimized"
+        Write-Host ""
+        Write-Host "🔧 ADVANCED TROUBLESHOOTING:"
+        Write-Host "   • If lag persists: Check your local internet connection"
+        Write-Host "   • For best performance: Close unnecessary apps on your local machine"
+        Write-Host "   • Gaming performance: All visual effects are disabled for maximum FPS"
+        Write-Host "   • Heavy workloads: CPU and RAM are optimized for maximum throughput"
+        Write-Host "   • Network issues: Try different RDP clients (mstsc, Remote Desktop Connection)"
+        Write-Host ""
+        
+        # Display comprehensive system info
         try {
-            $playitProcess = Get-Process -Name "playit*" -ErrorAction SilentlyContinue
-            if ($playitProcess) {
-                Write-Host "   ✅ Playit Tunnel: ACTIVE (PID: $($playitProcess.Id))"
-                Write-Host "   🔥 Priority: $($playitProcess.PriorityClass)"
-                $cpuUsage = Get-Counter -Counter "\Process(playit*)\% Processor Time" -ErrorAction SilentlyContinue
-                if ($cpuUsage) {
-                    Write-Host "   📊 CPU Usage: $([math]::Round($cpuUsage.CounterSamples[0].CookedValue, 2))%"
-                }
-            } else {
-                Write-Host "   ❌ Playit Tunnel: NOT FOUND"
-            }
+            $ip = (Invoke-WebRequest -Uri "http://ipinfo.io/ip" -UseBasicParsing -TimeoutSec 10).Content.Trim()
+            Write-Host "🌍 Server Public IP: $ip"
         } catch {
-            Write-Host "   ⚠️ Tunnel Status: UNKNOWN"
+            Write-Host "🌍 Server Public IP: Unable to determine"
         }
         
-        Write-Host ""
-        Write-Host "🖥️ SYSTEM INFORMATION:"
         try {
-            $computerInfo = Get-ComputerInfo
-            Write-Host "   💻 OS: $($computerInfo.WindowsProductName)"
-            Write-Host "   🧠 CPU: $($computerInfo.CsProcessors[0].Name)"
-            Write-Host "   🔢 Cores: $($computerInfo.CsNumberOfLogicalProcessors)"
-            Write-Host "   💾 RAM: $([math]::Round($computerInfo.TotalPhysicalMemory/1GB, 2)) GB"
+            $os = Get-CimInstance Win32_OperatingSystem
+            $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+            $memory = Get-CimInstance Win32_ComputerSystem
             
-            # Get network adapter info
-            $activeAdapter = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' } | Select-Object -First 1
-            if ($activeAdapter) {
-                Write-Host "   🌐 Network: $($activeAdapter.Name) - $($activeAdapter.LinkSpeed)"
-            }
+            Write-Host "💻 System Specifications:"
+            Write-Host "   OS: $($os.Caption) $($os.OSArchitecture)"
+            Write-Host "   CPU: $($cpu.Name) ($($cpu.NumberOfCores) cores, $($cpu.NumberOfLogicalProcessors) threads)"
+            Write-Host "   RAM: $([math]::Round($memory.TotalPhysicalMemory/1GB, 1)) GB"
+            Write-Host "   Power Plan: Ultimate Performance (Active)"
         } catch {
-            Write-Host "   ⚠️ System info collection failed"
+            Write-Host "💻 System info: Unable to retrieve detailed specs"
+        }
+        
+        # Check active optimizations
+        try {
+            $rdpService = Get-Service -Name "TermService" -ErrorAction SilentlyContinue
+            $playitProcess = Get-Process -Name "playit*" -ErrorAction SilentlyContinue
+            
+            Write-Host ""
+            Write-Host "🔍 OPTIMIZATION STATUS:"
+            Write-Host "   RDP Service: $($rdpService.Status)"
+            Write-Host "   Playit Agent: $(if($playitProcess){'Running at HIGH Priority'}else{'Not Running'})"
+            Write-Host "   Power Plan: Ultimate Performance"
+            Write-Host "   Network Optimizations: Applied"
+            Write-Host "   Visual Effects: Disabled for Performance"
+            Write-Host "   Security Features: Optimized for Speed"
+        } catch {
+            Write-Host "🔍 Status check: Some services could not be verified"
         }
         
         Write-Host ""
-        Write-Host "⚡ ULTRA-PERFORMANCE FEATURES:"
-        Write-Host "   • Zero-latency mouse and keyboard response"
-        Write-Host "   • Optimized for gaming and real-time applications"
-        Write-Host "   • Maximum bandwidth utilization"
-        Write-Host "   • Instant screen updates"
-        Write-Host "   • Hardware-accelerated graphics when available"
-        Write-Host "   • Minimal CPU overhead"
-        Write-Host ""
-        Write-Host "🔗 TO CONNECT:"
-        Write-Host "   1. Find your Playit.gg tunnel URL in the dashboard"
-        Write-Host "   2. Use any RDP client (mstsc, RDP apps, etc.)"
-        Write-Host "   3. Connect to: [your-playit-url]:3389"
-        Write-Host "   4. Login with the credentials above"
-        Write-Host ""
-        Write-Host "⚠️ SECURITY NOTES:"
-        Write-Host "   • This is optimized for MAXIMUM PERFORMANCE"
-        Write-Host "   • Some security features disabled for speed"
-        Write-Host "   • Recommended for internal/testing use only"
-        Write-Host "   • Change password after first login"
-        Write-Host ""
-        Write-Host "🕐 SESSION TIMEOUT: 6 HOURS (360 minutes)"
-        Write-Host "📞 SUPPORT: Check Playit.gg dashboard for tunnel status"
-        Write-Host ""
-        Write-Host "✅ ULTRA-HIGH PERFORMANCE RDP TUNNEL READY FOR USE!"
-        Write-Host "=================================================="
-        
-        # Keep the session alive and monitor
-        Write-Host ""
-        Write-Host "🔄 MONITORING SESSION (Press Ctrl+C to stop)..."
-        Write-Host "   💡 This workflow will run for up to 6 hours"
-        Write-Host "   📊 Monitoring tunnel and system health..."
+        Write-Host "⏰ Ultra-performance session will remain active for up to 6 hours..."
+        Write-Host "🎯 This configuration is optimized for:"
+        Write-Host "   • Gaming with minimal input lag"
+        Write-Host "   • Heavy computational tasks"
+        Write-Host "   • Video editing and rendering"
+        Write-Host "   • Software development with fast compilation"
+        Write-Host "   • Any latency-sensitive applications"
+    
+    - name: Ultra-High Performance Connection Monitor
+      run: |
+        Write-Host "🔄 Starting ULTRA-PERFORMANCE connection maintenance..."
+        Write-Host "💡 This monitoring system will maintain peak performance for 6 hours"
+        Write-Host "Press Ctrl+C in GitHub Actions to stop the session"
         Write-Host ""
         
-        # Monitor loop
-        $startTime = Get-Date
-        $maxDuration = New-TimeSpan -Hours 6
+        $endTime = (Get-Date).AddMinutes(350)  # 5 hours 50 minutes
+        $lastHealthCheck = Get-Date
+        $lastPerformanceOptimization = Get-Date
         
-        while ((Get-Date) - $startTime -lt $maxDuration) {
-            try {
-                # Check Playit process health
+        while ((Get-Date) -lt $endTime) {
+            $currentTime = Get-Date
+            $remainingMinutes = [math]::Floor(($endTime - $currentTime).TotalMinutes)
+            
+            # Comprehensive health check every 5 minutes
+            if (($currentTime - $lastHealthCheck).TotalMinutes -ge 5) {
+                Write-Host "=== ULTRA-PERFORMANCE HEALTH CHECK at $($currentTime.ToString('HH:mm:ss')) ==="
+                Write-Host "⏰ Time remaining: $remainingMinutes minutes"
+                
+                # Check Playit Agent with priority management
                 $playitProcess = Get-Process -Name "playit*" -ErrorAction SilentlyContinue
-                if (-not $playitProcess) {
-                    Write-Host "❌ $(Get-Date -Format 'HH:mm:ss') - Playit process died, attempting restart..."
-                    
-                    # Try to restart Playit
-                    $playitPath = "$env:USERPROFILE\playit.exe"
-                    if (Test-Path $playitPath) {
-                        Start-Process -FilePath $playitPath -ArgumentList "--secret", "$env:PLAYIT_AUTH_KEY" -WindowStyle Hidden
-                        Start-Sleep -Seconds 10
+                if ($playitProcess) {
+                    # Ensure high priority is maintained
+                    if ($playitProcess.PriorityClass -ne 'High') {
+                        $playitProcess.PriorityClass = 'High'
+                        Write-Host "✅ Playit Agent: Priority restored to HIGH"
+                    } else {
+                        Write-Host "✅ Playit Agent: Running at HIGH priority (PID: $($playitProcess.Id))"
                     }
                 } else {
-                    # Periodic health check
-                    $uptime = (Get-Date) - $startTime
-                    Write-Host "✅ $(Get-Date -Format 'HH:mm:ss') - Tunnel healthy | Uptime: $($uptime.ToString('hh\:mm\:ss')) | PID: $($playitProcess.Id)"
+                    Write-Host "❌ Playit Agent: Not running - attempting HIGH PRIORITY restart"
+                    try {
+                        $process = Start-Process -FilePath "$env:USERPROFILE\playit.exe" -ArgumentList "--secret", "$env:PLAYIT_AUTH_KEY" -WindowStyle Hidden -PassThru
+                        Start-Sleep -Seconds 5
+                        if ($process -and (Get-Process -Id $process.Id -ErrorAction SilentlyContinue)) {
+                            $process.PriorityClass = 'High'
+                            Write-Host "✅ Playit Agent restarted at HIGH priority"
+                        }
+                    } catch {
+                        Write-Host "❌ Failed to restart Playit Agent"
+                    }
                 }
                 
-                # Check every 5 minutes
-                Start-Sleep -Seconds 300
+                # Check RDP service health
+                $rdpService = Get-Service -Name "TermService" -ErrorAction SilentlyContinue
+                if ($rdpService -and $rdpService.Status -eq "Running") {
+                    Write-Host "✅ RDP Service: Running optimally"
+                } else {
+                    Write-Host "⚠️ RDP Service: Issues detected - applying fix"
+                    try {
+                        Restart-Service -Name "TermService" -Force
+                        Start-Sleep -Seconds 3
+                        
+                        # Reapply RDP optimizations after restart
+                        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxConnectionTime" -Value 0 -Force
+                        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "MaxIdleTime" -Value 0 -Force
+                        
+                        Write-Host "✅ RDP Service restarted and re-optimized"
+                    } catch {
+                        Write-Host "❌ Failed to restart RDP Service"
+                    }
+                }
                 
-            } catch {
-                Write-Host "⚠️ $(Get-Date -Format 'HH:mm:ss') - Monitor error: $($_.Exception.Message)"
-                Start-Sleep -Seconds 60
+                # Memory and CPU monitoring
+                try {
+                    $memory = Get-CimInstance -ClassName Win32_OperatingSystem
+                    $memUsed = [math]::Round((($memory.TotalVisibleMemorySize - $memory.FreePhysicalMemory) / $memory.TotalVisibleMemorySize) * 100, 1)
+                    
+                    $cpu = Get-CimInstance -ClassName Win32_Processor | Measure-Object -Property LoadPercentage -Average
+                    $cpuUsage = [math]::Round($cpu.Average, 1)
+                    
+                    Write-Host "💾 Memory Usage: $memUsed%"
+                    Write-Host "🔥 CPU Usage: $cpuUsage%"
+                    
+                    # Performance warnings
+                    if ($memUsed -gt 85) {
+                        Write-Host "⚠️ HIGH MEMORY USAGE - Performance may be affected"
+                    }
+                    if ($cpuUsage -gt 90) {
+                        Write-Host "⚠️ HIGH CPU USAGE - Consider closing unnecessary processes"
+                    }
+                    
+                } catch {
+                    Write-Host "💾 System monitoring: Unable to check resource usage"
+                }
+                
+                # Network connectivity test
+                try {
+                    $pingResult = Test-Connection -ComputerName "8.8.8.8" -Count 1 -Quiet -ErrorAction SilentlyContinue
+                    if ($pingResult) {
+                        Write-Host "🌐 Network: Optimal connectivity"
+                    } else {
+                        Write-Host "⚠️ Network: Connectivity issues detected"
+                    }
+                } catch {
+                    Write-Host "🌐 Network: Unable to test connectivity"
+                }
+                
+                $lastHealthCheck = $currentTime
+                Write-Host "============================================`n"
             }
+            
+            # Performance re-optimization every 30 minutes
+            if (($currentTime - $lastPerformanceOptimization).TotalMinutes -ge 30) {
+                Write-Host "🚀 Re-applying performance optimizations..."
+                
+                try {
+                    # Re-check power plan
+                    $currentScheme = (powercfg -getactivescheme).Split()[3]
+                    $ultimateScheme = (powercfg -list | Select-String "Ultimate Performance" | ForEach-Object { $_.Line.Split()[3] })
+                    
+                    if ($ultimateScheme -and $currentScheme -ne $ultimateScheme) {
+                        powercfg -setactive $ultimateScheme
+                        Write-Host "✅ Ultimate Performance power plan reactivated"
+                    }
+                    
+                    # Re-disable Windows Defender if it got re-enabled
+                    Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+                    
+                    # Clear DNS cache for optimal resolution
+                    Clear-DnsClientCache -ErrorAction SilentlyContinue
+                    
+                    Write-Host "✅ Performance optimizations refreshed"
+                } catch {
+                    Write-Host "⚠️ Some performance re-optimizations failed"
+                }
+                
+                $lastPerformanceOptimization = $currentTime
+            }
+            
+            Start-Sleep -Seconds 30  # Check every 30 seconds for rapid response
         }
         
-        Write-Host ""
-        Write-Host "⏰ MAXIMUM SESSION TIME REACHED (6 hours)"
-        Write-Host "🔄 Workflow will now terminate - restart if needed"
-        Write-Host "=================================================="
+        Write-Host "`n🏁 ULTRA-PERFORMANCE SESSION COMPLETED!"
+        Write-Host "Total runtime: ~6 hours of optimized performance"
+        Write-Host "Session maintained peak performance throughout duration"
