@@ -108,9 +108,9 @@ jobs:
         Set-Service -Name "SessionEnv" -StartupType Automatic -Force
         Set-Service -Name "UmRdpService" -StartupType Automatic -Force
         
-        Start-Service -Name "TermService" -Force
-        Start-Service -Name "SessionEnv" -Force
-        Start-Service -Name "UmRdpService" -Force
+        Start-Service -Name "TermService"
+        Start-Service -Name "SessionEnv"
+        Start-Service -Name "UmRdpService"
         
         # Test RDP is listening
         Write-Host "🔍 Testing RDP service..."
@@ -372,7 +372,7 @@ jobs:
                 $localTest = Test-NetConnection -ComputerName "127.0.0.1" -Port 3389 -InformationLevel Quiet
                 if (-not $localTest) {
                     Write-Host "❌ Local RDP service not responding - fixing..."
-                    Start-Service -Name "TermService" -Force
+                    Start-Service -Name "TermService"
                     Start-Sleep -Seconds 5
                     $localTest = Test-NetConnection -ComputerName "127.0.0.1" -Port 3389 -InformationLevel Quiet
                     if (-not $localTest) {
