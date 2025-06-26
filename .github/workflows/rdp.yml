@@ -58,8 +58,7 @@ jobs:
         }
         
         # Windows scaling and buffer optimizations
-        netsh int tcp set global autotuning=normal
-        netsh int tcp set supplemental internet congestionprovider=bbr2
+        netsh int tcp set supplemental template=internet congestionprovider=bbr2
         
         Write-Host "✅ Network stack optimized for low latency"
     
