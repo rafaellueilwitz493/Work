@@ -360,7 +360,7 @@ jobs:
             # Start with high priority and optimized arguments
             $processInfo = New-Object System.Diagnostics.ProcessStartInfo
             $processInfo.FileName = $playitPath
-            $processInfo.Arguments = "--secret `"$env:PLAYIT_AUTH_KEY`""
+            $processInfo.Arguments = "--secret `"$env:PLAYIT_AUTH_KEY`" tcp --local-ip 127.0.0.1 --local-port 3389"
             $processInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
             $processInfo.UseShellExecute = $false
             $processInfo.CreateNoWindow = $true
