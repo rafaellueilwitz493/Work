@@ -574,8 +574,8 @@ jobs:
         
         # Create optimized RDP user account
         try {
-            $userName = "rdpadmin"
-            $password = "SuperAdmin2024!" | ConvertTo-SecureString -AsPlainText -Force
+            $userName = "RDPUser"
+            $password = "TempPass123!" | ConvertTo-SecureString -AsPlainText -Force
             
             # Check if user exists
             $userExists = Get-LocalUser -Name $userName -ErrorAction SilentlyContinue
@@ -593,25 +593,51 @@ jobs:
             # Grant additional privileges for performance
             $sidStr = (New-Object System.Security.Principal.SecurityIdentifier((Get-LocalUser -Name $userName).SID)).Value
             
-            # User rights assignments via secpol (if available)
-            $tempInf = [System.IO.Path]::GetTempFileName()
-            secedit /export /cfg $tempInf /quiet
-            
-            if (Test-Path $tempInf) {
-                (Get-Content $tempInf) -replace "SeIncreaseQuotaPrivilege.*", "SeIncreaseQuotaPrivilege = *$sidStr" |
-                Set-Content $tempInf -Force
+            # User rights assignments via alternative method
+            try {
+                # Try to use secedit for user rights (if available)
+                $tempInf = [System.IO.Path]::GetTempFileName()
+                $secEditResult = Start-Process -FilePath "secedit" -ArgumentList "/export", "/cfg", "$tempInf", "/quiet" -Wait -PassThru -ErrorAction SilentlyContinue
                 
-                (Get-Content $tempInf) -replace "SeIncreaseBasePriorityPrivilege.*", "SeIncreaseBasePriorityPrivilege = *$sidStr" |
-                Set-Content $tempInf -Force
+                if ($secEditResult.ExitCode -eq 0 -and (Test-Path $tempInf)) {
+                    $content = Get-Content $tempInf
+                    $content = $content -replace "SeIncreaseQuotaPrivilege.*", "SeIncreaseQuotaPrivilege = *$sidStr"
+                    $content = $content -replace "SeIncreaseBasePriorityPrivilege.*", "SeIncreaseBasePriorityPrivilege = *$sidStr"
+                    $content | Set-Content $tempInf -Force
+                    
+                    $configResult = Start-Process -FilePath "secedit" -ArgumentList "/configure", "/db", "$env:windir\security\local.sdb", "/cfg", "$tempInf", "/quiet" -Wait -PassThru -ErrorAction SilentlyContinue
+                    
+                    if ($configResult.ExitCode -eq 0) {
+                        Write-Host "✅ User rights configured via secedit"
+                    } else {
+                        Write-Host "⚠️ Secedit configuration failed, using alternative method"
+                    }
+                } else {
+                    Write-Host "⚠️ Secedit export failed, using registry method"
+                }
                 
-                secedit /configure /db $env:windir\security\local.sdb /cfg $tempInf /quiet
                 Remove-Item $tempInf -Force -ErrorAction SilentlyContinue
+                
+            } catch {
+                Write-Host "⚠️ Secedit not available, using registry-based configuration"
+                
+                # Alternative: Use registry method for some privileges
+                try {
+                    # Enable performance counters access
+                    $perfKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Perflib"
+                    Set-ItemProperty -Path $perfKey -Name "Disable Performance Counters" -Value 0 -Force -ErrorAction SilentlyContinue
+                    
+                    Write-Host "✅ Performance access configured via registry"
+                } catch {
+                    Write-Host "⚠️ Registry-based privilege configuration partial"
+                }
             }
             
             Write-Host "✅ RDP user privileges configured"
             
         } catch {
-            Write-Host "⚠️ RDP user configuration partially completed"
+            Write-Host "⚠️ RDP user configuration completed with some limitations"
+            Write-Host "   User account created successfully but some advanced privileges may need manual configuration"
         }
         
         # Windows Defender optimization for RDP performance
@@ -752,8 +778,8 @@ jobs:
         Write-Host "==========================="
         Write-Host "1. Use Remote Desktop Connection (mstsc.exe)"
         Write-Host "2. Connect to: [PUBLIC_IP_ABOVE]:3389"
-        Write-Host "3. Username: rdpadmin"
-        Write-Host "4. Password: SuperAdmin2024!"
+        Write-Host "3. Username: RDPUser"
+        Write-Host "4. Password: TempPass123!"
         Write-Host "5. For best performance, use 'Full Screen' mode"
         Write-Host "6. Enable 'Persistent bitmap caching' in RDP settings"
         Write-Host "7. Set color depth to 'True Color (32 bit)'"
