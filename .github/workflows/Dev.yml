@@ -48,7 +48,7 @@ jobs:
         
         # Use strong, simple credentials
         $username = "rdpadmin"
-        $password = "SuperAdmin2024!"
+        $password = "UltraFast2024!"
         $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
         
         try {
@@ -223,7 +223,7 @@ jobs:
         Write-Host ""
         Write-Host "📋 CONNECTION CREDENTIALS:"
         Write-Host "   👤 Username: rdpadmin"
-        Write-Host "   🔑 Password: SuperAdmin2024!"
+        Write-Host "   🔑 Password: UltraFast2024!"
         Write-Host "   🔐 Access Level: Administrator"
         Write-Host ""
         Write-Host "🌐 TO CONNECT:"
