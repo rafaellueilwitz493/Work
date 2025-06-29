@@ -31,11 +31,12 @@ jobs:
             # Cleanly remove user if it exists to ensure a fresh start
             if (Get-LocalUser -Name $env:RDP_USER -ErrorAction SilentlyContinue) {
                 Write-Host "   - Removing existing user: $($env:RDP_USER)"
-                Remove-LocalUser -Name $env:RDP_USER
+                Remove-LocalUser -Name $env:RDP_USER -Force
             }
 
             # Create the user with optimized settings
-            New-LocalUser -Name $env:RDP_USER -Password $securePassword -FullName "Auto-Login RDP Administrator" -Description "Optimized RDP Access" -PasswordNeverExpires -UserMayNotChangePassword $false -AccountExpires ([datetime]::maxvalue)
+            # Corrected -UserMayNotChangePassword to be a proper switch parameter
+            New-LocalUser -Name $env:RDP_USER -Password $securePassword -FullName "Auto-Login RDP Administrator" -Description "Optimized RDP Access" -PasswordNeverExpires -UserMayNotChangePassword -AccountExpires ([datetime]::maxvalue)
             
             # Add user to critical groups for full access and performance monitoring
             Add-LocalGroupMember -Group "Administrators" -Member $env:RDP_USER
