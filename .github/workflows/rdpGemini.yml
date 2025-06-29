@@ -21,21 +21,21 @@ jobs:
         #================================================================================
         # SECTION 1: SYSTEM AND USER CONFIGURATION
         #================================================================================
-        Write-Host "🚀 Starting system configuration and optimization..."
+        Write-Host ">> Starting system configuration and optimization..."
 
         # --- User Account Setup ---
-        Write-Host "👤 Creating and configuring auto-login administrator..."
+        Write-Host "[User] Creating and configuring auto-login administrator..."
         $securePassword = ConvertTo-SecureString $env:RDP_PASS -AsPlainText -Force
 
         try {
             # Cleanly remove user if it exists to ensure a fresh start
             if (Get-LocalUser -Name $env:RDP_USER -ErrorAction SilentlyContinue) {
                 Write-Host "   - Removing existing user: $($env:RDP_USER)"
-                Remove-LocalUser -Name $env:RDP_USER -Force
+                Remove-LocalUser -Name $env:RDP_USER
             }
 
             # Create the user with optimized settings
-            New-LocalUser -Name $env:RDP_USER -Password $securePassword -FullName "Auto-Login RDP Administrator" -Description "Optimized RDP Access" -PasswordNeverExpires -UserMayNotChangePassword -AccountNeverExpires
+            New-LocalUser -Name $env:RDP_USER -Password $securePassword -FullName "Auto-Login RDP Administrator" -Description "Optimized RDP Access" -PasswordNeverExpires -UserMayNotChangePassword $false -AccountExpires ([datetime]::maxvalue)
             
             # Add user to critical groups for full access and performance monitoring
             Add-LocalGroupMember -Group "Administrators" -Member $env:RDP_USER
@@ -52,19 +52,21 @@ jobs:
             
             # Disable lock screen for a seamless auto-login experience
             $personalizationPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization"
-            New-Item -Path $personalizationPath -Force -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $personalizationPath -Name "NoLockScreen" -Value 1 -Force
+            if (-not (Test-Path $personalizationPath)) {
+                New-Item -Path $personalizationPath -Force
+            }
+            Set-ItemProperty -Path $personalizationPath -Name "NoLockScreen" -Value 1 -Type DWord -Force
             Write-Host "   - Auto-login enabled. The system will log in automatically on boot."
 
         } catch {
-            Write-Host "❌ FATAL: Failed to configure the user account. Error: $($_.Exception.Message)"
+            Write-Host "[FATAL] Failed to configure the user account. Error: $($_.Exception.Message)"
             exit 1
         }
 
         # --- Base System and Network Optimizations ---
-        Write-Host "🔧 Applying base system and network optimizations..."
+        Write-Host "[System] Applying base system and network optimizations..."
         # Prioritize interactive applications
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 24 -Force
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -Force
         # Modern TCP optimizations
         netsh int tcp set global autotuninglevel=normal
         netsh int tcp set global rss=enabled
@@ -73,7 +75,7 @@ jobs:
         #================================================================================
         # SECTION 2: RDP SERVICE OPTIMIZATION
         #================================================================================
-        Write-Host "🖥️ Enabling and tuning RDP service for performance and reliability..."
+        Write-Host "[RDP] Enabling and tuning RDP service for performance and reliability..."
         
         # Enable Remote Desktop and allow multiple sessions
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
@@ -82,27 +84,27 @@ jobs:
         # Configure RDP protocol settings for auto-login and performance
         $rdpPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
         Set-ItemProperty -Path $rdpPath -Name "UserAuthentication" -Value 0 -Force # Disable NLA (critical for many tunnel clients)
-        Set-ItemProperty -Path $rdpPath -Name "SecurityLayer" -Value 0 -Force      # Use RDP Security Layer for broad compatibility
+        Set-ItemProperty -Path $rdpPath -Name "SecurityLayer" -Value 1 -Force      # Use RDP Security Layer for broad compatibility
         Set-ItemProperty -Path $rdpPath -Name "fPromptForPassword" -Value 0 -Force # Do not prompt for password on connect
-        Set-ItemProperty -Path $rdpPath -Name "MaxConnectionTime" -Value 0 -Force   # Unlimited session time
-        Set-ItemProperty -Path $rdpPath -Name "MaxIdleTime" -Value 0 -Force         # Unlimited idle time
+        Set-ItemProperty -Path $rdpPath -Name "MaxConnectionTime" -Value 0 -Force  # Unlimited session time
+        Set-ItemProperty -Path $rdpPath -Name "MaxIdleTime" -Value 0 -Force        # Unlimited idle time
         
         # Configure firewall for RDP
-        Write-Host "🔥 Configuring firewall for RDP access..."
+        Write-Host "[Firewall] Configuring firewall for RDP access..."
         # Remove any pre-existing RDP rules for a clean state
-        Remove-NetFirewallRule -DisplayName "*Remote Desktop*" -ErrorAction SilentlyContinue
+        Get-NetFirewallRule -DisplayName "*Remote Desktop*" | Remove-NetFirewallRule -ErrorAction SilentlyContinue
         # Create new, robust rules for RDP traffic
-        New-NetFirewallRule -DisplayName "RDP-Allow-All" -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -Profile Any -EdgeTraversalPolicy Allow
+        New-NetFirewallRule -DisplayName "RDP-Allow-All" -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Allow -Profile Any -Enabled True
         
         #================================================================================
         # SECTION 3: ADVANCED PERFORMANCE TUNING
         #================================================================================
-        Write-Host "⚡ Applying advanced performance and power optimizations..."
+        Write-Host "[Perf] Applying advanced performance and power optimizations..."
         
         # Set high performance power plan and disable sleep/hibernate
-        powercfg -setactive SCHEME_MIN
-        powercfg -change standby-timeout-ac 0
-        powercfg -change hibernate-timeout-ac 0
+        powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c # High Performance GUID
+        powercfg /change standby-timeout-ac 0
+        powercfg /change hibernate-timeout-ac 0
         
         # Optimize memory management
         $memMgmtPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
@@ -120,7 +122,7 @@ jobs:
         #================================================================================
         # SECTION 4: SERVICE START AND VERIFICATION
         #================================================================================
-        Write-Host "🔄 Starting and verifying RDP services..."
+        Write-Host "[Service] Starting and verifying RDP services..."
         
         # Ensure RDP services are set to automatic and start them
         Set-Service -Name "TermService" -StartupType Automatic
@@ -131,15 +133,15 @@ jobs:
         $rdpReady = $false
         for ($i = 1; $i -le 5; $i++) {
             Start-Sleep -Seconds 5
-            if (Test-NetConnection -ComputerName "127.0.0.1" -Port 3389 -InformationLevel Quiet) {
-                Write-Host "✅ RDP service is running and listening on port 3389."
+            if (Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue) {
+                Write-Host "[OK] RDP service is running and listening on port 3389."
                 $rdpReady = $true
                 break
             }
             Write-Host "   - RDP check attempt $i failed. Retrying..."
         }
         if (-not $rdpReady) {
-            Write-Host "❌ FATAL: RDP service failed to start correctly after multiple attempts."
+            Write-Host "[FATAL] RDP service failed to start correctly after multiple attempts."
             Get-Service -Name "TermService" | Select-Object -Property *
             exit 1
         }
@@ -152,9 +154,9 @@ jobs:
         #================================================================================
         # SECTION 5: TUNNEL AGENT
         #================================================================================
-        Write-Host "📥 Downloading Playit.gg agent..."
+        Write-Host ">> Downloading Playit.gg agent..."
         if (-not $env:PLAYIT_AUTH_KEY) {
-            Write-Host "❌ FATAL: PLAYIT_AUTH_KEY secret is not set. Please add it to your repository secrets."
+            Write-Host "[FATAL] PLAYIT_AUTH_KEY secret is not set. Please add it to your repository secrets."
             exit 1
         }
         
@@ -163,23 +165,25 @@ jobs:
         
         try {
             Invoke-WebRequest -Uri $playitUrl -OutFile $playitPath -UseBasicParsing -TimeoutSec 120
-            Write-Host "✅ Playit Agent downloaded successfully."
+            Write-Host "[OK] Playit Agent downloaded successfully."
         } catch {
-            Write-Host "❌ FATAL: Failed to download Playit Agent. Error: $($_.Exception.Message)"
+            Write-Host "[FATAL] Failed to download Playit Agent. Error: $($_.Exception.Message)"
             exit 1
         }
         
-        Write-Host "🚀 Starting Playit tunnel with high priority..."
-        $process = Start-Process -FilePath $playitPath -ArgumentList "--secret `"$($env:PLAYIT_AUTH_KEY)`"" -PassThru -WindowStyle Hidden
-        $process.PriorityClass = "High"
+        Write-Host ">> Starting Playit tunnel with high priority..."
+        # Using an argument array is more robust and avoids complex quoting issues.
+        $arguments = @('--secret', $env:PLAYIT_AUTH_KEY)
+        $process = Start-Process -FilePath $playitPath -ArgumentList $arguments -PassThru -WindowStyle Hidden
+        $process.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High
         
         Write-Host "   - Playit Agent started (PID: $($process.Id)). Waiting for tunnel to establish..."
         Start-Sleep -Seconds 15 # Wait a moment for the tunnel to initialize
         
         if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
-            Write-Host "✅ Tunnel agent appears to be running."
+            Write-Host "[OK] Tunnel agent appears to be running."
         } else {
-            Write-Host "❌ FATAL: Tunnel agent failed to start or crashed."
+            Write-Host "[FATAL] Tunnel agent failed to start or crashed."
             exit 1
         }
 
@@ -198,9 +202,9 @@ jobs:
         
         Write-Host "
         "
-        Write-Host "🎉=============================================================🎉"
-        Write-Host "          TUNNEL IS ACTIVE - YOUR RDP IS READY!"
-        Write-Host "🎉=============================================================🎉"
+        Write-Host "============================================================="
+        Write-Host "           TUNNEL IS ACTIVE - YOUR RDP IS READY!"
+        Write-Host "============================================================="
         Write-Host ""
         Write-Host "You can now connect to your Windows session."
         Write-Host ""
@@ -215,13 +219,13 @@ jobs:
         Write-Host "   - RUNNER PUBLIC IP: $ip"
         Write-Host "   - SESSION TIMEOUT: 6 hours from start of job"
         Write-Host ""
-        Write-Host "🎉=============================================================🎉"
+        Write-Host "============================================================="
         Write-Host ""
 
     - name: Maintain Session and Monitor Health
       shell: powershell
       run: |
-        Write-Host "✅ Session is live. Monitoring health every 15 minutes."
+        Write-Host "[OK] Session is live. Monitoring health every 15 minutes."
         Write-Host "   To end this session, cancel the GitHub Actions workflow."
 
         $playitProcessName = "playit"
@@ -232,21 +236,20 @@ jobs:
             
             # Health Check
             $playitRunning = (Get-Process -Name $playitProcessName -ErrorAction SilentlyContinue)
-            $rdpRunning = (Get-Service -Name $rdpServiceName -ErrorAction SilentlyContinue)
+            $rdpService = (Get-Service -Name $rdpServiceName -ErrorAction SilentlyContinue)
 
-            if ($playitRunning -and ($rdpRunning.Status -eq 'Running')) {
+            if ($playitRunning -and ($rdpService.Status -eq 'Running')) {
                 Write-Host "[$(Get-Date)] Health Check: OK. RDP and Tunnel services are running."
             } else {
                 Write-Host "[$(Get-Date)] Health Check: WARNING! A service is down."
                 
-                if (-not $rdpRunning -or $rdpRunning.Status -ne 'Running') {
+                if (-not $rdpService -or $rdpService.Status -ne 'Running') {
                     Write-Host "   - RDP service is not running. Attempting to restart..."
                     Start-Service -Name $rdpServiceName -ErrorAction SilentlyContinue
                 }
 
                 if (-not $playitRunning) {
-                    Write-Host "   - Playit tunnel agent is not running. This is critical. Manual restart of workflow may be required."
-                    # You could attempt to restart it, but if it died, there might be a deeper issue.
+                    Write-Host "   - [CRITICAL] Playit tunnel agent is not running. Manual restart of workflow may be required."
                     # For now, we just alert the user.
                 }
             }
