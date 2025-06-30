@@ -150,7 +150,7 @@ jobs:
       run: |
         Write-Host "⚙️ Starting and prioritizing RDP services..."
         
-        Start-Service -Name "TermService" -Force
+        Start-Service -Name "TermService"
         Start-Sleep -Seconds 5 # Wait for the service to initialize
         
         # Set RDP Service to High Priority for maximum responsiveness
