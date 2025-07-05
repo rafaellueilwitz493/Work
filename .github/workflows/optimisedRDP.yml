@@ -1,9 +1,10 @@
-# 🚀 Polished & More Powerful Auto-Login RDP Workflow 🚀
-# This version includes enhanced stability, security, and performance tuning for a superior RDP experience.
+# 🚀 Ultimate Performance & Auto-Login RDP Workflow 🚀
+# This version includes the Ultimate Performance power plan and disables transparency
+# for maximum speed, alongside existing stability and security enhancements.
 # The Windows Search service is kept enabled for full functionality.
 # Username and password remain unchanged as per your request.
 
-name: Polished Auto-Login RDP Tunnel (More Stable & Powerful)
+name: Ultimate Performance Auto-Login RDP Tunnel
 on:
   workflow_dispatch:
 
@@ -90,7 +91,7 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0 -Force
         
-        # --- Enable GPU Hardware Acceleration for RDP (FIXED TYPO) ---
+        # --- Enable GPU Hardware Acceleration for RDP ---
         # This can dramatically improve smoothness if a GPU is available.
         $policyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
         New-Item -Path $policyPath -Force -ErrorAction SilentlyContinue
@@ -117,21 +118,23 @@ jobs:
       run: |
         Write-Host "⚡ Applying advanced performance and smoothness tuning..."
         
-        # --- High Performance Power Plan ---
-        powercfg /s SCHEME_MIN
-        Write-Host "✅ High performance power scheme activated"
+        # --- Ultimate Performance Power Plan ---
+        Write-Host "  - Importing and activating Ultimate Performance power scheme..."
+        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+        powercfg /s e9a42b02-d5df-448d-aa00-03f14749eb61
+        Write-Host "✅ Ultimate Performance power scheme activated"
 
         # --- Disable Non-Essential Services (Keeping Search Enabled) ---
         # Frees up significant CPU and RAM resources.
         # "wsearch" (Windows Search) is intentionally left running to allow file searching.
         $servicesToDisable = @("SysMain", "Print Spooler", "BITS", "diagtrack", "MapsBroker", "WbioSrvc", "lfsvc", "Themes", "TabletInputService", "dmwappushservice")
         foreach ($service in $servicesToDisable) {
-            Write-Host "   - Disabling service: $service"
+            Write-Host "  - Disabling service: $service"
             try {
                 Stop-Service -Name $service -Force -ErrorAction Stop
                 Set-Service -Name $service -StartupType Disabled -ErrorAction Stop
             } catch {
-                Write-Host "   - Could not stop/disable service '$service' (it may not exist or require higher privileges)." -ForegroundColor Yellow
+                Write-Host "  - Could not stop/disable service '$service' (it may not exist or require higher privileges)." -ForegroundColor Yellow
             }
         }
         Write-Host "✅ Non-essential services disabled"
@@ -141,7 +144,11 @@ jobs:
         New-Item -Path "HKCU:\Control Panel\Desktop" -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "DragFullWindows" -Value 0 -Force
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value 0 -Force
-        Write-Host "✅ Visual effects optimized for max performance"
+        # Disable transparency for extra performance boost
+        $personalizePath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+        New-Item -Path $personalizePath -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $personalizePath -Name "EnableTransparency" -Value 0 -Force
+        Write-Host "✅ Visual effects optimized for max performance (transparency disabled)"
 
         # --- System and Memory Optimizations ---
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "DisablePagingExecutive" -Value 1 -Force
@@ -214,7 +221,7 @@ jobs:
     - name: Display Connection Information
       run: |
         Write-Host ""
-        Write-Host "🎉 YOUR POLISHED RDP IS READY! 🎉"
+        Write-Host "🎉 YOUR ULTIMATE RDP IS READY! 🎉"
         Write-Host "========================================"
         Write-Host ""
         Write-Host "🔐 AUTO-LOGIN CREDENTIALS:"
@@ -228,8 +235,10 @@ jobs:
         Write-Host "4. The system will log you in automatically!"
         Write-Host ""
         Write-Host "🚀 ACTIVE POWER & STABILITY UPGRADES:"
+        Write-Host "   ✅ Ultimate Performance power plan ACTIVATED"
+        Write-Host "   ✅ Visual transparency effects DISABLED"
         Write-Host "   ✅ RDP Service & Tunnel Agent at HIGH priority"
-        Write-Host "   ✅ GPU hardware acceleration enabled (Typo Fixed)"
+        Write-Host "   ✅ GPU hardware acceleration enabled"
         Write-Host "   ✅ Aggressive network tuning for low latency"
         Write-Host "   ✅ Secure firewall rule for RDP (not disabled)"
         Write-Host "   ✅ More non-essential services disabled for performance"
