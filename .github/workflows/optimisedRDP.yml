@@ -1,10 +1,10 @@
-# 🚀 Ultimate Performance & Auto-Login RDP Workflow 🚀
+# 🚀 Ultimate Performance & Auto-Login RDP Workflow (Fixed) 🚀
 # This version includes the Ultimate Performance power plan and disables transparency
 # for maximum speed, alongside existing stability and security enhancements.
 # The Windows Search service is kept enabled for full functionality.
 # Username and password remain unchanged as per your request.
 
-name: Ultimate Performance Auto-Login RDP Tunnel
+name: Ultimate Performance Auto-Login RDP Tunnel (Fixed)
 on:
   workflow_dispatch:
 
@@ -17,6 +17,7 @@ jobs:
       uses: actions/checkout@v4
     
     - name: System Analysis and Base Optimization
+      shell: powershell
       run: |
         Write-Host "🔍 Analyzing system and applying base optimizations..."
         
@@ -43,6 +44,7 @@ jobs:
         Write-Host "✅ Base system optimization completed"
     
     - name: Configure Auto-Login RDP Administrator
+      shell: powershell
       run: |
         Write-Host "👤 Setting up auto-login RDP administrator..."
         
@@ -84,6 +86,7 @@ jobs:
         Write-Host "   🔑 Password: $password"
     
     - name: Enable and Supercharge RDP Service
+      shell: powershell
       run: |
         Write-Host "🚀 Enabling and supercharging RDP service..."
 
@@ -107,6 +110,7 @@ jobs:
         Write-Host "✅ RDP service supercharged for performance"
     
     - name: Configure Secure Firewall Rule for RDP
+      shell: powershell
       run: |
         Write-Host "🔥 Configuring secure firewall rule for RDP..."
         # Create a specific, high-priority rule for RDP instead of disabling the firewall entirely.
@@ -115,14 +119,18 @@ jobs:
         Write-Host "✅ Firewall rule created to allow RDP on port 3389."
 
     - name: Apply Advanced Performance & Smoothness Tuning
+      shell: powershell
       run: |
         Write-Host "⚡ Applying advanced performance and smoothness tuning..."
         
-        # --- Ultimate Performance Power Plan ---
+        # --- Ultimate Performance Power Plan (FIXED) ---
         Write-Host "  - Importing and activating Ultimate Performance power scheme..."
-        powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
-        powercfg /s e9a42b02-d5df-448d-aa00-03f14749eb61
-        Write-Host "✅ Ultimate Performance power scheme activated"
+        # Duplicate the scheme and capture the output to get the new GUID
+        $powercfgOutput = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+        $newGuid = ($powercfgOutput -split ' ')[3]
+        # Set the new scheme as active using the dynamically captured GUID
+        powercfg /s $newGuid
+        Write-Host "✅ Ultimate Performance power scheme ($newGuid) activated"
 
         # --- Disable Non-Essential Services (Keeping Search Enabled) ---
         # Frees up significant CPU and RAM resources.
@@ -130,11 +138,12 @@ jobs:
         $servicesToDisable = @("SysMain", "Print Spooler", "BITS", "diagtrack", "MapsBroker", "WbioSrvc", "lfsvc", "Themes", "TabletInputService", "dmwappushservice")
         foreach ($service in $servicesToDisable) {
             Write-Host "  - Disabling service: $service"
+            # Use try/catch to gracefully handle services that may not exist or cannot be stopped.
             try {
-                Stop-Service -Name $service -Force -ErrorAction Stop
-                Set-Service -Name $service -StartupType Disabled -ErrorAction Stop
+                Get-Service -Name $service | Stop-Service -Force -ErrorAction Stop
+                Get-Service -Name $service | Set-Service -StartupType Disabled -ErrorAction Stop
             } catch {
-                Write-Host "  - Could not stop/disable service '$service' (it may not exist or require higher privileges)." -ForegroundColor Yellow
+                Write-Host "  - INFO: Could not stop/disable service '$service'. It may not exist or was already stopped." -ForegroundColor Gray
             }
         }
         Write-Host "✅ Non-essential services disabled"
@@ -161,6 +170,7 @@ jobs:
         Write-Host "✅ Windows Defender real-time monitoring disabled"
 
     - name: Start and Prioritize RDP Services
+      shell: powershell
       run: |
         Write-Host "⚙️ Starting and prioritizing RDP services..."
         
@@ -188,6 +198,7 @@ jobs:
         }
     
     - name: Download and Start Playit Tunnel
+      shell: powershell
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
@@ -219,6 +230,7 @@ jobs:
         }
     
     - name: Display Connection Information
+      shell: powershell
       run: |
         Write-Host ""
         Write-Host "🎉 YOUR ULTIMATE RDP IS READY! 🎉"
@@ -250,6 +262,7 @@ jobs:
         Write-Host ""
     
     - name: Maintain Session
+      shell: powershell
       run: |
         Write-Host "🔄 Session is active. This window will keep the job running."
         Write-Host "💡 You can close this browser window; the RDP session will continue."
