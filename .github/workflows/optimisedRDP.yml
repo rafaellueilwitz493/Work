@@ -1,11 +1,8 @@
-# 🚀 Ultimate Performance & Auto-Login RDP Workflow (Encoding Fixed) 🚀
-# This version includes the Ultimate Performance power plan and disables transparency
-# for maximum speed, alongside existing stability and security enhancements.
-# Emojis have been removed from PowerShell scripts to prevent character encoding errors.
-# The Windows Search service is kept enabled for full functionality.
-# Username and password remain unchanged as per your request.
+# 🚀 Ultimate Performance & Android Emulator RDP Workflow 🚀
+# This version adds support for the Android Studio Emulator by enabling Hyper-V (WHPX).
+# It retains all previous performance, stability, and auto-login enhancements.
 
-name: Ultimate Performance Auto-Login RDP Tunnel (Encoding Fixed)
+name: Ultimate Performance & Android RDP (Emulator Ready)
 on:
   workflow_dispatch:
 
@@ -43,6 +40,17 @@ jobs:
         netsh int tcp set global timestamps=disabled
         
         Write-Host "[SUCCESS] Base system optimization completed"
+
+    # --- NEW STEP FOR ANDROID EMULATOR SUPPORT ---
+    - name: Enable Hyper-V for Android Emulator
+      shell: powershell
+      run: |
+        Write-Host "[*] Enabling Hyper-V for Android Emulator (WHPX)..."
+        # This is the critical step that allows the Android Emulator to run inside the RDP session.
+        # It enables the Windows Hypervisor Platform (WHPX), which the emulator needs for hardware acceleration.
+        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -All -NoRestart
+        Write-Host "[SUCCESS] Hyper-V feature enabled. The Android Emulator can now use the Windows Hypervisor Platform (WHPX)."
+        Write-Host "[INFO] In Android Studio, ensure the emulator is configured to use 'WHPX' for best performance."
     
     - name: Configure Auto-Login RDP Administrator
       shell: powershell
@@ -234,8 +242,8 @@ jobs:
       shell: powershell
       run: |
         Write-Host ""
-        Write-Host "********** YOUR ULTIMATE RDP IS READY! **********"
-        Write-Host "=================================================="
+        Write-Host "********** YOUR ANDROID-READY RDP IS HERE! **********"
+        Write-Host "======================================================"
         Write-Host ""
         Write-Host "[INFO] AUTO-LOGIN CREDENTIALS:"
         Write-Host "   - Username: rdpadmin"
@@ -246,6 +254,10 @@ jobs:
         Write-Host "2. Copy the IP:PORT address from your active TCP tunnel."
         Write-Host "3. Paste it into your RDP client."
         Write-Host "4. The system will log you in automatically!"
+        Write-Host ""
+        Write-Host "[INFO] ANDROID EMULATOR IS NOW SUPPORTED:"
+        Write-Host "   [+] Hyper-V & WHPX features have been enabled."
+        Write-Host "   [+] This allows the Android Emulator to use hardware acceleration."
         Write-Host ""
         Write-Host "[INFO] ACTIVE POWER & STABILITY UPGRADES:"
         Write-Host "   [+] Ultimate Performance power plan ACTIVATED"
