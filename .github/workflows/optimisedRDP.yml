@@ -1,8 +1,8 @@
-# 🚀 Ultimate Performance & Android Emulator RDP Workflow 🚀
-# This version adds support for the Android Studio Emulator by enabling Hyper-V (WHPX).
-# It retains all previous performance, stability, and auto-login enhancements.
+# 🚀 Ultimate Performance & Android Emulator RDP Workflow (v2) 🚀
+# This version fixes the Hyper-V feature name for compatibility with GitHub Actions runners.
+# It now correctly enables HypervisorPlatform and VirtualMachinePlatform for the Android Emulator.
 
-name: Ultimate Performance & Android RDP (Emulator Ready)
+name: Ultimate Performance & Android RDP (Emulator Ready - Fixed)
 on:
   workflow_dispatch:
 
@@ -41,15 +41,17 @@ jobs:
         
         Write-Host "[SUCCESS] Base system optimization completed"
 
-    # --- NEW STEP FOR ANDROID EMULATOR SUPPORT ---
-    - name: Enable Hyper-V for Android Emulator
+    # --- CORRECTED STEP FOR ANDROID EMULATOR SUPPORT ---
+    - name: Enable Virtualization for Android Emulator
       shell: powershell
       run: |
-        Write-Host "[*] Enabling Hyper-V for Android Emulator (WHPX)..."
+        Write-Host "[*] Enabling Virtualization Features for Android Emulator (WHPX)..."
         # This is the critical step that allows the Android Emulator to run inside the RDP session.
-        # It enables the Windows Hypervisor Platform (WHPX), which the emulator needs for hardware acceleration.
-        Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -All -NoRestart
-        Write-Host "[SUCCESS] Hyper-V feature enabled. The Android Emulator can now use the Windows Hypervisor Platform (WHPX)."
+        # It enables the Windows Hypervisor Platform (WHPX) and Virtual Machine Platform.
+        # Using dism.exe is more reliable in this environment.
+        dism.exe /online /enable-feature /featurename:HypervisorPlatform /all /norestart
+        dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+        Write-Host "[SUCCESS] Virtualization features enabled. The Android Emulator can now use the Windows Hypervisor Platform (WHPX)."
         Write-Host "[INFO] In Android Studio, ensure the emulator is configured to use 'WHPX' for best performance."
     
     - name: Configure Auto-Login RDP Administrator
