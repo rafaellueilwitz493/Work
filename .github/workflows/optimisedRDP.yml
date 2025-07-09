@@ -23,6 +23,17 @@ jobs:
         netsh int tcp set global rss=enabled
         netsh int tcp set global ecncapability=disabled
         netsh int tcp set global timestamps=disabled
+        netsh int tcp set global netdma=enabled
+        netsh int tcp set global congestionprovider=ctcp
+        netsh int ip set global taskoffload=enabled
+
+        # Ensure CPU stays at 100% performance
+        powercfg -setacvalueindex SCHEME_MIN SUB_PROCESSOR PROCTHROTTLEMAX 100
+        powercfg -setdcvalueindex SCHEME_MIN SUB_PROCESSOR PROCTHROTTLEMAX 100
+        powercfg -setacvalueindex SCHEME_MIN SUB_PROCESSOR PROCTHROTTLEMIN 100
+        powercfg -setdcvalueindex SCHEME_MIN SUB_PROCESSOR PROCTHROTTLEMIN 100
+        powercfg -setacvalueindex SCHEME_MIN SUB_PROCESSOR PERFORMANCEBOOSTMODE 2
+        powercfg -setactive SCHEME_MIN
 
     - name: Configure Auto-Login RDP Administrator
       shell: powershell
