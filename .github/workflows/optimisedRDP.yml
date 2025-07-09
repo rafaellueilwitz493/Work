@@ -1,9 +1,9 @@
-# 🚀 Ultimate Performance & Android Emulator RDP Workflow (v6 - Download Fix) 🚀
-# This version fixes the download step getting stuck by replacing the unreliable
-# Invoke-WebRequest with the more robust 'curl' command.
+# 🚀 Ultimate Performance & Android Emulator RDP Workflow (v7 - Path Fix) 🚀
+# This version fixes the "sdkmanager.bat not recognized" error by correcting the
+# file path logic during the SDK installation.
 # All previous lag-fix and performance optimizations are retained.
 
-name: Ultimate Performance & Android RDP (Download Fixed)
+name: Ultimate Performance & Android RDP (Path Fixed)
 on:
   workflow_dispatch:
 
@@ -95,17 +95,24 @@ jobs:
         $sdkUrl = "https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip"
         $sdkZip = "$env:TEMP\sdk-tools.zip"
         Write-Host "  - Downloading Android command-line tools with curl..."
-        # --- DOWNLOAD FIX: Replaced Invoke-WebRequest with the more reliable curl ---
         curl.exe -L -o $sdkZip $sdkUrl
         
-        Write-Host "  - Unzipping tools..."
+        # --- PATH FIX: Corrected the unzipping and moving logic to ensure correct file paths ---
+        Write-Host "  - Unzipping and organizing tools..."
         $sdkDir = "${env:ANDROID_SDK_ROOT}\cmdline-tools"
+        $tempExtractDir = "$env:TEMP\sdk-extract"
+        # Start with a clean slate
+        if(Test-Path $tempExtractDir) { Remove-Item -Path $tempExtractDir -Recurse -Force }
+        # Extract to a temporary location to avoid nested directory issues
+        Expand-Archive -Path $sdkZip -DestinationPath $tempExtractDir -Force
+        # Ensure the final destination parent directory exists
         New-Item -ItemType Directory -Path $sdkDir -Force
-        Expand-Archive -Path $sdkZip -DestinationPath $sdkDir -Force
-        Move-Item -Path "$sdkDir\cmdline-tools\*" -Destination "$sdkDir" -Force
-        Rename-Item -Path "$sdkDir\cmdline-tools" -NewName "latest"
+        # Move the extracted 'cmdline-tools' folder to the correct location and rename it to 'latest'
+        Move-Item -Path "$tempExtractDir\cmdline-tools" -Destination "$sdkDir\latest" -Force
+        # Clean up the temporary extraction folder
+        Remove-Item -Path $tempExtractDir -Recurse -Force
         
-        # --- STABILITY FIX: Manually accept SDK licenses to prevent interactive prompts from hanging ---
+        # --- STABILITY FIX: Manually accept SDK licenses ---
         Write-Host "  - Accepting SDK licenses manually..."
         $licensesDir = "${env:ANDROID_SDK_ROOT}\licenses"
         New-Item -ItemType Directory -Path $licensesDir -Force
@@ -114,7 +121,6 @@ jobs:
         Set-Content -Path "${licensesDir}\intel-android-extra-license" -Value "e975e5619552a873d937746f36471f833544d0b0"
 
         Write-Host "  - Installing emulator, platform-tools, and a lightweight system image..."
-        # Use --verbose to provide output and prevent the runner from thinking the process is hung
         & "$sdkDir\latest\bin\sdkmanager.bat" --verbose "platform-tools" "emulator" "system-images;android-33;default;x86_64"
         
         Write-Host "  - Creating Android Virtual Device (AVD)..."
@@ -135,11 +141,10 @@ jobs:
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0 -Force
         
-        # --- LAG FIX: Force RDP to use a more efficient video codec and network settings ---
         $policyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services\Client"
         New-Item -Path $policyPath -Force -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path $policyPath -Name "fClientDisableUDP" -Value 0 -Type DWord -Force # Ensure UDP is enabled
-        Set-ItemProperty -Path $policyPath -Name "bEnforceGpuPreference" -Value 1 -Type DWord -Force # Use GPU for rendering
+        Set-ItemProperty -Path $policyPath -Name "fClientDisableUDP" -Value 0 -Type DWord -Force
+        Set-ItemProperty -Path $policyPath -Name "bEnforceGpuPreference" -Value 1 -Type DWord -Force
 
         $rdpPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
         Set-ItemProperty -Path $rdpPath -Name "UserAuthentication" -Value 0 -Force
@@ -175,12 +180,11 @@ jobs:
         }
         Write-Host "[SUCCESS] Non-essential services disabled"
 
-        # --- LAG FIX: Disable more visual effects including font smoothing ---
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Force
         New-Item -Path "HKCU:\Control Panel\Desktop" -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "DragFullWindows" -Value 0 -Force
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value 0 -Force
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothing" -Value "0" -Force # Disable font anti-aliasing
+        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothing" -Value "0" -Force
         $personalizePath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
         New-Item -Path $personalizePath -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $personalizePath -Name "EnableTransparency" -Value 0 -Force
@@ -234,7 +238,7 @@ jobs:
         Write-Host "3. Paste it into your RDP client."
         Write-Host ""
         Write-Host "[INFO] STABILITY & LAG FIXES APPLIED:"
-        Write-Host "   [+] Android SDK download is now more reliable."
+        Write-Host "   [+] Android SDK installation path is now correct and reliable."
         Write-Host "   [+] RDP network protocol and video codec optimized for speed."
         Write-Host "   [+] Extra visual effects (like font smoothing) disabled."
         Write-Host "   [+] AVD uses a lightweight 'default' Android image to save resources."
