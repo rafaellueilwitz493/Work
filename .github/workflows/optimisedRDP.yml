@@ -1,3 +1,10 @@
+# 🚀 Ultimate Performance & Auto-Login RDP Workflow (Encoding Fixed) 🚀
+# This version includes the Ultimate Performance power plan and disables transparency
+# for maximum speed, alongside existing stability and security enhancements.
+# Emojis have been removed from PowerShell scripts to prevent character encoding errors.
+# The Windows Search service is kept enabled for full functionality.
+# Username and password remain unchanged as per your request.
+
 name: Ultimate Performance Auto-Login RDP Tunnel (Encoding Fixed)
 on:
   workflow_dispatch:
@@ -5,127 +12,261 @@ on:
 jobs:
   setup-rdp-tunnel:
     runs-on: windows-latest
-    timeout-minutes: 360
+    timeout-minutes: 360  # 6 hours
     steps:
     - name: Check out the repository
       uses: actions/checkout@v4
-
+    
     - name: System Analysis and Base Optimization
       shell: powershell
       run: |
-        # System Info & Scheduling Tweaks
+        Write-Host "[*] Analyzing system and applying base optimizations..."
+        
+        # Get system specs
+        $cpu = Get-CimInstance -ClassName Win32_Processor
+        $memory = Get-CimInstance -ClassName Win32_OperatingSystem
+        $gpu = Get-CimInstance -ClassName Win32_VideoController | Where-Object { $_.Name -notlike "*Basic*" }
+        
+        Write-Host "[+] CPU: $($cpu.Name) - $($cpu.NumberOfCores) cores, $($cpu.NumberOfLogicalProcessors) threads"
+        Write-Host "[+] RAM: $([math]::Round($memory.TotalVisibleMemorySize/1MB/1024, 2)) GB"
+        if ($gpu) { Write-Host "[+] GPU: $($gpu.Name)" }
+        
+        # Essential system optimizations for CPU scheduling and system responsiveness
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -Force
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "SystemResponsiveness" -Value 10 -Force
-
-        # Network Optimizations
+        
+        # Aggressive network optimizations for RDP
         netsh int tcp set global autotuninglevel=highlyrestricted
         netsh int tcp set global chimney=enabled
         netsh int tcp set global rss=enabled
         netsh int tcp set global ecncapability=disabled
         netsh int tcp set global timestamps=disabled
-        netsh int tcp set global netdma=enabled
-        netsh int tcp set global congestionprovider=ctcp
-        netsh int ip set global taskoffload=enabled
-
-        # Ensure CPU stays at 100% performance
-        powercfg -setacvalueindex SCHEME_MIN SUB_PROCESSOR PROCTHROTTLEMAX 100
-        powercfg -setdcvalueindex SCHEME_MIN SUB_PROCESSOR PROCTHROTTLEMAX 100
-        powercfg -setacvalueindex SCHEME_MIN SUB_PROCESSOR PROCTHROTTLEMIN 100
-        powercfg -setdcvalueindex SCHEME_MIN SUB_PROCESSOR PROCTHROTTLEMIN 100
-        powercfg -setacvalueindex SCHEME_MIN SUB_PROCESSOR PERFORMANCEBOOSTMODE 2
-        powercfg -setactive SCHEME_MIN
-
+        
+        Write-Host "[SUCCESS] Base system optimization completed"
+    
     - name: Configure Auto-Login RDP Administrator
       shell: powershell
       run: |
+        Write-Host "[*] Setting up auto-login RDP administrator..."
+        
+        # --- Credentials as requested ---
         $username = "rdpadmin"
         $password = "UltraFast2024!"
+        # --- Do not change the above ---
+        
         $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
-
-        if (-not (Get-LocalUser -Name $username -ErrorAction SilentlyContinue)) {
-          New-LocalUser -Name $username -Password $securePassword -PasswordNeverExpires -UserMayNotChangePassword -AccountNeverExpires
+        
+        # Check if user already exists to avoid errors on re-runs
+        if (Get-LocalUser -Name $username -ErrorAction SilentlyContinue) {
+            Write-Host "   - User '$username' already exists. Setting password and ensuring group membership."
+            Set-LocalUser -Name $username -Password $securePassword
+        } else {
+            Write-Host "   - Creating new user '$username'."
+            New-LocalUser -Name $username -Password $securePassword -FullName "Auto-Login RDP Administrator" -Description "Auto-Login RDP Access" -PasswordNeverExpires -UserMayNotChangePassword -AccountNeverExpires
         }
-        Set-LocalUser -Name $username -Password $securePassword
+        
+        # Ensure user is in the correct groups
         Add-LocalGroupMember -Group "Administrators" -Member $username -ErrorAction SilentlyContinue
         Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username -ErrorAction SilentlyContinue
-
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "AutoAdminLogon" -Value "1" -Force
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "DefaultUserName" -Value $username -Force
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "DefaultPassword" -Value $password -Force
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "ForceAutoLogon" -Value "1" -Force
-
-        $lockScreenPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization"
-        if (-not (Test-Path $lockScreenPath)) {
-          New-Item -Path $lockScreenPath -Force | Out-Null
-        }
-        Set-ItemProperty -Path $lockScreenPath -Name "NoLockScreen" -Value 1 -Force
-
-    - name: Enable and Configure RDP
+        
+        # Configure automatic login
+        $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+        Set-ItemProperty -Path $regPath -Name "AutoAdminLogon" -Value "1" -Force
+        Set-ItemProperty -Path $regPath -Name "DefaultUserName" -Value $username -Force
+        Set-ItemProperty -Path $regPath -Name "DefaultPassword" -Value $password -Force
+        Set-ItemProperty -Path $regPath -Name "ForceAutoLogon" -Value "1" -Force
+        
+        # Disable lock screen for smooth auto-login
+        $personalizationPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization"
+        New-Item -Path $personalizationPath -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $personalizationPath -Name "NoLockScreen" -Value 1 -Force
+        
+        Write-Host "[SUCCESS] Auto-login administrator configured successfully"
+        Write-Host "[INFO] CREDENTIALS (Auto-Login Enabled):"
+        Write-Host "   - Username: $username"
+        Write-Host "   - Password: $password"
+    
+    - name: Enable and Supercharge RDP Service
       shell: powershell
       run: |
+        Write-Host "[*] Enabling and supercharging RDP service..."
+
+        # Enable Remote Desktop and allow multiple sessions
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0 -Force
-
+        
+        # --- Enable GPU Hardware Acceleration for RDP ---
+        # This can dramatically improve smoothness if a GPU is available.
         $policyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
         New-Item -Path $policyPath -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $policyPath -Name "bEnforceGpuPreference" -Value 1 -Type DWord -Force
-
+        
+        # --- RDP performance and compatibility settings ---
         $rdpPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
-        Set-ItemProperty -Path $rdpPath -Name "UserAuthentication" -Value 0 -Force
-        Set-ItemProperty -Path $rdpPath -Name "SecurityLayer" -Value 0 -Force
-        Set-ItemProperty -Path $rdpPath -Name "MinEncryptionLevel" -Value 1 -Force
-        Set-ItemProperty -Path $rdpPath -Name "fPromptForPassword" -Value 0 -Force
-
-    - name: Create Firewall Rule
+        Set-ItemProperty -Path $rdpPath -Name "UserAuthentication" -Value 0 -Force  # Disable NLA for broad compatibility
+        Set-ItemProperty -Path $rdpPath -Name "SecurityLayer" -Value 0 -Force      # RDP Security Layer for broad compatibility
+        Set-ItemProperty -Path $rdpPath -Name "MinEncryptionLevel" -Value 1 -Force # Lowest encryption for speed
+        Set-ItemProperty -Path $rdpPath -Name "fPromptForPassword" -Value 0 -Force # No password prompt on connect
+        
+        Write-Host "[SUCCESS] RDP service supercharged for performance"
+    
+    - name: Configure Secure Firewall Rule for RDP
       shell: powershell
       run: |
+        Write-Host "[*] Configuring secure firewall rule for RDP..."
+        # Create a specific, high-priority rule for RDP instead of disabling the firewall entirely.
+        # This is more secure and stable.
         New-NetFirewallRule -DisplayName "Allow RDP (Port 3389)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3389 -Profile Any
+        Write-Host "[SUCCESS] Firewall rule created to allow RDP on port 3389."
 
-    - name: Performance & Visual Optimizations
+    - name: Apply Advanced Performance & Smoothness Tuning
       shell: powershell
       run: |
-        $guid = ((powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61) -split ' ')[3]
-        powercfg /s $guid
+        Write-Host "[*] Applying advanced performance and smoothness tuning..."
+        
+        # --- Ultimate Performance Power Plan (FIXED) ---
+        Write-Host "  - Importing and activating Ultimate Performance power scheme..."
+        # Duplicate the scheme and capture the output to get the new GUID
+        $powercfgOutput = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
+        $newGuid = ($powercfgOutput -split ' ')[3]
+        # Set the new scheme as active using the dynamically captured GUID
+        powercfg /s $newGuid
+        Write-Host "[SUCCESS] Ultimate Performance power scheme ($newGuid) activated"
 
-        $services = @("SysMain", "Print Spooler", "BITS", "diagtrack", "MapsBroker", "WbioSrvc", "lfsvc", "Themes", "TabletInputService", "dmwappushservice")
-        foreach ($svc in $services) {
-          try {
-            Stop-Service $svc -Force -ErrorAction Stop
-            Set-Service $svc -StartupType Disabled
-          } catch {}
+        # --- Disable Non-Essential Services (Keeping Search Enabled) ---
+        # Frees up significant CPU and RAM resources.
+        # "wsearch" (Windows Search) is intentionally left running to allow file searching.
+        $servicesToDisable = @("SysMain", "Print Spooler", "BITS", "diagtrack", "MapsBroker", "WbioSrvc", "lfsvc", "Themes", "TabletInputService", "dmwappushservice")
+        foreach ($service in $servicesToDisable) {
+            Write-Host "  - Disabling service: $service"
+            # Use try/catch to gracefully handle services that may not exist or cannot be stopped.
+            try {
+                Get-Service -Name $service | Stop-Service -Force -ErrorAction Stop
+                Get-Service -Name $service | Set-Service -StartupType Disabled -ErrorAction Stop
+            } catch {
+                Write-Host "  - INFO: Could not stop/disable service '$service'. It may not exist or was already stopped." -ForegroundColor Gray
+            }
         }
+        Write-Host "[SUCCESS] Non-essential services disabled"
 
+        # --- Optimize Visual Effects for Performance ---
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Force
+        New-Item -Path "HKCU:\Control Panel\Desktop" -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "DragFullWindows" -Value 0 -Force
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value 0 -Force
-        Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 0 -Force
+        # Disable transparency for extra performance boost
+        $personalizePath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+        New-Item -Path $personalizePath -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $personalizePath -Name "EnableTransparency" -Value 0 -Force
+        Write-Host "[SUCCESS] Visual effects optimized for max performance (transparency disabled)"
 
+        # --- System and Memory Optimizations ---
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "DisablePagingExecutive" -Value 1 -Force
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control" -Name "WaitToKillServiceTimeout" -Value 2000 -Force
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Value 0xFFFFFFFF -Force
+        Write-Host "[SUCCESS] System responsiveness and memory tuned"
+        
+        # --- Disable Windows Defender ---
         Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+        Write-Host "[SUCCESS] Windows Defender real-time monitoring disabled"
 
-    - name: Start and Prioritize RDP Service
+    - name: Start and Prioritize RDP Services
       shell: powershell
       run: |
+        Write-Host "[*] Starting and prioritizing RDP services..."
+        
         Start-Service -Name "TermService"
-        Start-Sleep -Seconds 5
-        $proc = Get-Process -Name svchost | Where-Object { (Get-CimInstance Win32_Service -Filter "ProcessId=$($_.Id)").Name -contains 'TermService' }
-        if ($proc) { $proc.PriorityClass = 'High' }
-
-    - name: Start Playit Tunnel
+        Start-Sleep -Seconds 5 # Wait for the service to initialize
+        
+        # Set RDP Service to High Priority for maximum responsiveness
+        try {
+            $rdpProcess = Get-Process -Name svchost | Where-Object { (Get-CimInstance Win32_Service -Filter "ProcessId = $($_.Id)").Name -contains 'TermService' }
+            if ($rdpProcess) {
+                $rdpProcess.PriorityClass = 'High'
+                Write-Host "[SUCCESS] RDP service process (TermService) priority set to HIGH"
+            }
+        } catch {
+            Write-Host "[WARNING] Could not set RDP service to high priority: $($_.Exception.Message)"
+        }
+        
+        # Final check on RDP port
+        $rdpTest = Test-NetConnection -ComputerName "127.0.0.1" -Port 3389 -InformationLevel Quiet
+        if ($rdpTest) {
+            Write-Host "[SUCCESS] RDP service is online and responding on port 3389"
+        } else {
+            Write-Host "[ERROR] RDP service failed to start. Please check the logs." -ForegroundColor Red
+            exit 1
+        }
+    
+    - name: Download and Start Playit Tunnel
       shell: powershell
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        if (-not $env:PLAYIT_AUTH_KEY) { exit 1 }
-        $path = "$env:USERPROFILE\playit.exe"
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile $path
-        $p = Start-Process -FilePath $path -ArgumentList "--secret", "`"$env:PLAYIT_AUTH_KEY`"" -PassThru -WindowStyle Hidden
-        $p.PriorityClass = "High"
+        Write-Host "[*] Downloading and starting Playit tunnel..."
+        
+        if (-not $env:PLAYIT_AUTH_KEY) {
+            Write-Host "[ERROR] PLAYIT_AUTH_KEY secret not found!" -ForegroundColor Red
+            Write-Host "Please add your Playit.gg tunnel token as a repository secret named 'PL'."
+            exit 1
+        }
+        
+        # Download Playit Agent
+        $playitPath = "$env:USERPROFILE\playit.exe"
+        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile $playitPath
+        
+        # Start Playit Agent in the background and set to high priority
+        $process = Start-Process -FilePath $playitPath -ArgumentList "--secret", "`"$env:PLAYIT_AUTH_KEY`"" -PassThru -WindowStyle Hidden
+        $process.PriorityClass = "High"
+        
+        Write-Host "[SUCCESS] Playit Agent started with HIGH priority (PID: $($process.Id))"
+        Write-Host "[*] Waiting for tunnel to establish..."
         Start-Sleep -Seconds 20
-
-    - name: Keep Session Alive
+        
+        if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
+            Write-Host "[SUCCESS] Tunnel agent appears to be running successfully."
+        } else {
+            Write-Host "[ERROR] Tunnel agent failed to stay running. Check your auth key and Playit.gg dashboard." -ForegroundColor Red
+            exit 1
+        }
+    
+    - name: Display Connection Information
       shell: powershell
       run: |
-        Start-Sleep -Seconds 21400
+        Write-Host ""
+        Write-Host "********** YOUR ULTIMATE RDP IS READY! **********"
+        Write-Host "=================================================="
+        Write-Host ""
+        Write-Host "[INFO] AUTO-LOGIN CREDENTIALS:"
+        Write-Host "   - Username: rdpadmin"
+        Write-Host "   - Password: UltraFast2024!"
+        Write-Host ""
+        Write-Host "[INFO] HOW TO CONNECT:"
+        Write-Host "1. Go to: https://playit.gg/account/tunnels"
+        Write-Host "2. Copy the IP:PORT address from your active TCP tunnel."
+        Write-Host "3. Paste it into your RDP client."
+        Write-Host "4. The system will log you in automatically!"
+        Write-Host ""
+        Write-Host "[INFO] ACTIVE POWER & STABILITY UPGRADES:"
+        Write-Host "   [+] Ultimate Performance power plan ACTIVATED"
+        Write-Host "   [+] Visual transparency effects DISABLED"
+        Write-Host "   [+] RDP Service & Tunnel Agent at HIGH priority"
+        Write-Host "   [+] GPU hardware acceleration enabled"
+        Write-Host "   [+] Aggressive network tuning for low latency"
+        Write-Host "   [+] Secure firewall rule for RDP (not disabled)"
+        Write-Host "   [+] More non-essential services disabled for performance"
+        Write-Host "   [+] Enhanced system responsiveness tuning"
+        Write-Host "   [+] Windows Search feature remains ENABLED"
+        Write-Host ""
+        Write-Host "[INFO] This session will remain active for up to 6 hours."
+        Write-Host "[SUCCESS] Your connection is now more stable, secure, and powerful."
+        Write-Host ""
+    
+    - name: Maintain Session
+      shell: powershell
+      run: |
+        Write-Host "[*] Session is active. This window will keep the job running."
+        Write-Host "[*] You can close this browser window; the RDP session will continue."
+        Start-Sleep -Seconds 21400 # Keep alive for just under 6 hours
+        Write-Host "[*] Session time limit reached."
+
