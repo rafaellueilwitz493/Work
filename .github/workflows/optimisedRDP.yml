@@ -316,29 +316,103 @@ jobs:
         Write-Host "[*] Installing Android emulator dependencies..."
         
         # Install Chocolatey for package management
+        Write-Host "  - Installing Chocolatey package manager..."
         Set-ExecutionPolicy Bypass -Scope Process -Force
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-        iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+        try {
+            iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+            Write-Host "  - Chocolatey installed successfully"
+        } catch {
+            Write-Host "  - ERROR: Failed to install Chocolatey: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "  - Proceeding without Chocolatey - will install Java manually"
+        }
         
-        # Install OpenJDK (required for Android Studio)
-        choco install openjdk11 -y
+        # Refresh PATH environment variable
+        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
+        
+        # Install OpenJDK manually if Chocolatey fails
+        if (Get-Command choco -ErrorAction SilentlyContinue) {
+            Write-Host "  - Installing OpenJDK 11 via Chocolatey..."
+            try {
+                & choco install openjdk11 -y --timeout 300
+                Write-Host "  - OpenJDK 11 installed successfully via Chocolatey"
+            } catch {
+                Write-Host "  - WARNING: Chocolatey OpenJDK installation failed, installing manually" -ForegroundColor Yellow
+                # Manual JDK installation fallback
+                $jdkUrl = "https://download.java.net/java/GA/jdk11/9/GPL/openjdk-11.0.2_windows-x64_bin.zip"
+                $jdkPath = "C:\Program Files\Java\jdk-11.0.2"
+                $zipPath = "$env:TEMP\openjdk-11.zip"
+                
+                Write-Host "  - Downloading OpenJDK 11 manually..."
+                Invoke-WebRequest -Uri $jdkUrl -OutFile $zipPath -TimeoutSec 300
+                
+                Write-Host "  - Extracting OpenJDK 11..."
+                Expand-Archive -Path $zipPath -DestinationPath "C:\Program Files\Java\" -Force
+                
+                # Set JAVA_HOME environment variable
+                [Environment]::SetEnvironmentVariable("JAVA_HOME", $jdkPath, "Machine")
+                [Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";$jdkPath\bin", "Machine")
+                
+                Write-Host "  - OpenJDK 11 installed manually"
+            }
+        } else {
+            Write-Host "  - Installing OpenJDK 11 manually (Chocolatey not available)..."
+            # Manual JDK installation
+            $jdkUrl = "https://download.java.net/java/GA/jdk11/9/GPL/openjdk-11.0.2_windows-x64_bin.zip"
+            $jdkPath = "C:\Program Files\Java\jdk-11.0.2"
+            $zipPath = "$env:TEMP\openjdk-11.zip"
+            
+            Write-Host "  - Downloading OpenJDK 11..."
+            Invoke-WebRequest -Uri $jdkUrl -OutFile $zipPath -TimeoutSec 300
+            
+            Write-Host "  - Extracting OpenJDK 11..."
+            New-Item -Path "C:\Program Files\Java" -ItemType Directory -Force -ErrorAction SilentlyContinue
+            Expand-Archive -Path $zipPath -DestinationPath "C:\Program Files\Java\" -Force
+            
+            # Set JAVA_HOME environment variable
+            [Environment]::SetEnvironmentVariable("JAVA_HOME", $jdkPath, "Machine")
+            [Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";$jdkPath\bin", "Machine")
+            
+            Write-Host "  - OpenJDK 11 installed manually"
+        }
         
         # Install Android SDK Command Line Tools
+        Write-Host "  - Installing Android SDK Command Line Tools..."
         $sdkUrl = "https://dl.google.com/android/repository/commandlinetools-win-8512546_latest.zip"
         $sdkPath = "C:\Android\Sdk\cmdline-tools"
         $zipPath = "$env:TEMP\cmdline-tools.zip"
         
-        Write-Host "  - Downloading Android SDK Command Line Tools..."
-        Invoke-WebRequest -Uri $sdkUrl -OutFile $zipPath
+        try {
+            Write-Host "  - Downloading Android SDK Command Line Tools..."
+            Invoke-WebRequest -Uri $sdkUrl -OutFile $zipPath -TimeoutSec 300
+            
+            Write-Host "  - Extracting Android SDK..."
+            New-Item -Path $sdkPath -ItemType Directory -Force -ErrorAction SilentlyContinue
+            Expand-Archive -Path $zipPath -DestinationPath $sdkPath -Force
+            
+            # Set up SDK path
+            $env:ANDROID_HOME = "C:\Android\Sdk"
+            $env:ANDROID_SDK_ROOT = "C:\Android\Sdk"
+            $androidPath = "$env:ANDROID_HOME\cmdline-tools\cmdline-tools\bin;$env:ANDROID_HOME\platform-tools"
+            [Environment]::SetEnvironmentVariable("ANDROID_HOME", $env:ANDROID_HOME, "Machine")
+            [Environment]::SetEnvironmentVariable("ANDROID_SDK_ROOT", $env:ANDROID_SDK_ROOT, "Machine")
+            [Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";$androidPath", "Machine")
+            
+            Write-Host "[SUCCESS] Android SDK Command Line Tools installed"
+        } catch {
+            Write-Host "  - ERROR: Failed to install Android SDK: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "  - Android emulator may not work properly without SDK tools"
+        }
         
-        Write-Host "  - Extracting Android SDK..."
-        Expand-Archive -Path $zipPath -DestinationPath $sdkPath -Force
+        # Verify Java installation
+        try {
+            $javaVersion = & java -version 2>&1
+            Write-Host "  - Java installation verified: $($javaVersion[0])"
+        } catch {
+            Write-Host "  - WARNING: Java installation could not be verified" -ForegroundColor Yellow
+        }
         
-        # Set up SDK path
-        $env:ANDROID_HOME = "C:\Android\Sdk"
-        $env:PATH = "$env:PATH;$env:ANDROID_HOME\cmdline-tools\cmdline-tools\bin;$env:ANDROID_HOME\platform-tools"
-        
-        Write-Host "[SUCCESS] Android emulator dependencies installed"
+        Write-Host "[SUCCESS] Android emulator dependencies installation completed"
     
     - name: Start and Prioritize Services
       shell: powershell
@@ -399,39 +473,50 @@ jobs:
         # Download Playit Agent
         $playitPath = "$env:USERPROFILE\playit.exe"
         Write-Host "  - Downloading Playit Agent..."
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile $playitPath
+        try {
+            Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile $playitPath -TimeoutSec 300
+            Write-Host "  - Playit Agent downloaded successfully"
+        } catch {
+            Write-Host "[ERROR] Failed to download Playit Agent: $($_.Exception.Message)" -ForegroundColor Red
+            exit 1
+        }
         
         # Start Playit Agent
         Write-Host "  - Starting Playit Agent with HIGH priority..."
-        $process = Start-Process -FilePath $playitPath -ArgumentList "--secret", "`"$env:PLAYIT_AUTH_KEY`"" -PassThru -WindowStyle Hidden
-        $process.PriorityClass = "High"
-        
-        Write-Host "[SUCCESS] Playit Agent started with HIGH priority (PID: $($process.Id))"
-        Write-Host "[*] Waiting for tunnel to establish..."
-        Start-Sleep -Seconds 30
-        
-        # Verify tunnel is running
-        $retryCount = 0
-        $maxRetries = 3
-        while ($retryCount -lt $maxRetries) {
-            if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
-                Write-Host "[SUCCESS] Tunnel agent is running successfully"
-                break
-            } else {
-                $retryCount++
-                Write-Host "[WARNING] Tunnel agent not responding, attempt $retryCount/$maxRetries"
-                if ($retryCount -lt $maxRetries) {
-                    Start-Sleep -Seconds 10
-                    # Restart the agent
-                    $process = Start-Process -FilePath $playitPath -ArgumentList "--secret", "`"$env:PLAYIT_AUTH_KEY`"" -PassThru -WindowStyle Hidden
-                    $process.PriorityClass = "High"
+        try {
+            $process = Start-Process -FilePath $playitPath -ArgumentList "--secret", "`"$env:PLAYIT_AUTH_KEY`"" -PassThru -WindowStyle Hidden
+            $process.PriorityClass = "High"
+            
+            Write-Host "[SUCCESS] Playit Agent started with HIGH priority (PID: $($process.Id))"
+            Write-Host "[*] Waiting for tunnel to establish..."
+            Start-Sleep -Seconds 30
+            
+            # Verify tunnel is running
+            $retryCount = 0
+            $maxRetries = 3
+            while ($retryCount -lt $maxRetries) {
+                if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
+                    Write-Host "[SUCCESS] Tunnel agent is running successfully"
+                    break
+                } else {
+                    $retryCount++
+                    Write-Host "[WARNING] Tunnel agent not responding, attempt $retryCount/$maxRetries"
+                    if ($retryCount -lt $maxRetries) {
+                        Start-Sleep -Seconds 10
+                        # Restart the agent
+                        $process = Start-Process -FilePath $playitPath -ArgumentList "--secret", "`"$env:PLAYIT_AUTH_KEY`"" -PassThru -WindowStyle Hidden
+                        $process.PriorityClass = "High"
+                    }
                 }
             }
-        }
-        
-        if ($retryCount -eq $maxRetries) {
-            Write-Host "[ERROR] Tunnel agent failed to start after multiple attempts" -ForegroundColor Red
-            Write-Host "[INFO] Check your auth key and Playit.gg dashboard"
+            
+            if ($retryCount -eq $maxRetries) {
+                Write-Host "[ERROR] Tunnel agent failed to start after multiple attempts" -ForegroundColor Red
+                Write-Host "[INFO] Check your auth key and Playit.gg dashboard"
+                exit 1
+            }
+        } catch {
+            Write-Host "[ERROR] Failed to start Playit Agent: $($_.Exception.Message)" -ForegroundColor Red
             exit 1
         }
     
@@ -449,36 +534,7 @@ jobs:
         Write-Host "[INFO] HOW TO CONNECT:"
         Write-Host "1. Go to: https://playit.gg/account/tunnels"
         Write-Host "2. Copy the IP:PORT address from your active TCP tunnel"
-        Write-Host "3. Paste it into your RDP client"
-        Write-Host "4. The system will log you in automatically!"
-        Write-Host ""
-        Write-Host "[INFO] ANDROID EMULATOR FIXES APPLIED:"
-        Write-Host "   [+] Hyper-V Platform enabled (RESTART APPLIED)"
-        Write-Host "   [+] Windows Hypervisor Platform configured"
-        Write-Host "   [+] Nested virtualization support enabled"
-        Write-Host "   [+] Android SDK Command Line Tools installed"
-        Write-Host "   [+] OpenJDK 11 installed for Android Studio"
-        Write-Host "   [+] ADB and emulator ports opened in firewall"
-        Write-Host "   [+] Graphics hardware acceleration optimized"
-        Write-Host "   [+] Memory management tuned for virtualization"
-        Write-Host "   [+] Power plan optimized for sustained performance"
-        Write-Host "   [+] Playit.gg tunnel restarted after system restart"
-        Write-Host ""
-        Write-Host "[INFO] RESTART HANDLING:"
-        Write-Host "   - System automatically restarts when virtualization features are enabled"
-        Write-Host "   - Playit.gg tunnel restarts automatically after system restart"
-        Write-Host "   - RDP session remains accessible throughout the process"
-        Write-Host "   - No manual intervention required"
-        Write-Host ""
-        Write-Host "[INFO] ANDROID EMULATOR TIPS:"
-        Write-Host "   - Use 'Pixel 3a API 30' or newer AVD for best compatibility"
-        Write-Host "   - Enable 'Use Host GPU' in AVD settings"
-        Write-Host "   - If emulator still fails, try x86_64 images instead of ARM"
-        Write-Host "   - Use 'Cold Boot' option if emulator hangs during startup"
-        Write-Host ""
-        Write-Host "[SUCCESS] Your RDP is optimized for Android Studio development!"
-        Write-Host ""
-    
+  
     - name: Maintain Session
       shell: powershell
       run: |
