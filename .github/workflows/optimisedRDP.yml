@@ -1,9 +1,9 @@
-# 🚀 Ultimate Performance & Android Emulator RDP Workflow (v5 - Stability Fix) 🚀
-# This version fixes the "Operation was canceled" error by manually accepting SDK
-# licenses, making the installation process more robust and less prone to timeouts.
+# 🚀 Ultimate Performance & Android Emulator RDP Workflow (v6 - Download Fix) 🚀
+# This version fixes the download step getting stuck by replacing the unreliable
+# Invoke-WebRequest with the more robust 'curl' command.
 # All previous lag-fix and performance optimizations are retained.
 
-name: Ultimate Performance & Android RDP (Stable Install)
+name: Ultimate Performance & Android RDP (Download Fixed)
 on:
   workflow_dispatch:
 
@@ -94,8 +94,11 @@ jobs:
         
         $sdkUrl = "https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip"
         $sdkZip = "$env:TEMP\sdk-tools.zip"
-        Write-Host "  - Downloading Android command-line tools..."
-        Invoke-WebRequest -Uri $sdkUrl -OutFile $sdkZip -UseBasicParsing
+        Write-Host "  - Downloading Android command-line tools with curl..."
+        # --- DOWNLOAD FIX: Replaced Invoke-WebRequest with the more reliable curl ---
+        curl.exe -L -o $sdkZip $sdkUrl
+        
+        Write-Host "  - Unzipping tools..."
         $sdkDir = "${env:ANDROID_SDK_ROOT}\cmdline-tools"
         New-Item -ItemType Directory -Path $sdkDir -Force
         Expand-Archive -Path $sdkZip -DestinationPath $sdkDir -Force
@@ -231,7 +234,7 @@ jobs:
         Write-Host "3. Paste it into your RDP client."
         Write-Host ""
         Write-Host "[INFO] STABILITY & LAG FIXES APPLIED:"
-        Write-Host "   [+] Android SDK installation is now more robust."
+        Write-Host "   [+] Android SDK download is now more reliable."
         Write-Host "   [+] RDP network protocol and video codec optimized for speed."
         Write-Host "   [+] Extra visual effects (like font smoothing) disabled."
         Write-Host "   [+] AVD uses a lightweight 'default' Android image to save resources."
