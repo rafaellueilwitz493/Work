@@ -110,11 +110,11 @@ jobs:
             
             # Create a startup script to continue the workflow after restart
             $startupScript = @"
-@echo off
-echo [INFO] System restarted - Virtualization features are now active
-echo [INFO] Continuing RDP setup...
-timeout /t 5 /nobreak > nul
-"@
+        @echo off
+        echo [INFO] System restarted - Virtualization features are now active
+        echo [INFO] Continuing RDP setup...
+        timeout /t 5 /nobreak > nul
+        "@
             $startupScript | Out-File -FilePath "C:\Windows\System32\GroupPolicy\Machine\Scripts\Startup\continue_setup.bat" -Encoding ASCII
             
             # Remove the restart flag
@@ -127,6 +127,7 @@ timeout /t 5 /nobreak > nul
             Write-Host "[SUCCESS] No restart required - virtualization features already enabled"
         }
     
+    - name: Setup Auto-Login RDP Administrator
       shell: powershell
       run: |
         Write-Host "[*] Setting up auto-login RDP administrator..."
@@ -458,6 +459,7 @@ timeout /t 5 /nobreak > nul
         Write-Host "   - RDP session remains accessible throughout the process"
         Write-Host "   - No manual intervention required"
         Write-Host ""
+        Write-Host "[INFO] ANDROID EMULATOR TIPS:"
         Write-Host "   - Use 'Pixel 3a API 30' or newer AVD for best compatibility"
         Write-Host "   - Enable 'Use Host GPU' in AVD settings"
         Write-Host "   - If emulator still fails, try x86_64 images instead of ARM"
