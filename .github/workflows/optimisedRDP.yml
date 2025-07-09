@@ -53,29 +53,40 @@ jobs:
         Write-Host "[*] Configuring virtualization environment for Android Studio emulator..."
         
         # Check if virtualization features are already enabled
-        $hyperVStatus = (Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Hypervisor).State
-        $hypervisorPlatformStatus = (Get-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform).State
-        $vmPlatformStatus = (Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform).State
-        
         $needsRestart = $false
         
-        # Enable Hyper-V Platform (required for Android emulator hardware acceleration)
-        if ($hyperVStatus -ne "Enabled") {
-            Write-Host "  - Enabling Hyper-V Platform for Android emulator..."
-            Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Hypervisor -All -NoRestart
-            $needsRestart = $true
+        # Try to enable Hyper-V Platform (required for Android emulator hardware acceleration)
+        try {
+            $hyperVStatus = (Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -ErrorAction SilentlyContinue).State
+            if ($hyperVStatus -ne "Enabled") {
+                Write-Host "  - Enabling Hyper-V Platform for Android emulator..."
+                Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All -All -NoRestart -ErrorAction SilentlyContinue
+                $needsRestart = $true
+            }
+        } catch {
+            Write-Host "  - INFO: Hyper-V not available on this system" -ForegroundColor Yellow
         }
         
-        if ($hypervisorPlatformStatus -ne "Enabled") {
-            Write-Host "  - Enabling Windows Hypervisor Platform..."
-            Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -All -NoRestart
-            $needsRestart = $true
+        try {
+            $hypervisorPlatformStatus = (Get-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -ErrorAction SilentlyContinue).State
+            if ($hypervisorPlatformStatus -ne "Enabled") {
+                Write-Host "  - Enabling Windows Hypervisor Platform..."
+                Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -All -NoRestart -ErrorAction SilentlyContinue
+                $needsRestart = $true
+            }
+        } catch {
+            Write-Host "  - INFO: Windows Hypervisor Platform not available" -ForegroundColor Yellow
         }
         
-        if ($vmPlatformStatus -ne "Enabled") {
-            Write-Host "  - Enabling Virtual Machine Platform..."
-            Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -All -NoRestart
-            $needsRestart = $true
+        try {
+            $vmPlatformStatus = (Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -ErrorAction SilentlyContinue).State
+            if ($vmPlatformStatus -ne "Enabled") {
+                Write-Host "  - Enabling Virtual Machine Platform..."
+                Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -All -NoRestart -ErrorAction SilentlyContinue
+                $needsRestart = $true
+            }
+        } catch {
+            Write-Host "  - INFO: Virtual Machine Platform not available" -ForegroundColor Yellow
         }
         
         # Configure HAXM alternative settings for GitHub Actions environment
