@@ -64,7 +64,7 @@ jobs:
         
         # --- Enhanced Credentials ---
         $username = "rdpadmin"
-        $password = "UltraFast2024!"
+        $password = "UF@2024HighSpeedRDP!"
         # --- Do not change the above ---
         
         $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
@@ -394,7 +394,7 @@ jobs:
         Write-Host ""
         Write-Host "[INFO] INSTANT AUTO-LOGIN CREDENTIALS:"
         Write-Host "   - Username: rdpadmin"
-        Write-Host "   - Password: UltraFast2024!"
+        Write-Host "   - Password: UF@2024HighSpeedRDP!"
         Write-Host ""
         Write-Host "[INFO] CONNECTION INSTRUCTIONS:"
         Write-Host "1. Visit: https://playit.gg/account/tunnels"
