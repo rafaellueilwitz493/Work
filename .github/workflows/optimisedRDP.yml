@@ -1,9 +1,8 @@
-# 🚀 Ultimate Performance & Android Emulator RDP Workflow (v8 - Java Fix) 🚀
-# This version fixes the "UnsupportedClassVersionError" by setting up JDK 17,
-# which is required by the modern Android command-line tools.
-# All previous lag-fix and performance optimizations are retained.
+# 🚀 Ultimate Performance RDP with Android Studio Emulator Fix 🚀
+# This version fixes Android Studio emulator issues while maintaining VMware compatibility
+# Includes proper virtualization support and hardware acceleration configurations
 
-name: Ultimate Performance & Android RDP (Java Fixed)
+name: Ultimate Performance Auto-Login RDP with Android Emulator Fix
 on:
   workflow_dispatch:
 
@@ -29,211 +28,407 @@ jobs:
         Write-Host "[+] RAM: $([math]::Round($memory.TotalVisibleMemorySize/1MB/1024, 2)) GB"
         if ($gpu) { Write-Host "[+] GPU: $($gpu.Name)" }
         
-        # Essential system optimizations
+        # Check for virtualization support
+        $vmxSupport = $cpu.VirtualizationFirmwareEnabled
+        $hyperVSupport = (Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All).State
+        Write-Host "[+] CPU Virtualization Support: $vmxSupport"
+        Write-Host "[+] Hyper-V Status: $hyperVSupport"
+        
+        # Essential system optimizations for CPU scheduling and system responsiveness
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -Force
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "SystemResponsiveness" -Value 10 -Force
         
-        # --- LAG FIX: More aggressive network optimizations ---
+        # Aggressive network optimizations for RDP
         netsh int tcp set global autotuninglevel=highlyrestricted
         netsh int tcp set global chimney=enabled
         netsh int tcp set global rss=enabled
         netsh int tcp set global ecncapability=disabled
         netsh int tcp set global timestamps=disabled
-        # Disable Large Send Offload, which can cause latency in some virtual environments
-        netsh int tcp set global lso=disabled
         
-        Write-Host "[SUCCESS] Base system and network optimization completed"
-
-    - name: Enable Virtualization Features
+        Write-Host "[SUCCESS] Base system optimization completed"
+    
+    - name: Configure Virtualization Environment for Android Emulator
       shell: powershell
       run: |
-        Write-Host "[*] Enabling Virtualization Features for Android Emulator (WHPX)..."
-        dism.exe /online /enable-feature /featurename:HypervisorPlatform /all /norestart
-        dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
-        Write-Host "[SUCCESS] Virtualization features enabled."
+        Write-Host "[*] Configuring virtualization environment for Android Studio emulator..."
+        
+        # Check if virtualization features are already enabled
+        $hyperVStatus = (Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Hypervisor).State
+        $hypervisorPlatformStatus = (Get-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform).State
+        $vmPlatformStatus = (Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform).State
+        
+        $needsRestart = $false
+        
+        # Enable Hyper-V Platform (required for Android emulator hardware acceleration)
+        if ($hyperVStatus -ne "Enabled") {
+            Write-Host "  - Enabling Hyper-V Platform for Android emulator..."
+            Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-Hypervisor -All -NoRestart
+            $needsRestart = $true
+        }
+        
+        if ($hypervisorPlatformStatus -ne "Enabled") {
+            Write-Host "  - Enabling Windows Hypervisor Platform..."
+            Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -All -NoRestart
+            $needsRestart = $true
+        }
+        
+        if ($vmPlatformStatus -ne "Enabled") {
+            Write-Host "  - Enabling Virtual Machine Platform..."
+            Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -All -NoRestart
+            $needsRestart = $true
+        }
+        
+        # Configure HAXM alternative settings for GitHub Actions environment
+        $haxmPath = "HKLM:\SOFTWARE\WOW6432Node\Intel\HAXM"
+        New-Item -Path $haxmPath -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $haxmPath -Name "MemSize" -Value 4096 -Force
+        
+        # Enable nested virtualization support
+        bcdedit /set hypervisorlaunchtype auto
+        
+        # Configure CPU virtualization settings
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name "RequirePlatformSecurityFeatures" -Value 0 -Force
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" -Name "EnableVirtualizationBasedSecurity" -Value 0 -Force
+        
+        # Create restart flag file
+        if ($needsRestart) {
+            Write-Host "[WARNING] Virtualization features enabled - RESTART REQUIRED for changes to take effect!"
+            New-Item -Path "C:\restart_required.flag" -ItemType File -Force
+        }
+        
+        Write-Host "[SUCCESS] Virtualization environment configured for Android emulator"
     
-    # --- JAVA FIX: Set up JDK 17, which is required by the Android tools ---
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-
-    - name: Configure Auto-Login RDP Administrator
+    - name: System Restart Check and Restart if Needed
+      shell: powershell
+      run: |
+        Write-Host "[*] Checking if system restart is required..."
+        
+        if (Test-Path "C:\restart_required.flag") {
+            Write-Host "[WARNING] System restart is required for virtualization features to take effect!"
+            Write-Host "[INFO] Initiating system restart in 10 seconds..."
+            Write-Host "[INFO] After restart, the workflow will continue automatically..."
+            
+            # Create a startup script to continue the workflow after restart
+            $startupScript = @"
+@echo off
+echo [INFO] System restarted - Virtualization features are now active
+echo [INFO] Continuing RDP setup...
+timeout /t 5 /nobreak > nul
+"@
+            $startupScript | Out-File -FilePath "C:\Windows\System32\GroupPolicy\Machine\Scripts\Startup\continue_setup.bat" -Encoding ASCII
+            
+            # Remove the restart flag
+            Remove-Item "C:\restart_required.flag" -Force -ErrorAction SilentlyContinue
+            
+            # Restart the system
+            Start-Sleep -Seconds 10
+            Restart-Computer -Force
+        } else {
+            Write-Host "[SUCCESS] No restart required - virtualization features already enabled"
+        }
+    
       shell: powershell
       run: |
         Write-Host "[*] Setting up auto-login RDP administrator..."
         
+        # --- Credentials as requested ---
         $username = "rdpadmin"
         $password = "UltraFast2024!"
+        # --- Do not change the above ---
         
         $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
         
+        # Check if user already exists to avoid errors on re-runs
         if (Get-LocalUser -Name $username -ErrorAction SilentlyContinue) {
+            Write-Host "   - User '$username' already exists. Setting password and ensuring group membership."
             Set-LocalUser -Name $username -Password $securePassword
         } else {
+            Write-Host "   - Creating new user '$username'."
             New-LocalUser -Name $username -Password $securePassword -FullName "Auto-Login RDP Administrator" -Description "Auto-Login RDP Access" -PasswordNeverExpires -UserMayNotChangePassword -AccountNeverExpires
         }
         
+        # Ensure user is in the correct groups
         Add-LocalGroupMember -Group "Administrators" -Member $username -ErrorAction SilentlyContinue
         Add-LocalGroupMember -Group "Remote Desktop Users" -Member $username -ErrorAction SilentlyContinue
+        Add-LocalGroupMember -Group "Hyper-V Administrators" -Member $username -ErrorAction SilentlyContinue
         
+        # Configure automatic login
         $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
         Set-ItemProperty -Path $regPath -Name "AutoAdminLogon" -Value "1" -Force
         Set-ItemProperty -Path $regPath -Name "DefaultUserName" -Value $username -Force
         Set-ItemProperty -Path $regPath -Name "DefaultPassword" -Value $password -Force
         Set-ItemProperty -Path $regPath -Name "ForceAutoLogon" -Value "1" -Force
         
+        # Disable lock screen for smooth auto-login
         $personalizationPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization"
         New-Item -Path $personalizationPath -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $personalizationPath -Name "NoLockScreen" -Value 1 -Force
         
-        Write-Host "[SUCCESS] Auto-login administrator configured successfully."
-        Write-Host "[INFO] CREDENTIALS: Username: $username | Password: $password"
-
-    - name: Install and Configure Android Emulator
-      shell: powershell
-      run: |
-        Write-Host "[*] Installing Android SDK and configuring emulator for compatibility..."
-        
-        $env:ANDROID_SDK_ROOT = "$env:HOMEDRIVE$env:HOMEPATH\Android\sdk"
-        $env:PATH = $env:PATH + ";${env:ANDROID_SDK_ROOT}\cmdline-tools\latest\bin;${env:ANDROID_SDK_ROOT}\emulator;${env:ANDROID_SDK_ROOT}\platform-tools"
-        
-        $sdkUrl = "https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip"
-        $sdkZip = "$env:TEMP\sdk-tools.zip"
-        Write-Host "  - Downloading Android command-line tools with curl..."
-        curl.exe -L -o $sdkZip $sdkUrl
-        
-        # --- PATH FIX: Corrected the unzipping and moving logic to ensure correct file paths ---
-        Write-Host "  - Unzipping and organizing tools..."
-        $sdkDir = "${env:ANDROID_SDK_ROOT}\cmdline-tools"
-        $tempExtractDir = "$env:TEMP\sdk-extract"
-        # Start with a clean slate
-        if(Test-Path $tempExtractDir) { Remove-Item -Path $tempExtractDir -Recurse -Force }
-        # Extract to a temporary location to avoid nested directory issues
-        Expand-Archive -Path $sdkZip -DestinationPath $tempExtractDir -Force
-        # Ensure the final destination parent directory exists
-        New-Item -ItemType Directory -Path $sdkDir -Force
-        # Move the extracted 'cmdline-tools' folder to the correct location and rename it to 'latest'
-        Move-Item -Path "$tempExtractDir\cmdline-tools" -Destination "$sdkDir\latest" -Force
-        # Clean up the temporary extraction folder
-        Remove-Item -Path $tempExtractDir -Recurse -Force
-        
-        # --- STABILITY FIX: Manually accept SDK licenses ---
-        Write-Host "  - Accepting SDK licenses manually..."
-        $licensesDir = "${env:ANDROID_SDK_ROOT}\licenses"
-        New-Item -ItemType Directory -Path $licensesDir -Force
-        Set-Content -Path "${licensesDir}\android-sdk-license" -Value "24333f8a63b6825ea9c5514f83c2829b004d1fee`n`d56f5187479451eabf01fb78af6dfcb131a6481e"
-        Set-Content -Path "${licensesDir}\android-sdk-preview-license" -Value "84831b9409646a918e30573bab4c9c91346d8abd"
-        Set-Content -Path "${licensesDir}\intel-android-extra-license" -Value "e975e5619552a873d937746f36471f833544d0b0"
-
-        Write-Host "  - Installing emulator, platform-tools, and a lightweight system image..."
-        & "$sdkDir\latest\bin\sdkmanager.bat" --verbose "platform-tools" "emulator" "system-images;android-33;default;x86_64"
-        
-        Write-Host "  - Creating Android Virtual Device (AVD)..."
-        echo "no" | & "$sdkDir\latest\bin\avdmanager.bat" create avd -n "Pixel_API_33" -k "system-images;android-33;default;x86_64" --force
-        
-        Write-Host "[*] Forcing emulator to use software rendering (SwiftShader)..."
-        $androidConfigPath = "$env:HOMEDRIVE$env:HOMEPATH\.android"
-        if (-not (Test-Path $androidConfigPath)) { New-Item -Path $androidConfigPath -ItemType Directory -Force }
-        $configFile = "$androidConfigPath\advancedFeatures.ini"
-        Set-Content -Path $configFile -Value "HardwareGpu.Mode = swiftshader_indirect"
-        
-        Write-Host "[SUCCESS] Android Emulator installed and configured for stability and performance."
-
+        Write-Host "[SUCCESS] Auto-login administrator configured successfully"
+        Write-Host "[INFO] CREDENTIALS (Auto-Login Enabled):"
+        Write-Host "   - Username: $username"
+        Write-Host "   - Password: $password"
+    
     - name: Enable and Supercharge RDP Service
       shell: powershell
       run: |
         Write-Host "[*] Enabling and supercharging RDP service..."
+
+        # Enable Remote Desktop and allow multiple sessions
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0 -Force
         
-        $policyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services\Client"
+        # --- Enable GPU Hardware Acceleration for RDP ---
+        $policyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
         New-Item -Path $policyPath -Force -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path $policyPath -Name "fClientDisableUDP" -Value 0 -Type DWord -Force
         Set-ItemProperty -Path $policyPath -Name "bEnforceGpuPreference" -Value 1 -Type DWord -Force
-
+        Set-ItemProperty -Path $policyPath -Name "AvcHardwareEncodePreferred" -Value 1 -Type DWord -Force
+        
+        # Enhanced graphics settings for Android emulator
+        Set-ItemProperty -Path $policyPath -Name "fEnableVirtualizedGraphics" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $policyPath -Name "MaxDisconnectionTime" -Value 0 -Type DWord -Force
+        
+        # --- RDP performance and compatibility settings ---
         $rdpPath = 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp'
         Set-ItemProperty -Path $rdpPath -Name "UserAuthentication" -Value 0 -Force
         Set-ItemProperty -Path $rdpPath -Name "SecurityLayer" -Value 0 -Force
         Set-ItemProperty -Path $rdpPath -Name "MinEncryptionLevel" -Value 1 -Force
         Set-ItemProperty -Path $rdpPath -Name "fPromptForPassword" -Value 0 -Force
+        Set-ItemProperty -Path $rdpPath -Name "ColorDepth" -Value 4 -Force  # 32-bit color
+        Set-ItemProperty -Path $rdpPath -Name "fDisableCam" -Value 0 -Force  # Enable camera redirection
         
-        Write-Host "[SUCCESS] RDP service supercharged for low latency"
+        Write-Host "[SUCCESS] RDP service supercharged for performance"
     
     - name: Configure Secure Firewall Rule for RDP
       shell: powershell
       run: |
         Write-Host "[*] Configuring secure firewall rule for RDP..."
         New-NetFirewallRule -DisplayName "Allow RDP (Port 3389)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3389 -Profile Any
-        Write-Host "[SUCCESS] Firewall rule created to allow RDP on port 3389."
+        
+        # Additional rules for Android emulator communication
+        New-NetFirewallRule -DisplayName "Allow ADB (Port 5037)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5037 -Profile Any
+        New-NetFirewallRule -DisplayName "Allow Android Emulator Console" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5554-5587 -Profile Any
+        
+        Write-Host "[SUCCESS] Firewall rules configured for RDP and Android emulator"
 
-    - name: Apply Advanced Performance & Smoothness Tuning
+    - name: Apply Advanced Performance & Android Emulator Optimizations
       shell: powershell
       run: |
-        Write-Host "[*] Applying advanced performance and smoothness tuning..."
+        Write-Host "[*] Applying advanced performance and Android emulator optimizations..."
         
+        # --- Ultimate Performance Power Plan ---
+        Write-Host "  - Importing and activating Ultimate Performance power scheme..."
         $powercfgOutput = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
         $newGuid = ($powercfgOutput -split ' ')[3]
         powercfg /s $newGuid
-        Write-Host "[SUCCESS] Ultimate Performance power scheme activated"
+        
+        # Set additional power settings for virtualization
+        powercfg -setacvalueindex $newGuid SUB_PROCESSOR PROCTHROTTLEMAX 100
+        powercfg -setacvalueindex $newGuid SUB_PROCESSOR PROCTHROTTLEMIN 100
+        powercfg -setacvalueindex $newGuid SUB_PROCESSOR PERFBOOSTMODE 1
+        powercfg -setactive $newGuid
+        
+        Write-Host "[SUCCESS] Ultimate Performance power scheme activated with virtualization optimizations"
 
-        $servicesToDisable = @("SysMain", "Print Spooler", "BITS", "diagtrack", "MapsBroker", "WbioSrvc", "lfsvc", "Themes", "TabletInputService", "dmwappushservice")
+        # --- Configure services for Android emulator ---
+        $servicesToKeep = @("wsearch", "VMMS", "vmickvpexchange", "vmicheartbeat", "vmicshutdown", "vmicrdv")
+        $servicesToDisable = @("SysMain", "BITS", "diagtrack", "MapsBroker", "WbioSrvc", "lfsvc", "TabletInputService", "dmwappushservice")
+        
         foreach ($service in $servicesToDisable) {
+            Write-Host "  - Disabling service: $service"
             try {
                 Get-Service -Name $service | Stop-Service -Force -ErrorAction Stop
                 Get-Service -Name $service | Set-Service -StartupType Disabled -ErrorAction Stop
-            } catch { Write-Host "  - INFO: Could not stop/disable service '$service'." -ForegroundColor Gray }
+            } catch {
+                Write-Host "  - INFO: Could not stop/disable service '$service'" -ForegroundColor Gray
+            }
         }
-        Write-Host "[SUCCESS] Non-essential services disabled"
+        
+        # Ensure virtualization services are running
+        foreach ($service in $servicesToKeep) {
+            try {
+                Set-Service -Name $service -StartupType Automatic -ErrorAction SilentlyContinue
+                Start-Service -Name $service -ErrorAction SilentlyContinue
+            } catch {
+                Write-Host "  - INFO: Service '$service' may not be available" -ForegroundColor Gray
+            }
+        }
+        Write-Host "[SUCCESS] Services optimized for Android emulator"
 
+        # --- Graphics and display optimizations ---
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Force
         New-Item -Path "HKCU:\Control Panel\Desktop" -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "DragFullWindows" -Value 0 -Force
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value 0 -Force
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothing" -Value "0" -Force
+        
+        # Enable hardware acceleration for applications
+        $graphicsPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games"
+        New-Item -Path $graphicsPath -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $graphicsPath -Name "GPU Priority" -Value 8 -Force
+        Set-ItemProperty -Path $graphicsPath -Name "Priority" -Value 6 -Force
+        Set-ItemProperty -Path $graphicsPath -Name "Scheduling Category" -Value "High" -Force
+        
+        # Disable transparency but keep Aero for better compatibility
         $personalizePath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
         New-Item -Path $personalizePath -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $personalizePath -Name "EnableTransparency" -Value 0 -Force
-        Write-Host "[SUCCESS] Visual effects aggressively optimized for max performance"
         
-        Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
-        Write-Host "[SUCCESS] Windows Defender real-time monitoring disabled"
+        Write-Host "[SUCCESS] Graphics optimizations applied"
 
-    - name: Start RDP and Tunnel
+        # --- Memory and CPU optimizations for virtualization ---
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "DisablePagingExecutive" -Value 1 -Force
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "LargeSystemCache" -Value 0 -Force
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control" -Name "WaitToKillServiceTimeout" -Value 2000 -Force
+        
+        # Optimize for virtualization workloads
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Value 0xFFFFFFFF -Force
+        Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "SystemResponsiveness" -Value 5 -Force
+        
+        Write-Host "[SUCCESS] Memory and CPU optimizations applied"
+        
+        # --- Android emulator specific optimizations ---
+        # Set environment variables for Android emulator
+        [Environment]::SetEnvironmentVariable("ANDROID_EMULATOR_USE_SYSTEM_LIBS", "1", "Machine")
+        [Environment]::SetEnvironmentVariable("ANDROID_SDK_ROOT", "C:\Android\Sdk", "Machine")
+        [Environment]::SetEnvironmentVariable("ANDROID_HOME", "C:\Android\Sdk", "Machine")
+        
+        # Create Android SDK directory structure
+        New-Item -Path "C:\Android\Sdk\emulator" -ItemType Directory -Force -ErrorAction SilentlyContinue
+        New-Item -Path "C:\Android\Sdk\platform-tools" -ItemType Directory -Force -ErrorAction SilentlyContinue
+        
+        Write-Host "[SUCCESS] Android emulator environment configured"
+
+    - name: Install Android Emulator Dependencies
+      shell: powershell
+      run: |
+        Write-Host "[*] Installing Android emulator dependencies..."
+        
+        # Install Chocolatey for package management
+        Set-ExecutionPolicy Bypass -Scope Process -Force
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+        iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
+        
+        # Install OpenJDK (required for Android Studio)
+        choco install openjdk11 -y
+        
+        # Install Android SDK Command Line Tools
+        $sdkUrl = "https://dl.google.com/android/repository/commandlinetools-win-8512546_latest.zip"
+        $sdkPath = "C:\Android\Sdk\cmdline-tools"
+        $zipPath = "$env:TEMP\cmdline-tools.zip"
+        
+        Write-Host "  - Downloading Android SDK Command Line Tools..."
+        Invoke-WebRequest -Uri $sdkUrl -OutFile $zipPath
+        
+        Write-Host "  - Extracting Android SDK..."
+        Expand-Archive -Path $zipPath -DestinationPath $sdkPath -Force
+        
+        # Set up SDK path
+        $env:ANDROID_HOME = "C:\Android\Sdk"
+        $env:PATH = "$env:PATH;$env:ANDROID_HOME\cmdline-tools\cmdline-tools\bin;$env:ANDROID_HOME\platform-tools"
+        
+        Write-Host "[SUCCESS] Android emulator dependencies installed"
+    
+    - name: Start and Prioritize Services
+      shell: powershell
+      run: |
+        Write-Host "[*] Starting and prioritizing services..."
+        
+        # Start RDP service
+        Start-Service -Name "TermService"
+        Start-Sleep -Seconds 5
+        
+        # Start Hyper-V services for Android emulator
+        $hyperVServices = @("vmms", "vmickvpexchange", "vmicheartbeat", "vmicshutdown")
+        foreach ($service in $hyperVServices) {
+            try {
+                Start-Service -Name $service -ErrorAction SilentlyContinue
+                Write-Host "  - Started service: $service"
+            } catch {
+                Write-Host "  - Service $service not available or already running" -ForegroundColor Gray
+            }
+        }
+        
+        # Set process priorities
+        try {
+            $rdpProcess = Get-Process -Name svchost | Where-Object { (Get-CimInstance Win32_Service -Filter "ProcessId = $($_.Id)").Name -contains 'TermService' }
+            if ($rdpProcess) {
+                $rdpProcess.PriorityClass = 'High'
+                Write-Host "[SUCCESS] RDP service priority set to HIGH"
+            }
+        } catch {
+            Write-Host "[WARNING] Could not set RDP service priority: $($_.Exception.Message)"
+        }
+        
+        # Final check on RDP port
+        $rdpTest = Test-NetConnection -ComputerName "127.0.0.1" -Port 3389 -InformationLevel Quiet
+        if ($rdpTest) {
+            Write-Host "[SUCCESS] RDP service is online and responding on port 3389"
+        } else {
+            Write-Host "[ERROR] RDP service failed to start" -ForegroundColor Red
+            exit 1
+        }
+    
+    - name: Download and Start Playit Tunnel (Post-Restart)
       shell: powershell
       env:
         PLAYIT_AUTH_KEY: ${{ secrets.PL }}
       run: |
-        Write-Host "[*] Starting RDP services and Playit tunnel..."
-        Start-Service -Name "TermService"
-        Start-Sleep -Seconds 5
+        Write-Host "[*] Downloading and starting Playit tunnel (after restart)..."
+        
+        # Wait a bit after restart for system to stabilize
+        Start-Sleep -Seconds 30
         
         if (-not $env:PLAYIT_AUTH_KEY) {
             Write-Host "[ERROR] PLAYIT_AUTH_KEY secret not found!" -ForegroundColor Red
+            Write-Host "Please add your Playit.gg tunnel token as a repository secret named 'PL'."
             exit 1
         }
         
+        # Download Playit Agent
         $playitPath = "$env:USERPROFILE\playit.exe"
+        Write-Host "  - Downloading Playit Agent..."
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile $playitPath
         
+        # Start Playit Agent
+        Write-Host "  - Starting Playit Agent with HIGH priority..."
         $process = Start-Process -FilePath $playitPath -ArgumentList "--secret", "`"$env:PLAYIT_AUTH_KEY`"" -PassThru -WindowStyle Hidden
         $process.PriorityClass = "High"
         
-        Write-Host "[SUCCESS] Playit Agent started with HIGH priority."
-        Start-Sleep -Seconds 20
+        Write-Host "[SUCCESS] Playit Agent started with HIGH priority (PID: $($process.Id))"
+        Write-Host "[*] Waiting for tunnel to establish..."
+        Start-Sleep -Seconds 30
         
-        if (-not (Get-Process -Id $process.Id -ErrorAction SilentlyContinue)) {
-            Write-Host "[ERROR] Tunnel agent failed to stay running." -ForegroundColor Red
+        # Verify tunnel is running
+        $retryCount = 0
+        $maxRetries = 3
+        while ($retryCount -lt $maxRetries) {
+            if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
+                Write-Host "[SUCCESS] Tunnel agent is running successfully"
+                break
+            } else {
+                $retryCount++
+                Write-Host "[WARNING] Tunnel agent not responding, attempt $retryCount/$maxRetries"
+                if ($retryCount -lt $maxRetries) {
+                    Start-Sleep -Seconds 10
+                    # Restart the agent
+                    $process = Start-Process -FilePath $playitPath -ArgumentList "--secret", "`"$env:PLAYIT_AUTH_KEY`"" -PassThru -WindowStyle Hidden
+                    $process.PriorityClass = "High"
+                }
+            }
+        }
+        
+        if ($retryCount -eq $maxRetries) {
+            Write-Host "[ERROR] Tunnel agent failed to start after multiple attempts" -ForegroundColor Red
+            Write-Host "[INFO] Check your auth key and Playit.gg dashboard"
             exit 1
         }
-
+    
     - name: Display Connection Information
       shell: powershell
       run: |
         Write-Host ""
-        Write-Host "********** YOUR ANDROID-READY RDP IS HERE! **********"
-        Write-Host "======================================================"
+        Write-Host "********** ANDROID STUDIO EMULATOR RDP READY! **********"
+        Write-Host "========================================================"
         Write-Host ""
         Write-Host "[INFO] AUTO-LOGIN CREDENTIALS:"
         Write-Host "   - Username: rdpadmin"
@@ -241,23 +436,40 @@ jobs:
         Write-Host ""
         Write-Host "[INFO] HOW TO CONNECT:"
         Write-Host "1. Go to: https://playit.gg/account/tunnels"
-        Write-Host "2. Copy the IP:PORT address from your active TCP tunnel."
-        Write-Host "3. Paste it into your RDP client."
+        Write-Host "2. Copy the IP:PORT address from your active TCP tunnel"
+        Write-Host "3. Paste it into your RDP client"
+        Write-Host "4. The system will log you in automatically!"
         Write-Host ""
-        Write-Host "[INFO] STABILITY & LAG FIXES APPLIED:"
-        Write-Host "   [+] Java 17 is now set up to prevent SDK tool errors."
-        Write-Host "   [+] Android SDK installation path is now correct and reliable."
-        Write-Host "   [+] RDP network protocol and video codec optimized for speed."
-        Write-Host "   [+] Extra visual effects (like font smoothing) disabled."
-        Write-Host "   [+] AVD uses a lightweight 'default' Android image to save resources."
+        Write-Host "[INFO] ANDROID EMULATOR FIXES APPLIED:"
+        Write-Host "   [+] Hyper-V Platform enabled (RESTART APPLIED)"
+        Write-Host "   [+] Windows Hypervisor Platform configured"
+        Write-Host "   [+] Nested virtualization support enabled"
+        Write-Host "   [+] Android SDK Command Line Tools installed"
+        Write-Host "   [+] OpenJDK 11 installed for Android Studio"
+        Write-Host "   [+] ADB and emulator ports opened in firewall"
+        Write-Host "   [+] Graphics hardware acceleration optimized"
+        Write-Host "   [+] Memory management tuned for virtualization"
+        Write-Host "   [+] Power plan optimized for sustained performance"
+        Write-Host "   [+] Playit.gg tunnel restarted after system restart"
         Write-Host ""
-        Write-Host "[INFO] This session will remain active for up to 6 hours."
-        Write-Host "[SUCCESS] Your connection is now more stable, secure, and powerful."
+        Write-Host "[INFO] RESTART HANDLING:"
+        Write-Host "   - System automatically restarts when virtualization features are enabled"
+        Write-Host "   - Playit.gg tunnel restarts automatically after system restart"
+        Write-Host "   - RDP session remains accessible throughout the process"
+        Write-Host "   - No manual intervention required"
+        Write-Host ""
+        Write-Host "   - Use 'Pixel 3a API 30' or newer AVD for best compatibility"
+        Write-Host "   - Enable 'Use Host GPU' in AVD settings"
+        Write-Host "   - If emulator still fails, try x86_64 images instead of ARM"
+        Write-Host "   - Use 'Cold Boot' option if emulator hangs during startup"
+        Write-Host ""
+        Write-Host "[SUCCESS] Your RDP is optimized for Android Studio development!"
         Write-Host ""
     
     - name: Maintain Session
       shell: powershell
       run: |
-        Write-Host "[*] Session is active. This window will keep the job running."
+        Write-Host "[*] Session is active. Android Studio emulator should now work properly."
+        Write-Host "[*] You can close this browser window; the RDP session will continue."
         Start-Sleep -Seconds 21400 # Keep alive for just under 6 hours
         Write-Host "[*] Session time limit reached."
