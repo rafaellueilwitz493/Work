@@ -1,9 +1,9 @@
-# 🚀 Ultimate Performance & Android Emulator RDP Workflow (v7 - Path Fix) 🚀
-# This version fixes the "sdkmanager.bat not recognized" error by correcting the
-# file path logic during the SDK installation.
+# 🚀 Ultimate Performance & Android Emulator RDP Workflow (v8 - Java Fix) 🚀
+# This version fixes the "UnsupportedClassVersionError" by setting up JDK 17,
+# which is required by the modern Android command-line tools.
 # All previous lag-fix and performance optimizations are retained.
 
-name: Ultimate Performance & Android RDP (Path Fixed)
+name: Ultimate Performance & Android RDP (Java Fixed)
 on:
   workflow_dispatch:
 
@@ -52,6 +52,13 @@ jobs:
         dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
         Write-Host "[SUCCESS] Virtualization features enabled."
     
+    # --- JAVA FIX: Set up JDK 17, which is required by the Android tools ---
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
     - name: Configure Auto-Login RDP Administrator
       shell: powershell
       run: |
@@ -238,6 +245,7 @@ jobs:
         Write-Host "3. Paste it into your RDP client."
         Write-Host ""
         Write-Host "[INFO] STABILITY & LAG FIXES APPLIED:"
+        Write-Host "   [+] Java 17 is now set up to prevent SDK tool errors."
         Write-Host "   [+] Android SDK installation path is now correct and reliable."
         Write-Host "   [+] RDP network protocol and video codec optimized for speed."
         Write-Host "   [+] Extra visual effects (like font smoothing) disabled."
