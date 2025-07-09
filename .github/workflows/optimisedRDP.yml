@@ -42,7 +42,12 @@ jobs:
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "DefaultUserName" -Value $username -Force
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "DefaultPassword" -Value $password -Force
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "ForceAutoLogon" -Value "1" -Force
-        Set-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization" -Name "NoLockScreen" -Value 1 -Force
+
+        $lockScreenPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization"
+        if (-not (Test-Path $lockScreenPath)) {
+          New-Item -Path $lockScreenPath -Force | Out-Null
+        }
+        Set-ItemProperty -Path $lockScreenPath -Name "NoLockScreen" -Value 1 -Force
 
     - name: Enable and Configure RDP
       shell: powershell
