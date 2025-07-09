@@ -1,9 +1,9 @@
-# 🚀 Ultimate Performance & Android Emulator RDP Workflow (v4 - Lag Fix) 🚀
-# This version aggressively targets RDP lag by optimizing network protocols,
-# disabling more visual effects, and using a lighter Android system image.
-# The emulator continues to use a stable software renderer.
+# 🚀 Ultimate Performance & Android Emulator RDP Workflow (v5 - Stability Fix) 🚀
+# This version fixes the "Operation was canceled" error by manually accepting SDK
+# licenses, making the installation process more robust and less prone to timeouts.
+# All previous lag-fix and performance optimizations are retained.
 
-name: Ultimate Performance & Android RDP (Lag Fixed)
+name: Ultimate Performance & Android RDP (Stable Install)
 on:
   workflow_dispatch:
 
@@ -94,17 +94,25 @@ jobs:
         
         $sdkUrl = "https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip"
         $sdkZip = "$env:TEMP\sdk-tools.zip"
-        Invoke-WebRequest -Uri $sdkUrl -OutFile $sdkZip
+        Write-Host "  - Downloading Android command-line tools..."
+        Invoke-WebRequest -Uri $sdkUrl -OutFile $sdkZip -UseBasicParsing
         $sdkDir = "${env:ANDROID_SDK_ROOT}\cmdline-tools"
         New-Item -ItemType Directory -Path $sdkDir -Force
         Expand-Archive -Path $sdkZip -DestinationPath $sdkDir -Force
         Move-Item -Path "$sdkDir\cmdline-tools\*" -Destination "$sdkDir" -Force
         Rename-Item -Path "$sdkDir\cmdline-tools" -NewName "latest"
         
+        # --- STABILITY FIX: Manually accept SDK licenses to prevent interactive prompts from hanging ---
+        Write-Host "  - Accepting SDK licenses manually..."
+        $licensesDir = "${env:ANDROID_SDK_ROOT}\licenses"
+        New-Item -ItemType Directory -Path $licensesDir -Force
+        Set-Content -Path "${licensesDir}\android-sdk-license" -Value "24333f8a63b6825ea9c5514f83c2829b004d1fee`n`d56f5187479451eabf01fb78af6dfcb131a6481e"
+        Set-Content -Path "${licensesDir}\android-sdk-preview-license" -Value "84831b9409646a918e30573bab4c9c91346d8abd"
+        Set-Content -Path "${licensesDir}\intel-android-extra-license" -Value "e975e5619552a873d937746f36471f833544d0b0"
+
         Write-Host "  - Installing emulator, platform-tools, and a lightweight system image..."
-        yes | & "$sdkDir\latest\bin\sdkmanager.bat" --licenses > $null
-        # --- LAG FIX: Use the 'default' image instead of 'google_apis' for lower resource usage ---
-        & "$sdkDir\latest\bin\sdkmanager.bat" "platform-tools" "emulator" "system-images;android-33;default;x86_64"
+        # Use --verbose to provide output and prevent the runner from thinking the process is hung
+        & "$sdkDir\latest\bin\sdkmanager.bat" --verbose "platform-tools" "emulator" "system-images;android-33;default;x86_64"
         
         Write-Host "  - Creating Android Virtual Device (AVD)..."
         echo "no" | & "$sdkDir\latest\bin\avdmanager.bat" create avd -n "Pixel_API_33" -k "system-images;android-33;default;x86_64" --force
@@ -222,7 +230,8 @@ jobs:
         Write-Host "2. Copy the IP:PORT address from your active TCP tunnel."
         Write-Host "3. Paste it into your RDP client."
         Write-Host ""
-        Write-Host "[INFO] LAG FIXES APPLIED:"
+        Write-Host "[INFO] STABILITY & LAG FIXES APPLIED:"
+        Write-Host "   [+] Android SDK installation is now more robust."
         Write-Host "   [+] RDP network protocol and video codec optimized for speed."
         Write-Host "   [+] Extra visual effects (like font smoothing) disabled."
         Write-Host "   [+] AVD uses a lightweight 'default' Android image to save resources."
