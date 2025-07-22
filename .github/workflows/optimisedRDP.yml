@@ -85,7 +85,6 @@ jobs:
         # --- 2. Aggressive Network Optimizations for Zero Lag ---
         Write-Host "  - Applying aggressive TCP settings for low latency..."
         netsh int tcp set global autotuninglevel=experimental
-        # FIX: Correct syntax for setting congestion provider on modern Windows
         netsh int tcp set supplemental template=internet congestionprovider=ctcp
         netsh int tcp set global rss=enabled
         netsh int tcp set global rsc=enabled
@@ -160,9 +159,9 @@ jobs:
         
         # Download and run Playit tunnel
         Write-Host "[*] Downloading and starting Playit.gg tunnel..."
-        # FIX: Force TLS 1.2 to prevent download error "The connection was closed unexpectedly"
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile "playit.exe"
+        # FIX: Using curl for a more robust download to prevent connection errors.
+        curl.exe -L -o playit.exe "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe"
+        
         $playitProcess = Start-Process -FilePath ".\playit.exe" -ArgumentList "--secret ${{ secrets.PL }}" -PassThru -WindowStyle Hidden
         $playitProcess.PriorityClass = "Realtime"
         Write-Host "[SUCCESS] Playit tunnel agent started with REALTIME priority (PID: $($playitProcess.Id))."
