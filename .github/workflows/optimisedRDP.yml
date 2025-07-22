@@ -10,7 +10,7 @@
 # experimental network settings, disabled security features like Defender). This is
 # intended for performance-critical tasks on a disposable, isolated VM.
 #
-name: Extreme Performance RDP Tunnel
+name: Extreme Performance RDP Tunnel (Fixed)
 on:
   workflow_dispatch:
 
@@ -26,7 +26,7 @@ jobs:
     - name: Configure Auto-Login Administrator
       shell: powershell
       run: |
-        $username = "Admin"
+        $username = "rdpadmin"
         $password = "UltraFast2024!"
         Write-Host "[*] Configuring auto-login user: $username"
         $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
@@ -85,7 +85,8 @@ jobs:
         # --- 2. Aggressive Network Optimizations for Zero Lag ---
         Write-Host "  - Applying aggressive TCP settings for low latency..."
         netsh int tcp set global autotuninglevel=experimental
-        netsh int tcp set global congestionprovider=ctcp
+        # FIX: Correct syntax for setting congestion provider on modern Windows
+        netsh int tcp set supplemental template=internet congestionprovider=ctcp
         netsh int tcp set global rss=enabled
         netsh int tcp set global rsc=enabled
         netsh int tcp set global ecncapability=disabled
@@ -159,6 +160,8 @@ jobs:
         
         # Download and run Playit tunnel
         Write-Host "[*] Downloading and starting Playit.gg tunnel..."
+        # FIX: Force TLS 1.2 to prevent download error "The connection was closed unexpectedly"
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile "playit.exe"
         $playitProcess = Start-Process -FilePath ".\playit.exe" -ArgumentList "--secret ${{ secrets.PL }}" -PassThru -WindowStyle Hidden
         $playitProcess.PriorityClass = "Realtime"
