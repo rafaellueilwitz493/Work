@@ -157,11 +157,28 @@ jobs:
             Write-Host "[WARNING] Could not set RDP service to realtime priority."
         }
         
-        # Download and run Playit tunnel
+        # FIX: Robust download using GitHub API to get direct URL
         Write-Host "[*] Downloading and starting Playit.gg tunnel..."
-        # FIX: Using curl for a more robust download to prevent connection errors.
-        curl.exe -L -o playit.exe "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe"
+        Write-Host "  - Fetching latest release information from GitHub API..."
+        $releaseInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/playit-cloud/playit-agent/releases/latest"
+        $downloadUrl = $releaseInfo.assets | Where-Object { $_.name -eq 'playit-windows-x86_64-signed.exe' } | Select-Object -ExpandProperty browser_download_url
         
+        if (-not $downloadUrl) {
+            Write-Host "[ERROR] Could not find the download URL for playit.exe in the latest release." -ForegroundColor Red
+            exit 1
+        }
+        
+        Write-Host "  - Downloading from direct URL: $downloadUrl"
+        curl.exe -L -o playit.exe $downloadUrl
+        
+        # Verify download was successful
+        $fileSize = (Get-Item -Path ".\playit.exe").Length
+        if ($fileSize -lt 1000000) { # A real exe will be > 1MB
+             Write-Host "[ERROR] Downloaded file is too small ($fileSize bytes). Download likely failed." -ForegroundColor Red
+             exit 1
+        }
+        Write-Host "[SUCCESS] Downloaded playit.exe successfully."
+
         $playitProcess = Start-Process -FilePath ".\playit.exe" -ArgumentList "--secret ${{ secrets.PL }}" -PassThru -WindowStyle Hidden
         $playitProcess.PriorityClass = "Realtime"
         Write-Host "[SUCCESS] Playit tunnel agent started with REALTIME priority (PID: $($playitProcess.Id))."
