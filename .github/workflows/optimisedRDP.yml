@@ -27,7 +27,7 @@ jobs:
       shell: powershell
       run: |
         $username = "Admin"
-        $password = "ExtremeRDP@2024"
+        $password = "UltraFast2024!"
         Write-Host "[*] Configuring auto-login user: $username"
         $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
         
