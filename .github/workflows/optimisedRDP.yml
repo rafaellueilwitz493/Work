@@ -87,7 +87,6 @@ jobs:
       shell: powershell
       run: |
         Write-Host "[*] Enabling and supercharging RDP service..."
-
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
         Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fSingleSessionPerUser" -Value 0 -Force
         
@@ -111,7 +110,6 @@ jobs:
         Write-Host "[*] Configuring secure firewall rule for RDP..."
         New-NetFirewallRule -DisplayName "Allow RDP (Port 3389)" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3389 -Profile Any
         Write-Host "[SUCCESS] Firewall rule created to allow RDP on port 3389."
-
     - name: Apply Advanced Performance & Smoothness Tuning
       shell: powershell
       run: |
@@ -124,7 +122,6 @@ jobs:
         powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
         powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
         Write-Host "[SUCCESS] Ultimate Performance power scheme ($newGuid) activated with CPU throttling disabled"
-
         $servicesToDisable = @("SysMain", "Print Spooler", "BITS", "diagtrack", "MapsBroker", "WbioSrvc", "lfsvc", "Themes", "TabletInputService", "dmwappushservice", "WwanSvc", "XblAuthManager", "XblGameSave")
         foreach ($service in $servicesToDisable) {
             Write-Host "  - Disabling service: $service"
@@ -136,23 +133,19 @@ jobs:
             }
         }
         Write-Host "[SUCCESS] Additional non-essential services disabled"
-
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Force
         New-Item -Path "HKCU:\Control Panel\Desktop" -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "DragFullWindows" -Value 0 -Force
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value 0 -Force
         Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -Value 0 -Force
         Write-Host "[SUCCESS] Visual effects optimized for max performance"
-
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "DisablePagingExecutive" -Value 1 -Force
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "LargeSystemCache" -Value 1 -Force
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control" -Name "WaitToKillServiceTimeout" -Value 1000 -Force
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Value 0xFFFFFFFF -Force
         Write-Host "[SUCCESS] System responsiveness and memory optimized"
-
         Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
         Write-Host "[SUCCESS] Windows Defender real-time monitoring disabled"
-
     - name: Start and Prioritize RDP Services
       shell: powershell
       run: |
