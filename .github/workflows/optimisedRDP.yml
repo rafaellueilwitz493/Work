@@ -7,8 +7,9 @@
 # maximum performance, low latency, and a smooth, responsive desktop experience.
 #
 # WARNING: The optimizations applied are extreme (e.g., 'Realtime' process priority,
-# experimental network settings, disabled security features like Defender). This is
-# intended for performance-critical tasks on a disposable, isolated VM.
+# disabled security mitigations like Spectre/Meltdown, experimental network settings,
+# disabled security features like Defender). This is intended for performance-critical
+# tasks on a disposable, isolated VM. Use with caution.
 #
 name: Extreme Performance RDP Tunnel (Fixed)
 on:
@@ -82,6 +83,9 @@ jobs:
         Write-Host "  - Setting CPU scheduling for foreground apps..."
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -Force
         
+        Write-Host "  - Disabling system-wide Power Throttling..."
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling" -Name "PowerThrottlingOff" -Value 1 -Force
+
         # --- 2. Aggressive Network Optimizations for Zero Lag ---
         Write-Host "  - Applying aggressive TCP settings for low latency..."
         netsh int tcp set global autotuninglevel=experimental
@@ -95,6 +99,9 @@ jobs:
         
         Write-Host "  - Disabling network throttling..."
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Value 0xFFFFFFFF -Force
+        
+        Write-Host "  - Optimizing TCP ACK frequency for lower latency..."
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces" -Name "TcpAckFrequency" -Value 1 -Force
         
         # --- 3. Deep RDP Protocol & Service Optimization ---
         Write-Host "  - Configuring RDP for performance over quality..."
@@ -115,8 +122,13 @@ jobs:
         Set-ItemProperty -Path $clientPolicyPath -Name "fClientDisablePrinterRedirection" -Value 1 -Type DWord -Force
 
         # --- 4. System-Wide Debloating & Responsiveness Tweaks ---
-        Write-Host "  - Disabling non-essential services..."
-        $servicesToDisable = @("SysMain", "Print Spooler", "BITS", "diagtrack", "MapsBroker", "WbioSrvc", "lfsvc", "Themes", "TabletInputService", "dmwappushservice", "WwanSvc", "XblAuthManager", "XblGameSave", "wisvc")
+        Write-Host "  - Disabling non-essential and performance-draining services..."
+        $servicesToDisable = @(
+            "SysMain", "Print Spooler", "BITS", "diagtrack", "MapsBroker", "WbioSrvc", 
+            "lfsvc", "Themes", "TabletInputService", "dmwappushservice", "WwanSvc", 
+            "XblAuthManager", "XblGameSave", "wisvc", "wuauserv", "SecurityHealthService", 
+            "wscsvc", "Sense", "RemoteRegistry", "Fax", "TrkWks", "PushToInstall"
+        )
         foreach ($service in $servicesToDisable) {
             try {
                 Get-Service -Name $service | Stop-Service -Force -ErrorAction SilentlyContinue
@@ -124,21 +136,36 @@ jobs:
             } catch {}
         }
 
-        Write-Host "  - Optimizing visual effects for performance..."
-        # Note: HKCU settings apply to the user running the script, not the auto-login user.
-        # These might not take effect for the RDP session without more complex user profile manipulation.
-        # Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Force
-        # Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "DragFullWindows" -Value 0 -Force
-        # Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value 0 -Force
-        
         Write-Host "  - Optimizing memory management..."
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "DisablePagingExecutive" -Value 1 -Force
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "LargeSystemCache" -Value 0 -Force # Prioritize apps over cache for desktop responsiveness
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "LargeSystemCache" -Value 0 -Force # Prioritize apps over cache
         
         Write-Host "  - Disabling Windows Defender real-time monitoring..."
         Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
         
+        # --- 5. Extreme CPU Performance: Disable Security Mitigations ---
+        Write-Host "  - [WARNING] Disabling Spectre & Meltdown CPU mitigations for max performance..."
+        $mitigationPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
+        Set-ItemProperty -Path $mitigationPath -Name "FeatureSettingsOverride" -Value 3 -Force
+        Set-ItemProperty -Path $mitigationPath -Name "FeatureSettingsOverrideMask" -Value 3 -Force
+        
         Write-Host "[SUCCESS] All performance optimizations have been applied."
+
+    - name: Disable Scheduled Tasks
+      shell: powershell
+      run: |
+        Write-Host "[*] Disabling performance-impacting scheduled tasks..."
+        $tasksToDisable = @(
+            "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
+            "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
+            "\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector",
+            "\Microsoft\Windows\Maintenance\WinSAT",
+            "\Microsoft\Windows\Windows Error Reporting\QueueReporting"
+        )
+        foreach ($task in $tasksToDisable) {
+            schtasks /Change /TN $task /DISABLE | Out-Null
+        }
+        Write-Host "[SUCCESS] Key scheduled tasks disabled."
 
     - name: Start RDP Service and Tunnel
       shell: powershell
@@ -163,12 +190,12 @@ jobs:
             Write-Host "[WARNING] Could not set RDP service to realtime priority. This is non-fatal."
         }
         
-        # FIX: Robust download using GitHub API to get direct URL
+        # Robust download using GitHub API to get direct URL
         Write-Host "[*] Downloading and starting Playit.gg tunnel..."
         Write-Host "  - Fetching latest release information from GitHub API..."
         $releaseInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/playit-cloud/playit-agent/releases/latest"
         
-        # FIX: Corrected the asset name to match the actual release file.
+        # Corrected the asset name to match the actual release file.
         $assetName = 'playit-windows-x86_64.exe'
         $downloadUrl = $releaseInfo.assets | Where-Object { $_.name -eq $assetName } | Select-Object -ExpandProperty browser_download_url
         
