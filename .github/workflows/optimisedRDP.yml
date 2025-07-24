@@ -63,6 +63,35 @@ jobs:
         Write-Host "Password: $password"
         Write-Host "-----------------------"
 
+    - name: Apply Optimizations to RDP User Profile
+      shell: powershell
+      run: |
+        Write-Host "[*] Applying visual optimizations directly to the RDP user's profile..."
+        # Wait for user profile to be fully created before modifying it.
+        Start-Sleep -s 5 
+        try {
+            # Load the user's registry hive into a temporary location.
+            reg load HKU\RDPUser "C:\Users\rdpadmin\NTUSER.DAT"
+            
+            # Disable all visual effects for maximum performance ("Adjust for best performance").
+            $visualEffectsPath = "HKU:\RDPUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"
+            New-Item -Path $visualEffectsPath -Force | Out-Null
+            Set-ItemProperty -Path $visualEffectsPath -Name "VisualFXSetting" -Value 2 -Force
+
+            # Explicitly disable font smoothing (ClearType) for performance.
+            Set-ItemProperty -Path "HKU:\RDPUser\Control Panel\Desktop" -Name "FontSmoothing" -Value "0" -Force
+            
+            # Ensure other UI animations are off.
+            Set-ItemProperty -Path "HKU:\RDPUser\Control Panel\Desktop" -Name "DragFullWindows" -Value "0" -Force
+            Set-ItemProperty -Path "HKU:\RDPUser\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0" -Force
+            
+            # Unload the hive to save the changes to the user's profile.
+            reg unload HKU\RDPUser
+            Write-Host "[SUCCESS] RDP user profile optimized for performance."
+        } catch {
+            Write-Host "[WARNING] Could not apply optimizations to the RDP user profile. This is non-fatal."
+        }
+
     - name: Apply Ultimate Performance Optimizations
       shell: powershell
       run: |
@@ -84,7 +113,6 @@ jobs:
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -Force
         
         Write-Host "  - Disabling system-wide Power Throttling..."
-        # FIX: Create the PowerThrottling key if it doesn't exist to prevent errors.
         $powerThrottlingPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling"
         New-Item -Path $powerThrottlingPath -Force | Out-Null
         Set-ItemProperty -Path $powerThrottlingPath -Name "PowerThrottlingOff" -Value 1 -Force
@@ -97,14 +125,14 @@ jobs:
         netsh int tcp set global rsc=enabled
         netsh int tcp set global ecncapability=disabled
         netsh int tcp set global timestamps=disabled
-        netsh int tcp set global initialRto=1000
-        netsh int tcp set global maxsynretransmissions=2
+        
+        Write-Host "  - Disabling Large Send Offload for lower, more consistent latency..."
+        Get-NetAdapter | ForEach-Object { Disable-NetAdapterLso -Name $_.Name -IPv4 -IPv6 }
         
         Write-Host "  - Disabling network throttling..."
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Value 0xFFFFFFFF -Force
         
         Write-Host "  - Optimizing TCP ACK frequency for lower latency..."
-        # This key might not exist on all systems, so we create it.
         $tcpInterfacesPath = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces"
         Get-ChildItem -Path $tcpInterfacesPath | ForEach-Object {
             $interfacePath = $_.PSPath
@@ -118,13 +146,16 @@ jobs:
         
         $policyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services"
         New-Item -Path $policyPath -Force | Out-Null
-        Set-ItemProperty -Path $policyPath -Name "bEnforceGpuPreference" -Value 1 -Type DWord -Force # Force GPU rendering
-        Set-ItemProperty -Path $policyPath -Name "MaxColorDepth" -Value 16 -Type DWord -Force # 16-bit color is faster
-        Set-ItemProperty -Path $policyPath -Name "fUseHardwareCodec" -Value 1 -Type DWord -Force # Force H.264/AVC hardware encoding
+        Set-ItemProperty -Path $policyPath -Name "bEnforceGpuPreference" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $policyPath -Name "MaxColorDepth" -Value 16 -Type DWord -Force
+        Set-ItemProperty -Path $policyPath -Name "fUseHardwareCodec" -Value 1 -Type DWord -Force
+
+        Write-Host "  - Enabling UDP transport for a more responsive RDP experience..."
+        Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -Name "fEnableUdp" -Value 1 -Type DWord -Force
         
-        # Disable unnecessary redirection for lower overhead
         $clientPolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services\Client"
         New-Item -Path $clientPolicyPath -Force | Out-Null
+        Set-ItemProperty -Path $clientPolicyPath -Name "fClientDisableUdp" -Value 0 -Type DWord -Force
         Set-ItemProperty -Path $clientPolicyPath -Name "fClientDisableClipboard" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $clientPolicyPath -Name "fClientDisableDriveRedirection" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $clientPolicyPath -Name "fClientDisablePrinterRedirection" -Value 1 -Type DWord -Force
@@ -146,7 +177,7 @@ jobs:
 
         Write-Host "  - Optimizing memory management..."
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "DisablePagingExecutive" -Value 1 -Force
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "LargeSystemCache" -Value 0 -Force # Prioritize apps over cache
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "LargeSystemCache" -Value 0 -Force
         
         Write-Host "  - Disabling Windows Defender real-time monitoring..."
         Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
@@ -165,10 +196,20 @@ jobs:
         Write-Host "[*] Disabling performance-impacting scheduled tasks..."
         $tasksToDisable = @(
             "\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser",
+            "\Microsoft\Windows\Application Experience\ProgramDataUpdater",
             "\Microsoft\Windows\Customer Experience Improvement Program\Consolidator",
+            "\Microsoft\Windows\Customer Experience Improvement Program\KernelCeipTask",
+            "\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip",
             "\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector",
             "\Microsoft\Windows\Maintenance\WinSAT",
-            "\Microsoft\Windows\Windows Error Reporting\QueueReporting"
+            "\Microsoft\Windows\Windows Error Reporting\QueueReporting",
+            "\Microsoft\Windows\Windows Defender\Windows Defender Cache Maintenance",
+            "\Microsoft\Windows\Windows Defender\Windows Defender Cleanup",
+            "\Microsoft\Windows\Windows Defender\Windows Defender Scheduled Scan",
+            "\Microsoft\Windows\Windows Defender\Windows Defender Verification",
+            "\Microsoft\Windows\UpdateOrchestrator\Schedule Scan",
+            "\Microsoft\Windows\UpdateOrchestrator\UpdateAssistant",
+            "\Microsoft\Windows\Shell\FamilySafetyUpload"
         )
         foreach ($task in $tasksToDisable) {
             schtasks /Change /TN $task /DISABLE | Out-Null
@@ -180,10 +221,10 @@ jobs:
       run: |
         Write-Host "[*] Starting services and tunnel with REALTIME priority..."
         
-        # Enable RDP Firewall Rule
+        # Enable RDP Firewall Rule for both TCP and UDP
         New-NetFirewallRule -DisplayName "Allow RDP" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3389
+        New-NetFirewallRule -DisplayName "Allow RDP UDP" -Direction Inbound -Action Allow -Protocol UDP -LocalPort 3389
         
-        # Start and prioritize RDP Service
         Start-Service -Name "TermService"
         Start-Sleep -s 5
         try {
@@ -198,12 +239,8 @@ jobs:
             Write-Host "[WARNING] Could not set RDP service to realtime priority. This is non-fatal."
         }
         
-        # Robust download using GitHub API to get direct URL
         Write-Host "[*] Downloading and starting Playit.gg tunnel..."
-        Write-Host "  - Fetching latest release information from GitHub API..."
         $releaseInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/playit-cloud/playit-agent/releases/latest"
-        
-        # Corrected the asset name to match the actual release file.
         $assetName = 'playit-windows-x86_64.exe'
         $downloadUrl = $releaseInfo.assets | Where-Object { $_.name -eq $assetName } | Select-Object -ExpandProperty browser_download_url
         
@@ -217,13 +254,12 @@ jobs:
         Write-Host "  - Downloading from direct URL: $downloadUrl"
         curl.exe -L -o playit.exe $downloadUrl
         
-        # Verify download was successful
         if (-not (Test-Path -Path ".\playit.exe")) {
             Write-Host "[ERROR] playit.exe not found after download attempt." -ForegroundColor Red
             exit 1
         }
         $fileSize = (Get-Item -Path ".\playit.exe").Length
-        if ($fileSize -lt 1000000) { # A real exe will be > 1MB
+        if ($fileSize -lt 1000000) {
              Write-Host "[ERROR] Downloaded file is too small ($fileSize bytes). Download likely failed." -ForegroundColor Red
              exit 1
         }
@@ -250,5 +286,4 @@ jobs:
         Your system is now hyper-optimized for performance.
         This session will remain active for the job duration.
         "
-        # Keep the workflow running
         Start-Sleep -Seconds 21000
