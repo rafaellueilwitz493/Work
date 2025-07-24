@@ -84,7 +84,10 @@ jobs:
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 26 -Force
         
         Write-Host "  - Disabling system-wide Power Throttling..."
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling" -Name "PowerThrottlingOff" -Value 1 -Force
+        # FIX: Create the PowerThrottling key if it doesn't exist to prevent errors.
+        $powerThrottlingPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling"
+        New-Item -Path $powerThrottlingPath -Force | Out-Null
+        Set-ItemProperty -Path $powerThrottlingPath -Name "PowerThrottlingOff" -Value 1 -Force
 
         # --- 2. Aggressive Network Optimizations for Zero Lag ---
         Write-Host "  - Applying aggressive TCP settings for low latency..."
@@ -101,7 +104,12 @@ jobs:
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Value 0xFFFFFFFF -Force
         
         Write-Host "  - Optimizing TCP ACK frequency for lower latency..."
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces" -Name "TcpAckFrequency" -Value 1 -Force
+        # This key might not exist on all systems, so we create it.
+        $tcpInterfacesPath = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces"
+        Get-ChildItem -Path $tcpInterfacesPath | ForEach-Object {
+            $interfacePath = $_.PSPath
+            New-ItemProperty -Path $interfacePath -Name "TcpAckFrequency" -Value 1 -PropertyType DWord -Force | Out-Null
+        }
         
         # --- 3. Deep RDP Protocol & Service Optimization ---
         Write-Host "  - Configuring RDP for performance over quality..."
