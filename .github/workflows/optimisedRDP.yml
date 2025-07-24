@@ -125,9 +125,11 @@ jobs:
         }
 
         Write-Host "  - Optimizing visual effects for performance..."
-        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Force
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "DragFullWindows" -Value 0 -Force
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value 0 -Force
+        # Note: HKCU settings apply to the user running the script, not the auto-login user.
+        # These might not take effect for the RDP session without more complex user profile manipulation.
+        # Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Force
+        # Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "DragFullWindows" -Value 0 -Force
+        # Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value 0 -Force
         
         Write-Host "  - Optimizing memory management..."
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "DisablePagingExecutive" -Value 1 -Force
@@ -150,21 +152,30 @@ jobs:
         Start-Service -Name "TermService"
         Start-Sleep -s 5
         try {
-            $rdpProcess = Get-CimInstance Win32_Service | Where-Object {$_.Name -eq 'TermService'}
-            (Get-Process -Id $rdpProcess.ProcessId).PriorityClass = 'Realtime'
-            Write-Host "[SUCCESS] RDP service (TermService) priority set to REALTIME."
+            $rdpService = Get-CimInstance Win32_Service | Where-Object {$_.Name -eq 'TermService'}
+            if ($rdpService.ProcessId -ne 0) {
+                (Get-Process -Id $rdpService.ProcessId).PriorityClass = 'Realtime'
+                Write-Host "[SUCCESS] RDP service (TermService) priority set to REALTIME."
+            } else {
+                Write-Host "[WARNING] RDP Service (TermService) has a PID of 0. Cannot set priority."
+            }
         } catch {
-            Write-Host "[WARNING] Could not set RDP service to realtime priority."
+            Write-Host "[WARNING] Could not set RDP service to realtime priority. This is non-fatal."
         }
         
         # FIX: Robust download using GitHub API to get direct URL
         Write-Host "[*] Downloading and starting Playit.gg tunnel..."
         Write-Host "  - Fetching latest release information from GitHub API..."
         $releaseInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/playit-cloud/playit-agent/releases/latest"
-        $downloadUrl = $releaseInfo.assets | Where-Object { $_.name -eq 'playit-windows-x86_64-signed.exe' } | Select-Object -ExpandProperty browser_download_url
+        
+        # FIX: Corrected the asset name to match the actual release file.
+        $assetName = 'playit-windows-x64.exe'
+        $downloadUrl = $releaseInfo.assets | Where-Object { $_.name -eq $assetName } | Select-Object -ExpandProperty browser_download_url
         
         if (-not $downloadUrl) {
-            Write-Host "[ERROR] Could not find the download URL for playit.exe in the latest release." -ForegroundColor Red
+            Write-Host "[ERROR] Could not find the download URL for '$assetName' in the latest release." -ForegroundColor Red
+            Write-Host "  - Available assets are:"
+            $releaseInfo.assets | ForEach-Object { Write-Host "    - $($_.name)" }
             exit 1
         }
         
@@ -172,6 +183,10 @@ jobs:
         curl.exe -L -o playit.exe $downloadUrl
         
         # Verify download was successful
+        if (-not (Test-Path -Path ".\playit.exe")) {
+            Write-Host "[ERROR] playit.exe not found after download attempt." -ForegroundColor Red
+            exit 1
+        }
         $fileSize = (Get-Item -Path ".\playit.exe").Length
         if ($fileSize -lt 1000000) { # A real exe will be > 1MB
              Write-Host "[ERROR] Downloaded file is too small ($fileSize bytes). Download likely failed." -ForegroundColor Red
@@ -202,4 +217,3 @@ jobs:
         "
         # Keep the workflow running
         Start-Sleep -Seconds 21000
-
