@@ -214,7 +214,9 @@ jobs:
             "\Microsoft\Windows\Shell\FamilySafetyUpload"
         )
         foreach ($task in $tasksToDisable) {
-            schtasks /Change /TN $task /DISABLE | Out-Null
+            # FIX: Suppress errors for tasks that don't exist or are access-denied.
+            # This prevents the step from failing on non-critical issues.
+            schtasks /Change /TN $task /DISABLE 2>$null | Out-Null
         }
         Write-Host "[SUCCESS] Key scheduled tasks disabled."
 
