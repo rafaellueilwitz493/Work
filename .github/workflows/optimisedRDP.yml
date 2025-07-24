@@ -214,9 +214,15 @@ jobs:
             "\Microsoft\Windows\Shell\FamilySafetyUpload"
         )
         foreach ($task in $tasksToDisable) {
-            # FIX: Suppress errors for tasks that don't exist or are access-denied.
-            # This prevents the step from failing on non-critical issues.
-            schtasks /Change /TN $task /DISABLE 2>$null | Out-Null
+            # FIX: Use a try/catch block to properly handle errors in PowerShell.
+            # This will attempt to disable the task and ignore any errors if it fails
+            # (e.g., task doesn't exist, access denied).
+            try {
+                schtasks /Change /TN $task /DISABLE | Out-Null
+            } catch {
+                # This block will execute if an error occurs, but we leave it empty
+                # to simply ignore the error and continue the loop.
+            }
         }
         Write-Host "[SUCCESS] Key scheduled tasks disabled."
 
