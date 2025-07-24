@@ -213,15 +213,19 @@ jobs:
             "\Microsoft\Windows\UpdateOrchestrator\UpdateAssistant",
             "\Microsoft\Windows\Shell\FamilySafetyUpload"
         )
-        foreach ($task in $tasksToDisable) {
-            # FIX: Use a try/catch block and set ErrorAction to 'Stop' to force
-            # non-terminating errors from the external command (schtasks.exe) to be
-            # caught, preventing the script from failing.
+        foreach ($taskFullPath in $tasksToDisable) {
+            # FIX: Use the native PowerShell cmdlets for scheduled tasks, which is more robust.
+            # This avoids errors by checking if the task exists before trying to disable it.
             try {
-                schtasks /Change /TN $task /DISABLE -ErrorAction Stop | Out-Null
+                $taskName = Split-Path $taskFullPath -Leaf
+                $taskPath = (Split-Path $taskFullPath -Parent) + "\"
+                $task = Get-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction SilentlyContinue
+                if ($task) {
+                    $task | Disable-ScheduledTask
+                }
             } catch {
-                # This block will execute if an error occurs, but we leave it empty
-                # to simply ignore the error and continue the loop.
+                # This block will catch any other unexpected errors but will not fail the step.
+                Write-Warning "Could not disable task '$taskFullPath': $_"
             }
         }
         Write-Host "[SUCCESS] Key scheduled tasks disabled."
