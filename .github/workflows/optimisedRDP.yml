@@ -4,12 +4,8 @@
 # Description:
 # This workflow sets up a highly optimized RDP session on a GitHub-hosted Windows runner.
 # It applies aggressive system, CPU, network, and RDP-specific tweaks designed for
-# maximum performance, low latency, and a smooth, responsive desktop experience.
-#
-# WARNING: The optimizations applied are extreme (e.g., 'Realtime' process priority,
-# disabled security mitigations like Spectre/Meltdown, experimental network settings,
-# disabled security features like Defender). This is intended for performance-critical
-# tasks on a disposable, isolated VM. Use with caution.
+# a powerful and STABLE experience, prioritizing smoothness and consistency over raw,
+# potentially unstable, speed.
 #
 name: Extreme Performance RDP Tunnel (Fixed)
 on:
@@ -66,7 +62,7 @@ jobs:
     - name: Apply Ultimate Performance Optimizations
       shell: powershell
       run: |
-        Write-Host "[*] Applying EXTREME system, network, and RDP optimizations..."
+        Write-Host "[*] Applying STABLE system, network, and RDP optimizations..."
 
         # --- 1. Maximize CPU Performance ---
         Write-Host "  - Activating Ultimate Performance power plan..."
@@ -88,27 +84,17 @@ jobs:
         New-Item -Path $powerThrottlingPath -Force | Out-Null
         Set-ItemProperty -Path $powerThrottlingPath -Name "PowerThrottlingOff" -Value 1 -Force
 
-        # --- 2. Aggressive Network Optimizations for Zero Lag ---
+        # --- 2. Aggressive Network Optimizations for Low Latency ---
         Write-Host "  - Applying aggressive TCP settings for low latency..."
-        netsh int tcp set global autotuninglevel=experimental
+        netsh int tcp set global autotuninglevel=normal # Use 'normal' for stability over 'experimental'
         netsh int tcp set supplemental template=internet congestionprovider=ctcp
         netsh int tcp set global rss=enabled
         netsh int tcp set global rsc=enabled
         netsh int tcp set global ecncapability=disabled
         netsh int tcp set global timestamps=disabled
         
-        Write-Host "  - Disabling Large Send Offload for lower, more consistent latency..."
-        Get-NetAdapter | ForEach-Object { Disable-NetAdapterLso -Name $_.Name -IPv4 -IPv6 }
-        
         Write-Host "  - Disabling network throttling..."
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Value 0xFFFFFFFF -Force
-        
-        Write-Host "  - Optimizing TCP ACK frequency for lower latency..."
-        $tcpInterfacesPath = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces"
-        Get-ChildItem -Path $tcpInterfacesPath | ForEach-Object {
-            $interfacePath = $_.PSPath
-            New-ItemProperty -Path $interfacePath -Name "TcpAckFrequency" -Value 1 -PropertyType DWord -Force | Out-Null
-        }
         
         # --- 3. Deep RDP Protocol & Service Optimization ---
         Write-Host "  - Configuring RDP for performance over quality..."
@@ -153,13 +139,9 @@ jobs:
         Write-Host "  - Disabling Windows Defender real-time monitoring..."
         Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
         
-        # --- 5. Extreme CPU Performance: Disable Security Mitigations ---
-        Write-Host "  - [WARNING] Disabling Spectre & Meltdown CPU mitigations for max performance..."
-        $mitigationPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
-        Set-ItemProperty -Path $mitigationPath -Name "FeatureSettingsOverride" -Value 3 -Force
-        Set-ItemProperty -Path $mitigationPath -Name "FeatureSettingsOverrideMask" -Value 3 -Force
+        # NOTE: Disabling CPU security mitigations has been removed to improve system stability and prevent freezes.
         
-        Write-Host "[SUCCESS] All performance optimizations have been applied."
+        Write-Host "[SUCCESS] All STABLE performance optimizations have been applied."
 
     - name: Disable Scheduled Tasks
       shell: powershell
@@ -183,7 +165,7 @@ jobs:
             "\Microsoft\Windows\Shell\FamilySafetyUpload"
         )
         foreach ($taskFullPath in $tasksToDisable) {
-            # FIX: Use the native PowerShell cmdlets for scheduled tasks, which is more robust.
+            # Use the native PowerShell cmdlets for scheduled tasks, which is more robust.
             # This avoids errors by checking if the task exists before trying to disable it.
             try {
                 $taskName = Split-Path $taskFullPath -Leaf
@@ -202,7 +184,7 @@ jobs:
     - name: Start RDP Service and Tunnel
       shell: powershell
       run: |
-        Write-Host "[*] Starting services and tunnel with REALTIME priority..."
+        Write-Host "[*] Starting services and tunnel with HIGH priority for stability..."
         
         # Enable RDP Firewall Rule for both TCP and UDP
         New-NetFirewallRule -DisplayName "Allow RDP" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3389
@@ -213,13 +195,14 @@ jobs:
         try {
             $rdpService = Get-CimInstance Win32_Service | Where-Object {$_.Name -eq 'TermService'}
             if ($rdpService.ProcessId -ne 0) {
-                (Get-Process -Id $rdpService.ProcessId).PriorityClass = 'Realtime'
-                Write-Host "[SUCCESS] RDP service (TermService) priority set to REALTIME."
+                # STABILITY FIX: Use 'High' priority instead of 'Realtime' to prevent system freezes.
+                (Get-Process -Id $rdpService.ProcessId).PriorityClass = 'High'
+                Write-Host "[SUCCESS] RDP service (TermService) priority set to HIGH."
             } else {
                 Write-Host "[WARNING] RDP Service (TermService) has a PID of 0. Cannot set priority."
             }
         } catch {
-            Write-Host "[WARNING] Could not set RDP service to realtime priority. This is non-fatal."
+            Write-Host "[WARNING] Could not set RDP service to high priority. This is non-fatal."
         }
         
         Write-Host "[*] Downloading and starting Playit.gg tunnel..."
@@ -249,8 +232,9 @@ jobs:
         Write-Host "[SUCCESS] Downloaded playit.exe successfully."
 
         $playitProcess = Start-Process -FilePath ".\playit.exe" -ArgumentList "--secret ${{ secrets.PL }}" -PassThru -WindowStyle Hidden
-        $playitProcess.PriorityClass = "Realtime"
-        Write-Host "[SUCCESS] Playit tunnel agent started with REALTIME priority (PID: $($playitProcess.Id))."
+        # STABILITY FIX: Use 'High' priority instead of 'Realtime' to prevent system freezes.
+        $playitProcess.PriorityClass = "High"
+        Write-Host "[SUCCESS] Playit tunnel agent started with HIGH priority (PID: $($playitProcess.Id))."
         
     - name: Display Connection Info & Maintain Session
       shell: powershell
@@ -260,13 +244,13 @@ jobs:
         
         Write-Host "
         ****************************************************
-        ** EXTREME PERFORMANCE RDP IS READY           **
+        ** STABLE PERFORMANCE RDP IS READY            **
         ****************************************************
         
         Connect using the TCP address from your Playit dashboard:
         https://playit.gg/account/tunnels
         
-        Your system is now hyper-optimized for performance.
+        Your system is now optimized for STABLE performance.
         This session will remain active for the job duration.
         "
         Start-Sleep -Seconds 21000
