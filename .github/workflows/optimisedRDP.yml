@@ -63,33 +63,35 @@ jobs:
         Write-Host "Password: $password"
         Write-Host "-----------------------"
 
-    - name: Apply Optimizations to RDP User Profile
+    - name: Apply Optimizations to Default User Profile
       shell: powershell
       run: |
-        Write-Host "[*] Applying visual optimizations directly to the RDP user's profile..."
-        # Wait for user profile to be fully created before modifying it.
-        Start-Sleep -s 5 
+        Write-Host "[*] Applying visual optimizations to the Default User profile..."
+        # Any new user, including our rdpadmin, will inherit these settings on first login.
+        # This is more reliable than trying to modify a profile that may not exist yet.
         try {
-            # Load the user's registry hive into a temporary location.
-            reg load HKU\RDPUser "C:\Users\rdpadmin\NTUSER.DAT"
+            # Load the Default User's registry hive into a temporary location.
+            reg load HKU\DefaultUser "C:\Users\Default\NTUSER.DAT"
             
             # Disable all visual effects for maximum performance ("Adjust for best performance").
-            $visualEffectsPath = "HKU:\RDPUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"
+            $visualEffectsPath = "HKU:\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"
             New-Item -Path $visualEffectsPath -Force | Out-Null
             Set-ItemProperty -Path $visualEffectsPath -Name "VisualFXSetting" -Value 2 -Force
 
             # Explicitly disable font smoothing (ClearType) for performance.
-            Set-ItemProperty -Path "HKU:\RDPUser\Control Panel\Desktop" -Name "FontSmoothing" -Value "0" -Force
+            Set-ItemProperty -Path "HKU:\DefaultUser\Control Panel\Desktop" -Name "FontSmoothing" -Value "0" -Force
             
             # Ensure other UI animations are off.
-            Set-ItemProperty -Path "HKU:\RDPUser\Control Panel\Desktop" -Name "DragFullWindows" -Value "0" -Force
-            Set-ItemProperty -Path "HKU:\RDPUser\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0" -Force
+            Set-ItemProperty -Path "HKU:\DefaultUser\Control Panel\Desktop" -Name "DragFullWindows" -Value "0" -Force
+            Set-ItemProperty -Path "HKU:\DefaultUser\Control Panel\Desktop" -Name "MenuShowDelay" -Value "0" -Force
             
             # Unload the hive to save the changes to the user's profile.
-            reg unload HKU\RDPUser
-            Write-Host "[SUCCESS] RDP user profile optimized for performance."
+            reg unload HKU\DefaultUser
+            Write-Host "[SUCCESS] Default User profile optimized for performance."
         } catch {
-            Write-Host "[WARNING] Could not apply optimizations to the RDP user profile. This is non-fatal."
+            Write-Host "[WARNING] Could not apply optimizations to the Default User profile. This is non-fatal."
+            # Exit with success code to prevent workflow failure on this non-critical step.
+            exit 0
         }
 
     - name: Apply Ultimate Performance Optimizations
