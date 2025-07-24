@@ -214,11 +214,11 @@ jobs:
             "\Microsoft\Windows\Shell\FamilySafetyUpload"
         )
         foreach ($task in $tasksToDisable) {
-            # FIX: Use a try/catch block to properly handle errors in PowerShell.
-            # This will attempt to disable the task and ignore any errors if it fails
-            # (e.g., task doesn't exist, access denied).
+            # FIX: Use a try/catch block and set ErrorAction to 'Stop' to force
+            # non-terminating errors from the external command (schtasks.exe) to be
+            # caught, preventing the script from failing.
             try {
-                schtasks /Change /TN $task /DISABLE | Out-Null
+                schtasks /Change /TN $task /DISABLE -ErrorAction Stop | Out-Null
             } catch {
                 # This block will execute if an error occurs, but we leave it empty
                 # to simply ignore the error and continue the loop.
