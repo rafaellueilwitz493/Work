@@ -169,7 +169,7 @@ jobs:
         $releaseInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/playit-cloud/playit-agent/releases/latest"
         
         # FIX: Corrected the asset name to match the actual release file.
-        $assetName = 'playit-windows-x64.exe'
+        $assetName = 'playit-windows-x86_64.exe'
         $downloadUrl = $releaseInfo.assets | Where-Object { $_.name -eq $assetName } | Select-Object -ExpandProperty browser_download_url
         
         if (-not $downloadUrl) {
