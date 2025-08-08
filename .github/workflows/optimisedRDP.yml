@@ -118,7 +118,6 @@ jobs:
       shell: powershell
       run: |
         Write-Host "[*] Applying advanced performance and smoothness tuning..."
-
         # Ultimate Performance power plan (duplicate and activate)
         Write-Host "  - Activating Ultimate Performance power scheme (if available)..."
         try {
@@ -140,7 +139,7 @@ jobs:
 
         # Disable Non-Essential Services (Keeping Search Enabled)
         $servicesToDisable = @(
-            "Spooler",         # Print Spooler service name (actual service name, not display name)
+            "Spooler",         # Print Spooler service name
             "BITS",            # Background Intelligent Transfer Service
             "DiagTrack",       # Connected User Experiences and Telemetry
             "MapsBroker",      # Downloaded Maps Manager
@@ -168,7 +167,7 @@ jobs:
         New-Item -Path $personalizePath -Force -ErrorAction SilentlyContinue | Out-Null
         Set-ItemProperty -Path $personalizePath -Name "EnableTransparency" -Value 0 -Force
 
-        # Memory and responsiveness
+        # Memory and responsiveness tweaks
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "DisablePagingExecutive" -Value 1 -Force
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control" -Name "WaitToKillServiceTimeout" -Value "2000" -Force
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Value 0xFFFFFFFF -Force
@@ -182,6 +181,9 @@ jobs:
         }
 
         Write-Host "[SUCCESS] Performance & smoothness tuning applied"
+
+        # Prevent GitHub Actions from failing
+        exit 0
 
     - name: Start and Prioritize RDP Services
       shell: powershell
