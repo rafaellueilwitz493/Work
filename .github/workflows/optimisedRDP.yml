@@ -260,7 +260,6 @@ jobs:
       shell: powershell
       run: |
         Write-Host "[*] Installing watchdog that monitors RDP and Playit and auto-restarts if needed..."
-
         $watchdogScript = @'
         $playitExe = "C:\\ProgramData\\playit-agent.exe"
         while ($true) {
@@ -290,8 +289,12 @@ jobs:
         $trigger = New-ScheduledTaskTrigger -AtLogOn
         Register-ScheduledTask -TaskName "RDP_Playit_Watchdog" -Action $action -Trigger $trigger -RunLevel Highest -Force | Out-Null
 
-        Start-Process -FilePath 'powershell.exe' -ArgumentList "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$watchdogPath`\"" -WindowStyle Hidden -PassThru | Out-Null
+        Start-Process -FilePath 'powershell.exe' -ArgumentList "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$watchdogPath`"" -WindowStyle Hidden -PassThru | Out-Null
         Write-Host "[SUCCESS] Watchdog installed and started."
+
+        # Prevent failure in CI/CD
+        echo "Watchdog setup complete"
+
 
     - name: Display Connection Information
       shell: powershell
