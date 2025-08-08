@@ -210,7 +210,7 @@ jobs:
 
         if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) { Write-Host "[SUCCESS] Playit Agent started and scheduled on startup (PID: $($process.Id))" } else { Write-Host "[ERROR] Playit Agent failed to start."; exit 1 }
 
-    - name: Watchdog: Ensure RDP & Tunnel Stay Up (Background Monitor)
+    - name: Watchdog Ensure RDP & Tunnel Stay Up (Background Monitor)
       shell: powershell
       run: |
         Write-Host "[*] Installing watchdog that monitors RDP and Playit and auto-restarts if needed..."
@@ -234,7 +234,7 @@ jobs:
 
             Start-Sleep -Seconds 15
         }
-'@
+        '@
 
         $watchdogPath = "$env:ProgramData\rdp_watchdog.ps1"
         $watchdogScript | Out-File -FilePath $watchdogPath -Encoding UTF8 -Force
