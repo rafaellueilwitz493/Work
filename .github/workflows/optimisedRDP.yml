@@ -122,41 +122,64 @@ jobs:
         # Ultimate Performance power plan (duplicate and activate)
         Write-Host "  - Activating Ultimate Performance power scheme (if available)..."
         try {
-            $powercfgOutput = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61
-            $newGuid = ($powercfgOutput -split '\s+' | Where-Object { $_ -match '^[0-9a-fA-F\\-]{36}$' })[0]
-            if ($newGuid) { powercfg /s $newGuid; Write-Host "  - Ultimate Performance activated: $newGuid" }
+            $powercfgOutput = powercfg -duplicatescheme e9a42b02-d5df-448d-aa00-03f14749eb61 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                $newGuid = ($powercfgOutput -split '\s+' | Where-Object { $_ -match '^[0-9a-fA-F\-]{36}$' })[0]
+                if ($newGuid) {
+                    powercfg /s $newGuid 2>$null
+                    Write-Host "  - Ultimate Performance activated: $newGuid"
+                } else {
+                    Write-Host "  - Could not parse GUID from powercfg output (non-fatal)." -ForegroundColor Yellow
+                }
+            } else {
+                Write-Host "  - Ultimate Performance plan may already exist or not be supported (non-fatal)." -ForegroundColor Yellow
+            }
         } catch {
-            Write-Host "  - Could not activate Ultimate Performance (non-fatal). Continuing..."
+            Write-Host "  - Could not activate Ultimate Performance (non-fatal). Continuing..." -ForegroundColor Yellow
         }
 
         # Disable Non-Essential Services (Keeping Search Enabled)
-        $servicesToDisable = @("Print Spooler", "BITS", "diagtrack", "MapsBroker", "WbioSrvc", "lfsvc", "TabletInputService", "dmwappushservice")
+        $servicesToDisable = @(
+            "Spooler",         # Print Spooler service name (actual service name, not display name)
+            "BITS",            # Background Intelligent Transfer Service
+            "DiagTrack",       # Connected User Experiences and Telemetry
+            "MapsBroker",      # Downloaded Maps Manager
+            "WbioSrvc",        # Windows Biometric Service
+            "lfsvc",           # Geolocation Service
+            "TabletInputService", # Tablet PC Input Service
+            "dmwappushservice" # Device Management Wireless Application Protocol
+        )
         foreach ($service in $servicesToDisable) {
             Write-Host "  - Disabling service: $service"
             try {
                 Get-Service -Name $service -ErrorAction Stop | Stop-Service -Force -ErrorAction Stop
-                Get-Service -Name $service -ErrorAction Stop | Set-Service -StartupType Disabled -ErrorAction Stop
+                Set-Service -Name $service -StartupType Disabled -ErrorAction Stop
             } catch {
-                Write-Host "  - INFO: Could not stop/disable service '$service'. It may not exist or be critical." -ForegroundColor Gray
+                Write-Host "  - INFO: Could not stop/disable service '$service'. It may not exist or is critical." -ForegroundColor Gray
             }
         }
 
         # Visual effects for performance
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Force
-        New-Item -Path "HKCU:\Control Panel\Desktop" -Force -ErrorAction SilentlyContinue
+        New-Item -Path "HKCU:\Control Panel\Desktop" -Force -ErrorAction SilentlyContinue | Out-Null
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "DragFullWindows" -Value 0 -Force
         Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -Value 0 -Force
         $personalizePath = "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-        New-Item -Path $personalizePath -Force -ErrorAction SilentlyContinue
+        New-Item -Path $personalizePath -Force -ErrorAction SilentlyContinue | Out-Null
         Set-ItemProperty -Path $personalizePath -Name "EnableTransparency" -Value 0 -Force
 
         # Memory and responsiveness
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" -Name "DisablePagingExecutive" -Value 1 -Force
-        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control" -Name "WaitToKillServiceTimeout" -Value 2000 -Force
+        Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control" -Name "WaitToKillServiceTimeout" -Value "2000" -Force
         Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" -Name "NetworkThrottlingIndex" -Value 0xFFFFFFFF -Force
 
         # Gracefully reduce Defender interruptions (non-destructive)
-        try { Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue; Write-Host "[INFO] Real-time monitoring request issued." } catch { Write-Host "[INFO] Windows Defender setting not changed (insufficient privileges or not applicable)." }
+        try {
+            Set-MpPreference -DisableRealtimeMonitoring $true -ErrorAction SilentlyContinue
+            Write-Host "[INFO] Real-time monitoring request issued."
+        } catch {
+            Write-Host "[INFO] Windows Defender setting not changed (insufficient privileges or not applicable)."
+        }
 
         Write-Host "[SUCCESS] Performance & smoothness tuning applied"
 
