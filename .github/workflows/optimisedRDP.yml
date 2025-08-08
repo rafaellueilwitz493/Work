@@ -216,15 +216,30 @@ jobs:
 
         if (-not $env:PLAYIT_AUTH_KEY) {
             Write-Host "[ERROR] PLAYIT_AUTH_KEY secret not found!" -ForegroundColor Red
-            Write-Host "Please add your Playit.gg tunnel token as a repository secret named 'PL'."
+            Write-Host "Please add your Playit.gg tunnel token as a repository secret named 'PLAYIT_AUTH_KEY'."
             exit 1
         }
 
-        $playitPath = "$env:ProgramData\playit-agent.exe"
-        Invoke-WebRequest -Uri "https://github.com/playit-cloud/playit-agent/releases/latest/download/playit-windows-x86_64-signed.exe" -OutFile $playitPath -UseBasicParsing
-        # Ensure binary is executable and create a scheduled task to run it at startup (highest privileges)
+        $playitPath = "$env:ProgramData\\playit-agent.exe"
+
+        # Get latest release asset URL dynamically from GitHub API
+        try {
+            $latestInfo = Invoke-RestMethod -Uri "https://api.github.com/repos/playit-cloud/playit-agent/releases/latest" -UseBasicParsing
+            $asset = $latestInfo.assets | Where-Object { $_.name -match "windows-x86_64.*exe$" } | Select-Object -First 1
+            if (-not $asset) { throw "Could not find Windows x86_64 asset in latest release." }
+            $downloadUrl = $asset.browser_download_url
+            Write-Host "  - Latest Playit agent URL: $downloadUrl"
+
+            Invoke-WebRequest -Uri $downloadUrl -OutFile $playitPath -UseBasicParsing
+        } catch {
+            Write-Host "[ERROR] Failed to download Playit agent: $_" -ForegroundColor Red
+            exit 1
+        }
+
+        # Ensure binary is executable and create scheduled task to run it at startup
+        $username = $env:USERNAME
         $action = New-ScheduledTaskAction -Execute $playitPath -Argument "--secret `"$env:PLAYIT_AUTH_KEY`""
-        $principal = New-ScheduledTaskPrincipal -UserId "$env:COMPUTERNAME\$username" -RunLevel Highest
+        $principal = New-ScheduledTaskPrincipal -UserId "$env:COMPUTERNAME\\$username" -RunLevel Highest
         $trigger = New-ScheduledTaskTrigger -AtStartup
         Register-ScheduledTask -TaskName "PlayitAgentAutoStart" -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 
@@ -233,7 +248,13 @@ jobs:
         try { $process.PriorityClass = 'High' } catch {}
         Start-Sleep -Seconds 10
 
-        if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) { Write-Host "[SUCCESS] Playit Agent started and scheduled on startup (PID: $($process.Id))" } else { Write-Host "[ERROR] Playit Agent failed to start."; exit 1 }
+        if (Get-Process -Id $process.Id -ErrorAction SilentlyContinue) {
+            Write-Host "[SUCCESS] Playit Agent started and scheduled on startup (PID: $($process.Id))"
+        } else {
+            Write-Host "[ERROR] Playit Agent failed to start." -ForegroundColor Red
+            exit 1
+        }
+
 
     - name: Watchdog Ensure RDP & Tunnel Stay Up (Background Monitor)
       shell: powershell
